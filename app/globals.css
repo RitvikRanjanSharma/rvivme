@@ -1,26 +1,105 @@
-@import "tailwindcss";
+/* app/globals.css */
+/* RVIVME — Global CSS Variables & Base Styles */
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Dark mode (default) ─────────────────────────────────────────────────── */
+:root,
+.dark {
+  --brand:         #3b82f6;
+  --brand-rgb:     59, 130, 246;
+  --brand-glow:    rgba(59, 130, 246, 0.30);
+
+  --bg:            #050505;
+  --surface:       #0a0a0a;
+  --surface-raised:#0f0f0f;
+  --card:          #111111;
+  --border:        #1a1a1a;
+  --border-subtle: #141414;
+  --muted:         #222222;
+
+  --nav-bg:        rgba(5, 5, 5, 0.92);
+
+  --text-primary:   #f0f0f0;
+  --text-secondary: #888888;
+  --text-tertiary:  #444444;
+
+  --signal-green: #00e676;
+  --signal-amber: #ffab00;
+  --signal-red:   #ff1744;
+  --signal-blue:  #2979ff;
+
+  --chart-grid:   rgba(255, 255, 255, 0.04);
+  --chart-axis:   #2a2a2a;
+  --chart-tick:   #555555;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ── Light mode ──────────────────────────────────────────────────────────── */
+.light {
+  --bg:            #f4f4f4;
+  --surface:       #ffffff;
+  --surface-raised:#f8f8f8;
+  --card:          #f2f2f2;
+  --border:        #e0e0e0;
+  --border-subtle: #eaeaea;
+  --muted:         #d4d4d4;
+
+  --nav-bg:        rgba(255, 255, 255, 0.92);
+
+  --text-primary:   #0a0a0a;
+  --text-secondary: #555555;
+  --text-tertiary:  #aaaaaa;
+
+  --chart-grid:   rgba(0, 0, 0, 0.05);
+  --chart-axis:   #e0e0e0;
+  --chart-tick:   #999999;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ── Base ────────────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin:     0;
+  padding:    0;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-size:       16px;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background:              var(--bg);
+  color:                   var(--text-primary);
+  font-family:             var(--font-inter), system-ui, sans-serif;
+  -webkit-font-smoothing:  antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x:              hidden;
 }
+
+/* ── Scrollbar ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar        { width: 4px; height: 4px; }
+::-webkit-scrollbar-track  { background: var(--bg); }
+::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* ── Selection ───────────────────────────────────────────────────────────── */
+::selection {
+  background: rgba(var(--brand-rgb), 0.20);
+  color:      var(--text-primary);
+}
+
+/* ── Focus ───────────────────────────────────────────────────────────────── */
+:focus-visible {
+  outline:        2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius:  4px;
+}
+
+/* ── Font helpers ────────────────────────────────────────────────────────── */
+.font-display { font-family: var(--font-syne),    sans-serif;  }
+.font-mono    { font-family: var(--font-dm-mono), monospace;   }
+.font-body    { font-family: var(--font-inter),   sans-serif;  }
