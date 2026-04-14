@@ -201,8 +201,8 @@ function StatusBadge({ status }: { status: "connected" | "disconnected" | "pendi
 
 function ProfileTab({ brandColor }: { brandColor: string }) {
   const [company, setCompany]   = useState("AI Marketing Labs");
-  const [website, setWebsite]   = useState("https://aimarketinglabs.co.uk");
-  const [email, setEmail]       = useState("admin@aimarketinglabs.co.uk");
+  const [website, setWebsite]   = useState("https://aimarketinglab.co.uk");
+  const [email, setEmail]       = useState("admin@aimarketinglab.co.uk");
   const [fullName, setFullName] = useState("Platform Administrator");
 
   return (

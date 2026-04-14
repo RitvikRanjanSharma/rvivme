@@ -2,7 +2,7 @@
 // =============================================================================
 // AIMarketingLabs — useDomain hook
 // Reads the authenticated user's website_url from Supabase public.users table.
-// Falls back to aimarketinglabs.co.uk during development / before auth is set up.
+// Falls back to aimarketinglab.co.uk during development / before auth is set up.
 // =============================================================================
 
 "use client";
@@ -10,7 +10,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 
-const FALLBACK_DOMAIN = "aimarketinglabs.co.uk";
+const FALLBACK_DOMAIN = "aimarketinglab.co.uk";
 
 function cleanDomain(url: string): string {
   return url
