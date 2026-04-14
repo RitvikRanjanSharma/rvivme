@@ -15,7 +15,7 @@ import { supabase } from "@/lib/supabase";
 
 const SPRING = { type: "spring", stiffness: 260, damping: 28, mass: 0.9 } as const;
 
-export LoginPage() {
+function LoginForm() {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const redirect     = searchParams.get("redirect") ?? "/dashboard";
