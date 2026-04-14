@@ -6,7 +6,7 @@
 // Email + password · Google OAuth · Redirect-aware · Error states
 // =============================================================================
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
@@ -15,7 +15,7 @@ import { supabase } from "@/lib/supabase";
 
 const SPRING = { type: "spring", stiffness: 260, damping: 28, mass: 0.9 } as const;
 
-export default function LoginPage() {
+export LoginPage() {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const redirect     = searchParams.get("redirect") ?? "/dashboard";
@@ -324,5 +324,17 @@ export default function LoginPage() {
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ width: "14px", height: "14px", border: "2px solid rgba(255,255,255,0.2)", borderTopColor: "#3b82f6", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }
