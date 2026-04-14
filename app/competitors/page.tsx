@@ -2,7 +2,7 @@
 
 // app/competitors/page.tsx
 // =============================================================================
-// RVIVME — Competitor Intelligence (Live Data)
+// AI Marketing Labs — Competitor Intelligence (Live Data)
 // Fetches real competitor domains from DataForSEO
 // Falls back to empty state gracefully if API is unavailable
 // =============================================================================

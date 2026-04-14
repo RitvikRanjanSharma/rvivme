@@ -2,7 +2,7 @@
 
 // app/settings/page.tsx
 // =============================================================================
-// RVIVME — Settings & Configuration Centre
+// AI Marketing Labs — Settings & Configuration Centre
 // Brand theming · API integrations · Profile · Billing · Data providers
 // =============================================================================
 

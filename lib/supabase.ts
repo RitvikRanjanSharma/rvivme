@@ -1,6 +1,6 @@
 // lib/supabase.ts
 // =============================================================================
-// RVIVME — Supabase Client
+// AI Marketing Labs — Supabase Client
 // Browser-safe singleton. Import this anywhere in the app.
 // =============================================================================
 

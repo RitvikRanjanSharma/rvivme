@@ -1,6 +1,6 @@
 // app/api/dataforseo/serp/route.ts
 // =============================================================================
-// RVIVME — DataForSEO SERP API Route
+// AI Marketing Labs — DataForSEO SERP API Route
 // Live SERP position checking + AI Overview detection
 // Used by dashboard projection and keyword detail views
 // =============================================================================

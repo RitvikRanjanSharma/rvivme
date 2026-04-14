@@ -1,5 +1,5 @@
 -- =============================================================================
--- RVIVME — God Mode Database Schema v1.0
+-- AI Marketing Labs — God Mode Database Schema v1.0
 -- Supabase PostgreSQL · Strict RLS · Full Audit Trail
 -- Run in: Supabase Dashboard → SQL Editor
 -- =============================================================================

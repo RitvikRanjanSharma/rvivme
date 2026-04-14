@@ -1,6 +1,6 @@
 // middleware.ts  (place in project ROOT, next to package.json)
 // =============================================================================
-// RVIVME — Route Protection Middleware
+// AI Marketing Labs — Route Protection Middleware
 // Unauthenticated users are redirected to /auth/login.
 // Authenticated users visiting /auth/* are redirected to /dashboard.
 // =============================================================================

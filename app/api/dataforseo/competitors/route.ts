@@ -1,6 +1,6 @@
 // app/api/dataforseo/competitors/route.ts
 // =============================================================================
-// RVIVME — DataForSEO Competitors API Route
+// AI Marketing Labs — DataForSEO Competitors API Route
 // Discovers competitor domains via keyword overlap analysis
 // Returns domain metrics: authority, traffic estimate, keyword count
 // =============================================================================

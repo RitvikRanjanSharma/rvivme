@@ -1,6 +1,6 @@
 // app/api/dataforseo/keywords/route.ts
 // =============================================================================
-// RVIVME — DataForSEO Keywords API Route
+// AI Marketing Labs — DataForSEO Keywords API Route
 // Server-side proxy — credentials never reach the browser
 // Fetches keyword rankings for a target domain
 // =============================================================================

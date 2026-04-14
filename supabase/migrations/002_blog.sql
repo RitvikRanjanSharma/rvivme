@@ -1,5 +1,5 @@
 -- =============================================================================
--- RVIVME — Blog System Schema
+-- AI Marketing Labs — Blog System Schema
 -- Run AFTER the main schema.sql (depends on public.users existing)
 -- =============================================================================
 
@@ -53,7 +53,7 @@ CREATE TABLE public.blog_posts (
   canonical_url       TEXT,
 
   -- Author display fields (denormalised for public rendering without join)
-  author_name         TEXT                   NOT NULL DEFAULT 'RVIVME Editorial',
+  author_name         TEXT                   NOT NULL DEFAULT 'AI Marketing Labs Editorial',
   author_bio          TEXT,
   author_avatar_url   TEXT,
 

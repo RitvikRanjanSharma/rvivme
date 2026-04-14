@@ -2,7 +2,7 @@
 
 // app/keywords/page.tsx
 // =============================================================================
-// RVIVME — Keyword Intelligence (Live Data)
+// AI Marketing Labs — Keyword Intelligence (Live Data)
 // Fetches real rankings from DataForSEO via /api/dataforseo/keywords
 // Falls back to empty state gracefully if API is unavailable
 // =============================================================================

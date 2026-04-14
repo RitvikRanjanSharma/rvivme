@@ -2,7 +2,7 @@
 
 // app/layout.tsx
 // =============================================================================
-// RVIVME — Root Layout & Dynamic Theming Engine
+// AI Marketing Labs — Root Layout & Dynamic Theming Engine
 // Reads --brand CSS variable from user profile; injects into document root.
 // Dark / light mode toggle persisted in localStorage + applied via .dark class.
 // =============================================================================
@@ -12,6 +12,7 @@ import { Syne, DM_Mono, Inter } from "next/font/google";
 import Link from "next/link";
 import { useState, useEffect, createContext, useContext, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useRouter, usePathname } from "next/navigation";
 import {
   Zap, Sun, Moon, Bell, ChevronDown, Settings,
   LogOut, User, BarChart3, Search, Cpu, FileText,
@@ -123,7 +124,12 @@ function ProfileDropdown({ brandColor }: { brandColor: string }) {
           fontFamily:   "var(--font-syne), sans-serif",
           fontWeight:   700,
           color:        "#fff",
-        }}>AI</div>
+        }}>{"AI Marketing Labs"
+          .split(" ")
+          .map(w => w[0])
+          .join("")
+          .slice(0, 2)
+          .toUpperCase()}</div>
         <span style={{ maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           AI Marketing Labs
         </span>
@@ -389,6 +395,8 @@ function Navbar() {
 
 // ── Root layout export ────────────────────────────────────────────────────────
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const pathname   = usePathname();
+  const isAuthPage = pathname?.startsWith("/auth") ?? false;
   return (
     <html
       lang="en-GB"
@@ -406,6 +414,26 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <main style={{ paddingTop: "56px", minHeight: "100vh" }}>
             {children}
           </main>
+          {!isAuthPage && (
+            <footer
+              style={{
+                borderTop: "1px solid var(--border)",
+                padding:   "24px",
+                textAlign: "center",
+              }}
+            >
+              <p
+                style={{
+                  fontFamily: "var(--font-inter), sans-serif",
+                  fontSize:   "13px",
+                  color:      "var(--text-tertiary)",
+                  margin:     0,
+                }}
+              >
+                © {new Date().getFullYear()} AI Marketing Labs Ltd. All rights reserved. · Registered in England &amp; Wales
+              </p>
+            </footer>
+          )}
         </ThemeProvider>
       </body>
     </html>

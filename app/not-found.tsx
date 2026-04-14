@@ -11,7 +11,7 @@ export default function NotFound() {
          <div style={{ fontFamily:"var(--font-dm-mono),monospace", fontSize:"64px", fontWeight:500, color:"var(--text-tertiary)", lineHeight:1, marginBottom:"8px" }}>404</div>
          <h1 style={{ fontFamily:"var(--font-syne),sans-serif", fontSize:"22px", fontWeight:800, color:"var(--text-primary)", letterSpacing:"-0.025em", marginBottom:"8px" }}>Page Not Found</h1>
          <p style={{ fontFamily:"var(--font-inter),sans-serif", fontSize:"14px", color:"var(--text-secondary)", maxWidth:"340px", lineHeight:1.7 }}>
-           The requested route does not exist within the RVIVME platform.
+           The requested route does not exist within the AI Marketing Labs platform.
         </p>
        </div>
        <Link href="/dashboard" style={{ fontFamily:"var(--font-inter),sans-serif", fontSize:"13px", fontWeight:600, color:"#fff", background:"linear-gradient(135deg,var(--brand),color-mix(in srgb,var(--brand) 60%,#000))", padding:"9px 20px", borderRadius:"8px", textDecoration:"none", boxShadow:"0 0 16px var(--brand-glow)" }}>

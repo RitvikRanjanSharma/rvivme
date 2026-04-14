@@ -2,7 +2,7 @@
 
 // app/auth/signup/page.tsx
 // =============================================================================
-// RVIVME — Signup Page
+// AI Marketing Labs — Signup Page
 // Email + password with company name + website URL captured at registration.
 // These are passed as user_metadata and picked up by the DB trigger.
 // =============================================================================

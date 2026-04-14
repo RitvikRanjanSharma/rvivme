@@ -2,7 +2,7 @@
 
 // app/blog/page.tsx
 // =============================================================================
-// RVIVME — Public Blog Index
+// AI Marketing Labs — Public Blog Index
 // Editorial dark aesthetic · Category filter · Search · Newsletter capture
 // Obsidian & Bio-Blue design system — public-facing, no auth required
 // =============================================================================
@@ -105,7 +105,7 @@ const MOCK_POSTS: Post[] = [
   {
     id: "8", slug: "rvivme-platform-case-study-organic-growth",
     title: "Case Study: 85% Organic Traffic Growth in 6 Months Using RVIVME Intelligence",
-    excerpt: "A detailed account of how a mid-market professional services firm in the UK achieved an 85% increase in organic sessions within 26 weeks by implementing the three AI-generated strategies surfaced by the RVIVME platform. Includes full methodology, timeline, and attribution analysis.",
+    excerpt: "A detailed account of how a mid-market professional services firm in the UK achieved an 85% increase in organic sessions within 26 weeks by implementing the three AI-generated strategies surfaced by the AI Marketing Labs platform. Includes full methodology, timeline, and attribution analysis.",
     category: "case_studies", tags: ["Case Study", "RVIVME", "SEO"],
     read_time: 13, published_at: "2026-03-25", author_name: "AI Marketing Labs Editorial",
     author_avatar: "RE", featured: false, cover_image: "",
@@ -187,7 +187,7 @@ function NewsletterBanner() {
         <span style={{ color: brandColor }}>Delivered to your inbox.</span>
       </h3>
       <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "14px", color: "var(--text-secondary)", lineHeight: 1.7, maxWidth: "480px", margin: "0 auto 28px" }}>
-        Join 2,400+ enterprise SEO practitioners receiving the RVIVME weekly brief — strategy analysis, algorithm updates, and GEO intelligence every Tuesday.
+        Join 2,400+ enterprise SEO practitioners receiving the AI Marketing Labs weekly brief — strategy analysis, algorithm updates, and GEO intelligence every Tuesday.
       </p>
 
       <AnimatePresence mode="wait">
