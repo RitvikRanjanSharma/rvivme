@@ -37,16 +37,18 @@ export function useDomain() {
         }
 
         const { data, error: dbError } = await supabase
-          .from("users")
-          .select("website_url")
-          .eq("id", user.id)
-          .single();
+        .from("users")
+        .select("website_url")
+        .eq("id", user.id)
+        .single();
 
-        if (dbError || !data?.website_url) {
-          setDomain(FALLBACK_DOMAIN);
-        } else {
-          setDomain(cleanDomain(data.website_url));
-        }
+      const record = data as { website_url: string } | null;
+
+      if (dbError || !record?.website_url) {
+        setDomain(FALLBACK_DOMAIN);
+      } else {
+        setDomain(cleanDomain(record.website_url));
+      }
       } catch (err: any) {
         setError(err.message);
         setDomain(FALLBACK_DOMAIN);
