@@ -106,10 +106,31 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "domain query param required" }, { status: 400 });
   }
 
-  return POST(
-    new NextRequest(request.url, {
-      method: "POST",
-      body:   JSON.stringify({ domain, limit: 20 }),
-    })
-  );
+  try {
+    const data = await dfsPost(
+      "/dataforseo_labs/google/ranked_keywords/live",
+      [{ target: domain, location_code: 2826, language_code: "en", limit: 20 }]
+    );
+
+    const task    = data?.tasks?.[0];
+    if (task?.status_code !== 20000) throw new Error(task?.status_message ?? "Task failed");
+
+    const items   = task?.result?.[0]?.items ?? [];
+    const keywords = items.map((item: any) => ({
+      term:       item.keyword_data?.keyword ?? "",
+      position:   item.ranked_serp_element?.serp_item?.rank_group ?? 0,
+      volume:     item.keyword_data?.keyword_info?.search_volume ?? 0,
+      cpc:        item.keyword_data?.keyword_info?.cpc ?? 0,
+      ctr:        parseFloat((item.ranked_serp_element?.serp_item?.rank_group <= 3 ? 15 : 5).toFixed(1)),
+      difficulty: item.keyword_data?.keyword_properties?.keyword_difficulty ?? 0,
+      intent:     item.keyword_data?.search_intent_info?.main_intent ?? "informational",
+      url:        item.ranked_serp_element?.serp_item?.url ?? "",
+      featured:   item.ranked_serp_element?.serp_item?.type === "featured_snippet",
+      aiOverview: false,
+    }));
+
+    return NextResponse.json({ success: true, domain, total: keywords.length, keywords });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
 }
