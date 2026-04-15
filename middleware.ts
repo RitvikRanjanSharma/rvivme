@@ -1,8 +1,15 @@
+// middleware.ts
+// =============================================================================
+// AI Marketing Labs — Route Protection Middleware
+// Public:    /, /blog, /blog/*, /auth/*
+// Protected: /dashboard, /keywords, /competitors, /settings
+// =============================================================================
+
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const AUTH_ROUTES = ["/auth/login", "/auth/signup"];
 const PROTECTED_PREFIXES = ["/dashboard", "/keywords", "/competitors", "/settings"];
+const AUTH_ROUTES        = ["/auth/login", "/auth/signup"];
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -17,23 +24,20 @@ export async function middleware(request: NextRequest) {
           for (const cookie of cookiesToSet) {
             request.cookies.set(cookie.name, cookie.value);
           }
-
           supabaseResponse = NextResponse.next({ request });
-
           for (const cookie of cookiesToSet) {
             supabaseResponse.cookies.set(cookie.name, cookie.value, cookie.options);
           }
         },
       },
-    },
+    }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const { pathname } = request.nextUrl;
+  const { data: { user } } = await supabase.auth.getUser();
+  const { pathname }       = request.nextUrl;
 
-  const isProtected = PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+  // Redirect unauthenticated users away from protected routes
+  const isProtected = PROTECTED_PREFIXES.some(p => pathname.startsWith(p));
   if (isProtected && !user) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/auth/login";
@@ -41,7 +45,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  const isAuthRoute = AUTH_ROUTES.some((route) => pathname.startsWith(route));
+  // Redirect authenticated users away from auth pages
+  const isAuthRoute = AUTH_ROUTES.some(p => pathname.startsWith(p));
   if (isAuthRoute && user) {
     const dashboardUrl = request.nextUrl.clone();
     dashboardUrl.pathname = "/dashboard";
@@ -52,5 +57,7 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
 };
