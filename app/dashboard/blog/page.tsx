@@ -1,63 +1,49 @@
 "use client";
 
-// app/blog/page.tsx
+// app/dashboard/blog/page.tsx
 // =============================================================================
-// AI Marketing Labs — Public Blog Index
-// Reads from Supabase blog_posts table · Category filter · Search · Newsletter
+// AI Marketing Labs — Blog Admin
+// Real Supabase CRUD · TipTap rich text editor · SEO fields · Publish controls
 // =============================================================================
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Search, Clock, ArrowRight, Zap, Rss,
-  TrendingUp, Code2, FileText, Globe2, Newspaper,
-  Lightbulb, BookOpen, CheckCircle2, X,
+  Plus, Eye, Edit3, Trash2, Search, Zap, ExternalLink,
+  Globe2, Lock, Calendar, Archive, CheckCircle2,
+  AlertCircle, RefreshCw, X, Tag, Clock, BarChart3,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { RichTextEditor } from "./editor";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
-interface Post {
-  id:                string;
-  slug:              string;
-  title:             string;
-  excerpt:           string;
-  category:          string;
-  read_time_minutes: number;
-  published_at:      string | null;
-  author_name:       string;
-  featured:          boolean;
-  focus_keyword:     string | null;
-}
+type PostStatus   = "draft" | "scheduled" | "published" | "archived";
+type PostCategory =
+  | "seo_strategy" | "geo_optimisation" | "technical_seo"
+  | "content_marketing" | "business_insights" | "platform_updates"
+  | "case_studies" | "industry_news";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Data
-// ─────────────────────────────────────────────────────────────────────────────
-const CATEGORIES = [
-  { id: "all",               label: "All Posts",         icon: BookOpen    },
-  { id: "seo_strategy",      label: "SEO Strategy",      icon: TrendingUp  },
-  { id: "geo_optimisation",  label: "GEO",               icon: Globe2      },
-  { id: "technical_seo",     label: "Technical SEO",     icon: Code2       },
-  { id: "content_marketing", label: "Content",           icon: FileText    },
-  { id: "business_insights", label: "Business Insights", icon: Lightbulb   },
-  { id: "platform_updates",  label: "Platform Updates",  icon: Zap         },
-  { id: "case_studies",      label: "Case Studies",      icon: CheckCircle2},
-  { id: "industry_news",     label: "Industry News",     icon: Newspaper   },
-];
-
-function categoryLabel(id: string): string {
-  return CATEGORIES.find(c => c.id === id)?.label ?? id;
-}
-
-function formatDate(iso: string | null): string {
-  if (!iso) return "";
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
-}
-
-function authorInitials(name: string): string {
-  return name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+interface BlogPost {
+  id:                 string;
+  author_id:          string;
+  title:              string;
+  slug:               string;
+  excerpt:            string;
+  content:            string;
+  category:           PostCategory;
+  status:             PostStatus;
+  focus_keyword:      string | null;
+  meta_title:         string | null;
+  meta_description:   string | null;
+  author_name:        string;
+  read_time_minutes:  number;
+  view_count:         number;
+  featured:           boolean;
+  published_at:       string | null;
+  updated_at:         string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -65,347 +51,574 @@ function authorInitials(name: string): string {
 // ─────────────────────────────────────────────────────────────────────────────
 const SP = { type: "spring", stiffness: 260, damping: 30, mass: 0.9 } as const;
 function pv(delay = 0) {
-  return { hidden: { opacity: 0, y: 18 }, visible: { opacity: 1, y: 0, transition: { ...SP, delay } } };
+  return { hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0, transition: { ...SP, delay } } };
+}
+
+function slugify(text: string): string {
+  return text.toLowerCase().trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 80);
+}
+
+function estimateReadTime(html: string): number {
+  const text = html.replace(/<[^>]*>/g, "");
+  const words = text.trim().split(/\s+/).length;
+  return Math.max(1, Math.round(words / 200));
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function categoryLabel(id: string): string {
+  const map: Record<string, string> = {
+    seo_strategy: "SEO Strategy", geo_optimisation: "GEO", technical_seo: "Technical SEO",
+    content_marketing: "Content", business_insights: "Business",
+    platform_updates: "Platform", case_studies: "Case Studies", industry_news: "News",
+  };
+  return map[id] ?? id;
+}
+
+function statusConfig(s: PostStatus) {
+  return {
+    published: { label: "Published", color: "var(--signal-green)", bg: "rgba(0,230,118,0.10)",  border: "rgba(0,230,118,0.25)",  icon: Globe2    },
+    scheduled: { label: "Scheduled", color: "var(--signal-amber)", bg: "rgba(255,171,0,0.10)", border: "rgba(255,171,0,0.25)", icon: Calendar  },
+    draft:     { label: "Draft",     color: "var(--text-tertiary)", bg: "var(--card)",          border: "var(--border)",        icon: Lock      },
+    archived:  { label: "Archived",  color: "var(--text-tertiary)", bg: "var(--card)",          border: "var(--border)",        icon: Archive   },
+  }[s];
+}
+
+function Panel({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", ...style }}>{children}</div>;
+}
+
+function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
+  return (
+    <div style={{ marginBottom: "16px" }}>
+      <label style={{ display: "block", fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>{label}</label>
+      {children}
+      {hint && <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "11px", color: "var(--text-tertiary)", marginTop: "4px" }}>{hint}</div>}
+    </div>
+  );
+}
+
+function Input({ value, onChange, placeholder, type = "text" }: { value: string; onChange: (v: string) => void; placeholder?: string; type?: string }) {
+  return (
+    <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+      style={{ width: "100%", padding: "9px 12px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-primary)", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "7px", outline: "none", transition: "border-color 0.18s", boxSizing: "border-box" as const }}
+      onFocus={e => e.currentTarget.style.borderColor = "var(--brand)"}
+      onBlur={e =>  e.currentTarget.style.borderColor = "var(--border)"}
+    />
+  );
+}
+
+function Textarea({ value, onChange, placeholder, rows = 3 }: { value: string; onChange: (v: string) => void; placeholder?: string; rows?: number }) {
+  return (
+    <textarea value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} rows={rows}
+      style={{ width: "100%", padding: "9px 12px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-primary)", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "7px", outline: "none", transition: "border-color 0.18s", resize: "vertical", boxSizing: "border-box" as const, lineHeight: 1.6 }}
+      onFocus={e => e.currentTarget.style.borderColor = "var(--brand)"}
+      onBlur={e =>  e.currentTarget.style.borderColor = "var(--border)"}
+    />
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Newsletter banner
+// KPI strip
 // ─────────────────────────────────────────────────────────────────────────────
-function NewsletterBanner() {
-  const [email,     setEmail]     = useState("");
-  const [submitted, setSubmitted] = useState(false);
-  const [loading,   setLoading]   = useState(false);
-  const brandColor = "#3b82f6";
+function BlogKpis({ posts, brandColor }: { posts: BlogPost[]; brandColor: string }) {
+  const published  = posts.filter(p => p.status === "published");
+  const drafts     = posts.filter(p => p.status === "draft");
+  const totalViews = published.reduce((s, p) => s + p.view_count, 0);
+  const kpis = [
+    { label: "Total Posts",    value: posts.length,     color: brandColor              },
+    { label: "Published",      value: published.length, color: "var(--signal-green)"  },
+    { label: "Drafts",         value: drafts.length,    color: "var(--signal-amber)"  },
+    { label: "Total Views",    value: totalViews,       color: brandColor              },
+  ];
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginBottom: "24px" }}>
+      {kpis.map((k, i) => (
+        <motion.div key={k.label} variants={pv(0.08 + i * 0.06)} initial="hidden" animate="visible">
+          <Panel style={{ padding: "16px 18px" }}>
+            <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "24px", fontWeight: 500, color: k.color, letterSpacing: "-0.02em", lineHeight: 1, marginBottom: "4px" }}>{k.value.toLocaleString()}</div>
+            <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "11px", fontWeight: 600, color: "var(--text-secondary)" }}>{k.label}</div>
+          </Panel>
+        </motion.div>
+      ))}
+    </div>
+  );
+}
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!email.includes("@")) return;
-    setLoading(true);
+// ─────────────────────────────────────────────────────────────────────────────
+// Posts table
+// ─────────────────────────────────────────────────────────────────────────────
+function PostsTable({ posts, brandColor, onEdit, onDelete, onStatusChange }: {
+  posts:          BlogPost[];
+  brandColor:     string;
+  onEdit:         (post: BlogPost) => void;
+  onDelete:       (id: string) => void;
+  onStatusChange: (id: string, status: PostStatus) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<PostStatus | "all">("all");
+
+  const filtered = posts.filter(p => {
+    const matchQuery  = !query || p.title.toLowerCase().includes(query.toLowerCase()) || (p.focus_keyword ?? "").toLowerCase().includes(query.toLowerCase());
+    const matchFilter = filter === "all" || p.status === filter;
+    return matchQuery && matchFilter;
+  });
+
+  return (
+    <motion.div variants={pv(0.24)} initial="hidden" animate="visible">
+      <Panel>
+        {/* Table header */}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "16px 20px", borderBottom: "1px solid var(--border)", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, minWidth: "200px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "7px", padding: "8px 12px" }}>
+            <Search size={13} color="var(--text-tertiary)" />
+            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search posts..." style={{ background: "transparent", border: "none", outline: "none", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-primary)", width: "100%" }} />
+          </div>
+          <div style={{ display: "flex", gap: "6px" }}>
+            {(["all", "published", "draft", "scheduled", "archived"] as const).map(f => (
+              <button key={f} onClick={() => setFilter(f)} style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", padding: "5px 10px", borderRadius: "5px", border: `1px solid ${filter === f ? brandColor : "var(--border)"}`, background: filter === f ? `rgba(var(--brand-rgb),0.10)` : "transparent", color: filter === f ? brandColor : "var(--text-tertiary)", cursor: "pointer", letterSpacing: "0.06em", textTransform: "capitalize" }}>
+                {f}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Table */}
+        {filtered.length === 0 ? (
+          <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--text-tertiary)", fontFamily: "var(--font-dm-mono), monospace", fontSize: "12px" }}>
+            {posts.length === 0 ? "No posts yet. Create your first post." : "No posts match your search."}
+          </div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ borderCollapse: "collapse", width: "100%" }}>
+              <thead>
+                <tr>
+                  {["Title", "Status", "Category", "Keyword", "Published", "Views", "Actions"].map(h => (
+                    <th key={h} style={{ borderBottom: "1px solid var(--border)", padding: "10px 14px", textAlign: "left", fontFamily: "var(--font-dm-mono), monospace", fontSize: "9px", color: "var(--text-tertiary)", letterSpacing: "0.1em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((post, i) => {
+                  const sc = statusConfig(post.status);
+                  const StatusIcon = sc.icon;
+                  return (
+                    <tr key={post.id} style={{ borderBottom: i < filtered.length - 1 ? "1px solid var(--border)" : "none" }}
+                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.02)"}
+                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
+                    >
+                      <td style={{ padding: "14px", maxWidth: "280px" }}>
+                        <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: "2px" }}>{post.title || "Untitled"}</div>
+                        <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)" }}>{post.slug}</div>
+                      </td>
+                      <td style={{ padding: "14px", whiteSpace: "nowrap" }}>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: sc.color, background: sc.bg, border: `1px solid ${sc.border}`, padding: "3px 8px", borderRadius: "100px", letterSpacing: "0.06em" }}>
+                          <StatusIcon size={9} />{sc.label}
+                        </span>
+                      </td>
+                      <td style={{ padding: "14px", whiteSpace: "nowrap" }}>
+                        <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)" }}>{categoryLabel(post.category)}</span>
+                      </td>
+                      <td style={{ padding: "14px", maxWidth: "160px" }}>
+                        <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>{post.focus_keyword ?? "—"}</span>
+                      </td>
+                      <td style={{ padding: "14px", whiteSpace: "nowrap" }}>
+                        <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-secondary)" }}>{formatDate(post.published_at)}</span>
+                      </td>
+                      <td style={{ padding: "14px" }}>
+                        <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-primary)", fontWeight: 500 }}>{post.view_count.toLocaleString()}</span>
+                      </td>
+                      <td style={{ padding: "14px" }}>
+                        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                          <button onClick={() => onEdit(post)} title="Edit post" style={{ width: "28px", height: "28px", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer", color: "var(--text-secondary)", transition: "all 0.15s" }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = brandColor; (e.currentTarget as HTMLElement).style.color = brandColor; }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; }}
+                          ><Edit3 size={12} /></button>
+
+                          {post.status === "published" && (
+                            <Link href={`/blog/${post.slug}`} target="_blank" title="View post" style={{ width: "28px", height: "28px", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--text-secondary)", transition: "all 0.15s", textDecoration: "none" }}
+                              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--signal-green)"; (e.currentTarget as HTMLElement).style.color = "var(--signal-green)"; }}
+                              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; }}
+                            ><ExternalLink size={12} /></Link>
+                          )}
+
+                          {post.status === "draft" && (
+                            <button onClick={() => onStatusChange(post.id, "published")} title="Publish" style={{ display: "flex", alignItems: "center", gap: "4px", fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--signal-green)", background: "rgba(0,230,118,0.08)", border: "1px solid rgba(0,230,118,0.25)", borderRadius: "6px", padding: "4px 8px", cursor: "pointer", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>
+                              <Globe2 size={10} /> PUBLISH
+                            </button>
+                          )}
+
+                          {post.status === "published" && (
+                            <button onClick={() => onStatusChange(post.id, "draft")} title="Unpublish" style={{ display: "flex", alignItems: "center", gap: "4px", fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", background: "transparent", border: "1px solid var(--border)", borderRadius: "6px", padding: "4px 8px", cursor: "pointer", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>
+                              <Lock size={10} /> UNPUBLISH
+                            </button>
+                          )}
+
+                          <button onClick={() => { if (window.confirm("Delete this post? This cannot be undone.")) onDelete(post.id); }} title="Delete" style={{ width: "28px", height: "28px", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "1px solid transparent", borderRadius: "6px", cursor: "pointer", color: "var(--text-tertiary)", transition: "all 0.15s" }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,23,68,0.3)"; (e.currentTarget as HTMLElement).style.color = "var(--signal-red)"; (e.currentTarget as HTMLElement).style.background = "rgba(255,23,68,0.08)"; }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-tertiary)"; (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                          ><Trash2 size={12} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
+    </motion.div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Post editor modal
+// ─────────────────────────────────────────────────────────────────────────────
+function PostEditor({ post, onClose, onSaved, brandColor }: {
+  post:       BlogPost | null; // null = new post
+  onClose:    () => void;
+  onSaved:    () => void;
+  brandColor: string;
+}) {
+  const isNew = !post;
+
+  const [title,           setTitle]           = useState(post?.title           ?? "");
+  const [slug,            setSlug]            = useState(post?.slug            ?? "");
+  const [excerpt,         setExcerpt]         = useState(post?.excerpt         ?? "");
+  const [content,         setContent]         = useState(post?.content         ?? "");
+  const [category,        setCategory]        = useState<PostCategory>(post?.category ?? "seo_strategy");
+  const [focusKeyword,    setFocusKeyword]    = useState(post?.focus_keyword   ?? "");
+  const [metaTitle,       setMetaTitle]       = useState(post?.meta_title      ?? "");
+  const [metaDescription, setMetaDescription] = useState(post?.meta_description ?? "");
+  const [featured,        setFeatured]        = useState(post?.featured        ?? false);
+  const [status,          setStatus]          = useState<PostStatus>(post?.status ?? "draft");
+  const [saving,          setSaving]          = useState(false);
+  const [error,           setError]           = useState<string | null>(null);
+  const [saved,           setSaved]           = useState(false);
+  const [slugManual,      setSlugManual]      = useState(!!post?.slug);
+
+  // Auto-generate slug from title
+  useEffect(() => {
+    if (!slugManual && title) setSlug(slugify(title));
+  }, [title, slugManual]);
+
+  const CATEGORIES: { value: PostCategory; label: string }[] = [
+    { value: "seo_strategy",      label: "SEO Strategy"     },
+    { value: "geo_optimisation",  label: "GEO Optimisation" },
+    { value: "technical_seo",     label: "Technical SEO"    },
+    { value: "content_marketing", label: "Content Marketing"},
+    { value: "business_insights", label: "Business Insights"},
+    { value: "platform_updates",  label: "Platform Updates" },
+    { value: "case_studies",      label: "Case Studies"     },
+    { value: "industry_news",     label: "Industry News"    },
+  ];
+
+  async function handleSave(publishStatus?: PostStatus) {
+    setSaving(true);
+    setError(null);
+    const targetStatus = publishStatus ?? status;
+
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/newsletter_subscribers`, {
-        method: "POST",
-        headers: {
-          apikey:         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
-          Authorization:  `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""}`,
-          "Content-Type": "application/json",
-          Prefer:         "return=minimal",
-        },
-        body: JSON.stringify({ email, source: "blog" }),
-      });
-      setSubmitted(true);
-    } catch {
-      setSubmitted(true); // still show success
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const readTime = estimateReadTime(content);
+      const payload = {
+        title:              title.trim(),
+        slug:               slug.trim(),
+        excerpt:            excerpt.trim(),
+        content,
+        category,
+        status:             targetStatus,
+        focus_keyword:      focusKeyword.trim() || null,
+        meta_title:         metaTitle.trim()    || null,
+        meta_description:   metaDescription.trim() || null,
+        featured,
+        read_time_minutes:  readTime,
+        author_name:        "AI Marketing Labs Editorial",
+        published_at:       targetStatus === "published"
+          ? (post?.published_at ?? new Date().toISOString())
+          : post?.published_at ?? null,
+        updated_at:         new Date().toISOString(),
+      };
+
+      if (isNew) {
+        const { error: insertErr } = await supabase
+          .from("blog_posts")
+          .insert({ ...payload, author_id: user.id } as never);
+        if (insertErr) throw insertErr;
+      } else {
+        const { error: updateErr } = await supabase
+          .from("blog_posts")
+          .update(payload as never)
+          .eq("id", post.id);
+        if (updateErr) throw updateErr;
+      }
+
+      setSaved(true);
+      setStatus(targetStatus);
+      setTimeout(() => { setSaved(false); onSaved(); onClose(); }, 1000);
+    } catch (e: any) {
+      setError(e.message ?? "Failed to save post.");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   }
 
   return (
-    <div style={{ background: `linear-gradient(135deg, rgba(var(--brand-rgb),0.08) 0%, rgba(var(--brand-rgb),0.03) 100%)`, border: `1px solid rgba(var(--brand-rgb),0.20)`, borderRadius: "16px", padding: "40px 48px", textAlign: "center", position: "relative", overflow: "hidden" }}>
-      <div style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: "300px", height: "1px", background: `linear-gradient(90deg, transparent, ${brandColor}, transparent)` }} />
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginBottom: "12px" }}>
-        <Rss size={16} color={brandColor} />
-        <span style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "11px", fontWeight: 700, color: brandColor, letterSpacing: "0.14em", textTransform: "uppercase" }}>Intelligence Dispatch</span>
-      </div>
-      <h3 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "clamp(1.4rem,3vw,1.9rem)", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.025em", marginBottom: "10px" }}>
-        Weekly SEO & GEO Intelligence.<br /><span style={{ color: brandColor }}>Delivered to your inbox.</span>
-      </h3>
-      <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "14px", color: "var(--text-secondary)", lineHeight: 1.7, maxWidth: "480px", margin: "0 auto 28px" }}>
-        Join enterprise SEO practitioners receiving the AI Marketing Labs weekly brief — strategy analysis, algorithm updates, and GEO intelligence every Tuesday.
-      </p>
-      <AnimatePresence mode="wait">
-        {submitted ? (
-          <motion.div key="success" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
-            style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "12px 24px", background: "rgba(0,230,118,0.10)", border: "1px solid rgba(0,230,118,0.25)", borderRadius: "8px" }}
-          >
-            <CheckCircle2 size={15} color="var(--signal-green)" />
-            <span style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 600, color: "var(--signal-green)" }}>Subscribed. Check your inbox for confirmation.</span>
-          </motion.div>
-        ) : (
-          <motion.form key="form" onSubmit={handleSubmit}
-            style={{ display: "flex", gap: "8px", maxWidth: "440px", margin: "0 auto", flexWrap: "wrap", justifyContent: "center" }}
-          >
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="your@company.com" required
-              style={{ flex: "1 1 240px", padding: "11px 16px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-primary)", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", outline: "none" }}
-              onFocus={e => e.currentTarget.style.borderColor = brandColor}
-              onBlur={e =>  e.currentTarget.style.borderColor = "var(--border)"}
-            />
-            <button type="submit" disabled={loading}
-              style={{ flex: "0 0 auto", display: "flex", alignItems: "center", gap: "6px", padding: "11px 22px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 700, color: "#fff", background: `linear-gradient(135deg, ${brandColor}, color-mix(in srgb, ${brandColor} 60%, #000))`, border: "none", borderRadius: "8px", cursor: "pointer", boxShadow: "0 0 18px var(--brand-glow)" }}
-            >
-              {loading ? <div style={{ width: "12px", height: "12px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} /> : <><Zap size={13} strokeWidth={2.5} />Subscribe</>}
-            </button>
-          </motion.form>
-        )}
-      </AnimatePresence>
-      <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "11px", color: "var(--text-tertiary)", marginTop: "14px" }}>No spam. Unsubscribe at any time. GDPR compliant.</p>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Featured post hero
-// ─────────────────────────────────────────────────────────────────────────────
-function FeaturedPost({ post, brandColor }: { post: Post; brandColor: string }) {
-  const [hovered, setHovered] = useState(false);
-  return (
-    <Link href={`/blog/${post.slug}`} style={{ textDecoration: "none", display: "block" }}>
-      <motion.div variants={pv(0.15)} initial="hidden" animate="visible"
-        onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
-        style={{ background: "var(--surface)", border: `1px solid ${hovered ? `rgba(var(--brand-rgb),0.35)` : "var(--border)"}`, borderRadius: "16px", padding: "40px 44px", marginBottom: "24px", position: "relative", overflow: "hidden", transition: "border-color 0.25s, box-shadow 0.25s", boxShadow: hovered ? "0 12px 48px rgba(0,0,0,0.5)" : "none", cursor: "pointer" }}
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)", zIndex: 200, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "24px 16px", overflowY: "auto" }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 20, scale: 0.97 }}
+        transition={SP}
+        style={{ width: "100%", maxWidth: "900px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "14px", overflow: "hidden", marginBottom: "24px" }}
       >
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "2px", background: `linear-gradient(90deg, transparent, ${brandColor}80, transparent)` }} />
-        <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
-          <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "9px", fontWeight: 500, color: brandColor, background: `rgba(var(--brand-rgb),0.10)`, border: `1px solid rgba(var(--brand-rgb),0.25)`, padding: "3px 10px", borderRadius: "100px", letterSpacing: "0.1em", textTransform: "uppercase" }}>Featured</span>
-          <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "9px", color: "var(--text-tertiary)", background: "var(--card)", border: "1px solid var(--border)", padding: "3px 10px", borderRadius: "100px", letterSpacing: "0.08em", textTransform: "uppercase" }}>{categoryLabel(post.category)}</span>
-        </div>
-        <h2 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "clamp(1.4rem,3vw,2rem)", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.03em", lineHeight: 1.15, marginBottom: "14px", maxWidth: "760px" }}>{post.title}</h2>
-        <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "15px", color: "var(--text-secondary)", lineHeight: 1.75, maxWidth: "720px", marginBottom: "24px" }}>{post.excerpt}</p>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
-              <div style={{ width: "28px", height: "28px", borderRadius: "50%", background: `linear-gradient(135deg, ${brandColor}, color-mix(in srgb, ${brandColor} 55%, #000))`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-syne), sans-serif", fontSize: "9px", fontWeight: 700, color: "#fff" }}>
-                {authorInitials(post.author_name)}
-              </div>
-              <span style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", color: "var(--text-secondary)", fontWeight: 500 }}>{post.author_name}</span>
+        {/* Modal header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 24px", borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
+          <div>
+            <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "16px", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.02em" }}>
+              {isNew ? "New Post" : "Edit Post"}
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-              <Clock size={11} color="var(--text-tertiary)" />
-              <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-tertiary)" }}>{post.read_time_minutes} min read</span>
+            <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.06em", marginTop: "2px" }}>
+              {isNew ? "CREATING NEW DRAFT" : `EDITING · ${post?.slug}`}
             </div>
-            <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-tertiary)" }}>{formatDate(post.published_at)}</span>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "6px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 600, color: brandColor }}>
-            Read article <ArrowRight size={14} style={{ transform: hovered ? "translateX(3px)" : "translateX(0)", transition: "transform 0.2s" }} />
-          </div>
-        </div>
-      </motion.div>
-    </Link>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Post card
-// ─────────────────────────────────────────────────────────────────────────────
-function PostCard({ post, delay, brandColor }: { post: Post; delay: number; brandColor: string }) {
-  const [hovered, setHovered] = useState(false);
-  return (
-    <Link href={`/blog/${post.slug}`} style={{ textDecoration: "none", display: "block", height: "100%" }}>
-      <motion.div variants={pv(delay)} initial="hidden" animate="visible"
-        onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
-        style={{ background: "var(--surface)", border: `1px solid ${hovered ? `rgba(var(--brand-rgb),0.30)` : "var(--border)"}`, borderRadius: "12px", padding: "24px", height: "100%", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden", transition: "border-color 0.22s, transform 0.22s, box-shadow 0.22s", transform: hovered ? "translateY(-2px)" : "translateY(0)", boxShadow: hovered ? "0 8px 32px rgba(0,0,0,0.4)" : "0 1px 4px rgba(0,0,0,0.3)", cursor: "pointer" }}
-      >
-        <div style={{ display: "flex", gap: "6px", marginBottom: "14px" }}>
-          <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "9px", fontWeight: 500, color: "var(--text-tertiary)", background: "var(--card)", border: "1px solid var(--border)", padding: "2px 8px", borderRadius: "100px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-            {categoryLabel(post.category)}
-          </span>
-        </div>
-        <h3 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "15px", fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.015em", lineHeight: 1.35, marginBottom: "10px", flex: "0 0 auto" }}>{post.title}</h3>
-        <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.7, flex: 1, marginBottom: "18px", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-          {post.excerpt}
-        </p>
-        {post.focus_keyword && (
-          <div style={{ marginBottom: "14px" }}>
-            <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "9px", color: brandColor, background: `rgba(var(--brand-rgb),0.08)`, border: `1px solid rgba(var(--brand-rgb),0.18)`, padding: "2px 7px", borderRadius: "100px", letterSpacing: "0.06em" }}>
-              {post.focus_keyword}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {/* Status badge */}
+            <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: statusConfig(status).color, background: statusConfig(status).bg, border: `1px solid ${statusConfig(status).border}`, padding: "3px 10px", borderRadius: "100px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              {statusConfig(status).label}
             </span>
+            <button onClick={onClose} style={{ width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "1px solid var(--border)", borderRadius: "7px", cursor: "pointer", color: "var(--text-secondary)" }}>
+              <X size={14} />
+            </button>
           </div>
-        )}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: "14px", borderTop: "1px solid var(--border)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <Clock size={10} color="var(--text-tertiary)" />
-              <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)" }}>{post.read_time_minutes} min</span>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", minHeight: "600px" }}>
+          {/* Main content area */}
+          <div style={{ padding: "24px", borderRight: "1px solid var(--border)" }}>
+            {error && (
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 14px", background: "rgba(255,23,68,0.08)", border: "1px solid rgba(255,23,68,0.25)", borderRadius: "8px", marginBottom: "16px" }}>
+                <AlertCircle size={13} color="var(--signal-red)" />
+                <span style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", color: "var(--signal-red)" }}>{error}</span>
+              </div>
+            )}
+
+            <Field label="Post Title">
+              <input
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                placeholder="Enter post title..."
+                style={{ width: "100%", padding: "10px 12px", fontFamily: "var(--font-display)", fontSize: "18px", fontWeight: 700, color: "var(--text-primary)", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "7px", outline: "none", transition: "border-color 0.18s", boxSizing: "border-box" as const, letterSpacing: "-0.03em" }}
+                onFocus={e => e.currentTarget.style.borderColor = "var(--brand)"}
+                onBlur={e =>  e.currentTarget.style.borderColor = "var(--border)"}
+              />
+            </Field>
+
+            <Field label="URL Slug" hint="Auto-generated from title. Edit to customise.">
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>/blog/</span>
+                <input value={slug} onChange={e => { setSlug(e.target.value); setSlugManual(true); }} placeholder="post-slug"
+                  style={{ flex: 1, padding: "8px 10px", fontFamily: "var(--font-dm-mono), monospace", fontSize: "12px", color: "var(--text-primary)", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "7px", outline: "none", transition: "border-color 0.18s" }}
+                  onFocus={e => e.currentTarget.style.borderColor = "var(--brand)"}
+                  onBlur={e =>  e.currentTarget.style.borderColor = "var(--border)"}
+                />
+              </div>
+            </Field>
+
+            <Field label="Excerpt" hint="A short summary shown on the blog index page. 1–2 sentences.">
+              <Textarea value={excerpt} onChange={setExcerpt} placeholder="Brief summary of this post..." rows={2} />
+            </Field>
+
+            <Field label="Content">
+              <RichTextEditor content={content} onChange={setContent} brandColor={brandColor} placeholder="Start writing your post..." />
+            </Field>
+          </div>
+
+          {/* Sidebar */}
+          <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px", overflowY: "auto" }}>
+
+            {/* Publish actions */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <button
+                onClick={() => handleSave("published")}
+                disabled={saving || !title || !slug}
+                style={{ width: "100%", padding: "10px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 700, color: "#fff", background: (saving || !title || !slug) ? "var(--muted)" : `linear-gradient(135deg, var(--signal-green), #00b060)`, border: "none", borderRadius: "8px", cursor: (saving || !title || !slug) ? "not-allowed" : "pointer", transition: "all 0.2s" }}
+              >
+                {saving ? <div style={{ width: "12px", height: "12px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} /> : saved ? <CheckCircle2 size={13} /> : <Globe2 size={13} />}
+                {saved ? "Published!" : "Publish"}
+              </button>
+              <button
+                onClick={() => handleSave("draft")}
+                disabled={saving || !title || !slug}
+                style={{ width: "100%", padding: "9px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 600, color: "var(--text-secondary)", background: "transparent", border: "1px solid var(--border)", borderRadius: "8px", cursor: (saving || !title || !slug) ? "not-allowed" : "pointer", transition: "all 0.18s" }}
+              >
+                <Lock size={12} /> Save Draft
+              </button>
             </div>
-            <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)" }}>{formatDate(post.published_at)}</span>
+
+            {/* Category */}
+            <div>
+              <label style={{ display: "block", fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Category</label>
+              <select value={category} onChange={e => setCategory(e.target.value as PostCategory)}
+                style={{ width: "100%", padding: "9px 12px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-primary)", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "7px", outline: "none", cursor: "pointer" }}
+              >
+                {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </div>
+
+            {/* SEO fields */}
+            <div style={{ padding: "14px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "9px" }}>
+              <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: brandColor, letterSpacing: "0.1em", marginBottom: "12px" }}>SEO SETTINGS</div>
+
+              <Field label="Focus Keyword">
+                <Input value={focusKeyword} onChange={setFocusKeyword} placeholder="primary keyword" />
+              </Field>
+              <Field label="Meta Title" hint={`${metaTitle.length}/60 chars`}>
+                <Input value={metaTitle || title} onChange={setMetaTitle} placeholder="SEO title (defaults to post title)" />
+              </Field>
+              <Field label="Meta Description" hint={`${metaDescription.length}/160 chars`}>
+                <Textarea value={metaDescription} onChange={setMetaDescription} placeholder="SEO description..." rows={3} />
+              </Field>
+            </div>
+
+            {/* Options */}
+            <div style={{ padding: "14px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "9px" }}>
+              <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.1em", marginBottom: "12px" }}>OPTIONS</div>
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                <input type="checkbox" checked={featured} onChange={e => setFeatured(e.target.checked)} style={{ width: "14px", height: "14px", accentColor: brandColor }} />
+                <span style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-secondary)" }}>Featured post</span>
+              </label>
+            </div>
           </div>
-          <ArrowRight size={13} color={hovered ? brandColor : "var(--text-tertiary)"} style={{ transition: "color 0.2s, transform 0.2s", transform: hovered ? "translateX(2px)" : "translateX(0)" }} />
         </div>
       </motion.div>
-    </Link>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Empty state
-// ─────────────────────────────────────────────────────────────────────────────
-function EmptyState({ brandColor }: { brandColor: string }) {
-  return (
-    <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "80px 24px" }}>
-      <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: `rgba(var(--brand-rgb),0.10)`, border: `1px solid rgba(var(--brand-rgb),0.20)`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
-        <FileText size={20} color={brandColor} />
-      </div>
-      <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "16px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "8px" }}>No posts published yet</div>
-      <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-tertiary)", maxWidth: "320px", margin: "0 auto" }}>
-        Articles will appear here once published. Check back soon.
-      </div>
-    </div>
+    </motion.div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────────────────────
-export default function BlogIndexPage() {
-  const [posts,          setPosts]          = useState<Post[]>([]);
-  const [loading,        setLoading]        = useState(true);
-  const [activeCategory, setActiveCategory] = useState("all");
-  const [search,         setSearch]         = useState("");
-  const [searchOpen,     setSearchOpen]     = useState(false);
-  const [brandColor,     setBrandColor]     = useState("#3b82f6");
+export default function BlogAdminPage() {
+  const [brandColor, setBrandColor] = useState("#3b82f6");
+  const [posts,      setPosts]      = useState<BlogPost[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [editPost,   setEditPost]   = useState<BlogPost | null | "new">(null);
+  const [error,      setError]      = useState<string | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem("rvivme-brand");
-    if (stored) {
-      setBrandColor(stored);
-      document.documentElement.style.setProperty("--brand", stored);
-    }
+    if (stored) setBrandColor(stored);
   }, []);
 
-  useEffect(() => {
-    async function loadPosts() {
-      const { data } = await supabase
+  const loadPosts = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setError("Sign in to manage posts."); setLoading(false); return; }
+
+      const { data, error: dbErr } = await supabase
         .from("blog_posts")
-        .select("id, slug, title, excerpt, category, read_time_minutes, published_at, author_name, featured, focus_keyword")
-        .eq("status", "published")
-        .order("featured",      { ascending: false })
-        .order("published_at",  { ascending: false });
-      setPosts((data ?? []) as Post[]);
+        .select("*")
+        .eq("author_id", user.id)
+        .order("updated_at", { ascending: false });
+
+      if (dbErr) throw dbErr;
+      setPosts((data ?? []) as BlogPost[]);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
       setLoading(false);
     }
-    loadPosts();
   }, []);
 
-  const featured = posts.find(p => p.featured);
-  const rest     = posts.filter(p => !p.featured);
+  useEffect(() => { loadPosts(); }, [loadPosts]);
 
-  const filtered = rest.filter(p => {
-    const matchCat    = activeCategory === "all" || p.category === activeCategory;
-    const matchSearch = search === "" ||
-      p.title.toLowerCase().includes(search.toLowerCase()) ||
-      p.excerpt.toLowerCase().includes(search.toLowerCase()) ||
-      (p.focus_keyword ?? "").toLowerCase().includes(search.toLowerCase());
-    return matchCat && matchSearch;
-  });
+  async function handleDelete(id: string) {
+    const { error: deleteErr } = await supabase.from("blog_posts").delete().eq("id", id);
+    if (!deleteErr) setPosts(prev => prev.filter(p => p.id !== id));
+  }
+
+  async function handleStatusChange(id: string, newStatus: PostStatus) {
+    const { error: updateErr } = await supabase
+      .from("blog_posts")
+      .update({
+        status:       newStatus,
+        published_at: newStatus === "published" ? new Date().toISOString() : undefined,
+      } as never)
+      .eq("id", id);
+    if (!updateErr) setPosts(prev => prev.map(p => p.id === id ? { ...p, status: newStatus } : p));
+  }
 
   return (
-    <div style={{ background: "var(--bg)", minHeight: "100vh" }}>
-      {/* Page header */}
-      <div style={{ borderBottom: "1px solid var(--border)", padding: "60px 24px 40px", position: "relative", overflow: "hidden" }}>
-        <div style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: "800px", height: "300px", background: `radial-gradient(ellipse, rgba(var(--brand-rgb),0.07) 0%, transparent 70%)`, pointerEvents: "none" }} />
-        <div style={{ maxWidth: "1200px", margin: "0 auto", position: "relative" }}>
-          <motion.div variants={pv(0)} initial="hidden" animate="visible">
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px" }}>
-              <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", fontWeight: 600, color: brandColor, letterSpacing: "0.14em", textTransform: "uppercase", padding: "4px 12px", border: `1px solid rgba(var(--brand-rgb),0.25)`, borderRadius: "100px", background: `rgba(var(--brand-rgb),0.07)` }}>
-                Intelligence Blog
-              </span>
-            </div>
-            <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: "16px" }}>
-              <div>
-                <h1 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "clamp(2rem,5vw,3.5rem)", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.04em", lineHeight: 0.95, marginBottom: "12px" }}>
-                  SEO & GEO<br /><span style={{ color: brandColor }}>Intelligence.</span>
-                </h1>
-                <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "15px", color: "var(--text-secondary)", maxWidth: "520px", lineHeight: 1.7 }}>
-                  Strategy analysis, technical guides, and growth insights from the AI Marketing Labs team.
-                </p>
-              </div>
-              {/* Search */}
-              <div style={{ position: "relative" }}>
-                <AnimatePresence>
-                  {searchOpen ? (
-                    <motion.div key="search-input" initial={{ width: 0, opacity: 0 }} animate={{ width: "260px", opacity: 1 }} exit={{ width: 0, opacity: 0 }} transition={{ duration: 0.25, ease: "easeOut" }}
-                      style={{ display: "flex", alignItems: "center", gap: "8px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", padding: "8px 12px", overflow: "hidden" }}
-                    >
-                      <Search size={13} color="var(--text-tertiary)" style={{ flexShrink: 0 }} />
-                      <input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search articles..."
-                        style={{ background: "transparent", border: "none", outline: "none", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-primary)", flex: 1, minWidth: 0 }}
-                      />
-                      <button onClick={() => { setSearch(""); setSearchOpen(false); }} style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--text-tertiary)", display: "flex", padding: "2px" }}>
-                        <X size={12} />
-                      </button>
-                    </motion.div>
-                  ) : (
-                    <motion.button key="search-btn" initial={{ opacity: 0 }} animate={{ opacity: 1 }} onClick={() => setSearchOpen(true)}
-                      style={{ display: "flex", alignItems: "center", gap: "6px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", padding: "8px 14px", cursor: "pointer", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-secondary)" }}
-                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = brandColor}
-                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"}
-                    >
-                      <Search size={13} /> Search
-                    </motion.button>
-                  )}
-                </AnimatePresence>
-              </div>
-            </div>
-          </motion.div>
+    <div style={{ background: "var(--bg)", minHeight: "100vh", padding: "32px 24px 80px", maxWidth: "1280px", margin: "0 auto" }}>
+
+      {/* Header */}
+      <motion.div variants={pv(0)} initial="hidden" animate="visible" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
+        <div>
+          <h1 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "clamp(1.5rem,3vw,2rem)", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.03em", lineHeight: 1, marginBottom: "6px" }}>Blog Admin</h1>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>
+              {posts.filter(p => p.status === "published").length} PUBLISHED · {posts.filter(p => p.status === "draft").length} DRAFTS
+            </span>
+            <Link href="/blog" target="_blank" style={{ display: "flex", alignItems: "center", gap: "4px", fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: brandColor, textDecoration: "none", letterSpacing: "0.06em" }}>
+              <ExternalLink size={10} /> VIEW PUBLIC BLOG
+            </Link>
+          </div>
         </div>
-      </div>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <button onClick={loadPosts} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "9px 14px", fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-secondary)", background: "transparent", border: "1px solid var(--border)", borderRadius: "8px", cursor: "pointer", letterSpacing: "0.06em" }}>
+            <RefreshCw size={11} style={{ animation: loading ? "spin 0.7s linear infinite" : "none" }} /> REFRESH
+          </button>
+          <button onClick={() => setEditPost("new")} style={{ display: "flex", alignItems: "center", gap: "7px", padding: "10px 18px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 700, color: "#fff", background: `linear-gradient(135deg, ${brandColor}, color-mix(in srgb, ${brandColor} 60%, #000))`, border: "none", borderRadius: "9px", cursor: "pointer", boxShadow: "0 0 18px var(--brand-glow)", transition: "all 0.2s" }}>
+            <Plus size={14} strokeWidth={2.5} /> New Post
+          </button>
+        </div>
+      </motion.div>
 
-      <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "40px 24px 80px" }}>
-        {/* Category filter */}
-        <motion.div variants={pv(0.1)} initial="hidden" animate="visible" style={{ marginBottom: "32px", overflowX: "auto", paddingBottom: "4px" }}>
-          <div style={{ display: "flex", gap: "6px", width: "max-content" }}>
-            {CATEGORIES.map(cat => {
-              const Icon   = cat.icon;
-              const active = activeCategory === cat.id;
-              return (
-                <button key={cat.id} onClick={() => setActiveCategory(cat.id)}
-                  style={{ display: "flex", alignItems: "center", gap: "5px", padding: "7px 14px", fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", fontWeight: active ? 600 : 500, color: active ? brandColor : "var(--text-secondary)", background: active ? `rgba(var(--brand-rgb),0.10)` : "transparent", border: `1px solid ${active ? `rgba(var(--brand-rgb),0.25)` : "var(--border)"}`, borderRadius: "7px", cursor: "pointer", transition: "all 0.18s", whiteSpace: "nowrap" }}
-                  onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"; (e.currentTarget as HTMLElement).style.background = "var(--surface)"; } }}
-                  onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; (e.currentTarget as HTMLElement).style.background = "transparent"; } }}
-                >
-                  <Icon size={11} />{cat.label}
-                </button>
-              );
-            })}
-          </div>
-        </motion.div>
+      {error && (
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "12px 16px", background: "rgba(255,171,0,0.08)", border: "1px solid rgba(255,171,0,0.25)", borderRadius: "8px", marginBottom: "20px" }}>
+          <AlertCircle size={14} color="var(--signal-amber)" />
+          <span style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--signal-amber)" }}>{error}</span>
+        </div>
+      )}
 
-        {/* Search results notice */}
-        <AnimatePresence>
-          {search && (
-            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} style={{ marginBottom: "20px" }}>
-              <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>
-                {filtered.length} result{filtered.length !== 1 ? "s" : ""} for &ldquo;{search}&rdquo;
-              </span>
-            </motion.div>
-          )}
-        </AnimatePresence>
+      {loading ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          {[1,2,3].map(i => <div key={i} style={{ height: "60px", background: "linear-gradient(90deg, var(--card) 25%, var(--muted) 50%, var(--card) 75%)", backgroundSize: "200% 100%", borderRadius: "12px", animation: "shimmer 1.4s ease-in-out infinite" }} />)}
+        </div>
+      ) : (
+        <>
+          <BlogKpis posts={posts} brandColor={brandColor} />
+          <PostsTable posts={posts} brandColor={brandColor} onEdit={p => setEditPost(p)} onDelete={handleDelete} onStatusChange={handleStatusChange} />
+        </>
+      )}
 
-        {/* Loading skeleton */}
-        {loading && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: "16px", marginBottom: "48px" }}>
-            {[1,2,3].map(i => (
-              <div key={i} style={{ height: "220px", background: "linear-gradient(90deg, var(--card) 25%, var(--muted) 50%, var(--card) 75%)", backgroundSize: "200% 100%", borderRadius: "12px", animation: "shimmer 1.4s ease-in-out infinite" }} />
-            ))}
-          </div>
+      <AnimatePresence>
+        {editPost !== null && (
+          <PostEditor
+            post={editPost === "new" ? null : editPost as BlogPost}
+            onClose={() => setEditPost(null)}
+            onSaved={loadPosts}
+            brandColor={brandColor}
+          />
         )}
-
-        {/* Featured post */}
-        {!loading && activeCategory === "all" && !search && featured && (
-          <FeaturedPost post={featured} brandColor={brandColor} />
-        )}
-
-        {/* Post grid */}
-        {!loading && (
-          <AnimatePresence mode="wait">
-            <motion.div key={activeCategory + search} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
-              style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: "16px", marginBottom: "48px" }}
-            >
-              {filtered.length > 0
-                ? filtered.map((post, i) => <PostCard key={post.id} post={post} delay={i * 0.06} brandColor={brandColor} />)
-                : posts.length > 0
-                ? <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "60px 24px" }}><div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-tertiary)", letterSpacing: "0.1em", textTransform: "uppercase" }}>No articles found for this filter</div></div>
-                : <EmptyState brandColor={brandColor} />
-              }
-            </motion.div>
-          </AnimatePresence>
-        )}
-
-        {/* Newsletter */}
-        <motion.div variants={pv(0.3)} initial="hidden" animate="visible">
-          <NewsletterBanner />
-        </motion.div>
-      </div>
+      </AnimatePresence>
 
       <style>{`
         @keyframes spin    { to { transform: rotate(360deg); } }
