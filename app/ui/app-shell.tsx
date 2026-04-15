@@ -13,6 +13,7 @@ import {
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LogOut, Settings, User, ChevronDown, Sun, Moon } from "lucide-react";
+const { brandColor, mode, toggleMode } = useTheme();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Theme context
@@ -258,7 +259,7 @@ function Header() {
           width:          "32px",
           height:         "32px",
           borderRadius:   "8px",
-          background:     brand,
+          background:     brandColor,
           display:        "flex",
           alignItems:     "center",
           justifyContent: "center",
