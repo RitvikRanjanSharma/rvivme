@@ -1,105 +1,90 @@
-/* app/globals.css */
-/* AI Marketing Labs — Global CSS Variables & Base Styles */
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ── Dark mode (default) ─────────────────────────────────────────────────── */
 :root,
 .dark {
-  --brand:         #3b82f6;
-  --brand-rgb:     59, 130, 246;
-  --brand-glow:    rgba(59, 130, 246, 0.30);
+  --brand: #2563eb;
+  --brand-rgb: 37, 99, 235;
+  --brand-glow: rgba(37, 99, 235, 0.28);
 
-  --bg:            #050505;
-  --surface:       #0a0a0a;
-  --surface-raised:#0f0f0f;
-  --card:          #111111;
-  --border:        #1a1a1a;
-  --border-subtle: #141414;
-  --muted:         #222222;
+  --bg: #071018;
+  --surface: #0d1721;
+  --surface-raised: #13202b;
+  --card: #121d28;
+  --border: rgba(148, 163, 184, 0.16);
+  --muted: rgba(148, 163, 184, 0.26);
 
-  --nav-bg:        rgba(5, 5, 5, 0.92);
+  --text-primary: #f8fafc;
+  --text-secondary: #a3b4c7;
+  --text-tertiary: #6b7c8f;
 
-  --text-primary:   #f0f0f0;
-  --text-secondary: #888888;
-  --text-tertiary:  #444444;
-
-  --signal-green: #00e676;
-  --signal-amber: #ffab00;
-  --signal-red:   #ff1744;
-  --signal-blue:  #2979ff;
-
-  --chart-grid:   rgba(255, 255, 255, 0.04);
-  --chart-axis:   #2a2a2a;
-  --chart-tick:   #555555;
+  --font-display: "Georgia", "Times New Roman", serif;
+  --font-body: "Segoe UI", "Inter", system-ui, sans-serif;
+  --font-mono: "Consolas", "SFMono-Regular", monospace;
 }
 
-/* ── Light mode ──────────────────────────────────────────────────────────── */
 .light {
-  --bg:            #f4f4f4;
-  --surface:       #ffffff;
-  --surface-raised:#f8f8f8;
-  --card:          #f2f2f2;
-  --border:        #e0e0e0;
-  --border-subtle: #eaeaea;
-  --muted:         #d4d4d4;
+  --bg: #eef4fb;
+  --surface: #ffffff;
+  --surface-raised: #f8fbff;
+  --card: #f3f7fc;
+  --border: rgba(15, 23, 42, 0.1);
+  --muted: rgba(15, 23, 42, 0.16);
 
-  --nav-bg:        rgba(255, 255, 255, 0.92);
-
-  --text-primary:   #0a0a0a;
-  --text-secondary: #555555;
-  --text-tertiary:  #aaaaaa;
-
-  --chart-grid:   rgba(0, 0, 0, 0.05);
-  --chart-axis:   #e0e0e0;
-  --chart-tick:   #999999;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-tertiary: #64748b;
 }
 
-/* ── Base ────────────────────────────────────────────────────────────────── */
 *,
 *::before,
 *::after {
   box-sizing: border-box;
-  margin:     0;
-  padding:    0;
 }
 
 html {
+  font-size: 16px;
   scroll-behavior: smooth;
-  font-size:       16px;
 }
 
 body {
-  background:              var(--bg);
-  color:                   var(--text-primary);
-  font-family:             var(--font-inter), system-ui, sans-serif;
-  -webkit-font-smoothing:  antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  overflow-x:              hidden;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  margin: 0;
+  min-width: 320px;
 }
 
-/* ── Scrollbar ───────────────────────────────────────────────────────────── */
-::-webkit-scrollbar        { width: 4px; height: 4px; }
-::-webkit-scrollbar-track  { background: var(--bg); }
-::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+a,
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
 
-/* ── Selection ───────────────────────────────────────────────────────────── */
+button {
+  cursor: pointer;
+}
+
 ::selection {
-  background: rgba(var(--brand-rgb), 0.20);
-  color:      var(--text-primary);
+  background: rgba(var(--brand-rgb), 0.18);
 }
 
-/* ── Focus ───────────────────────────────────────────────────────────────── */
 :focus-visible {
-  outline:        2px solid var(--brand);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
-  border-radius:  4px;
 }
 
-/* ── Font helpers ────────────────────────────────────────────────────────── */
-.font-display { font-family: var(--font-syne),    sans-serif;  }
-.font-mono    { font-family: var(--font-dm-mono), monospace;   }
-.font-body    { font-family: var(--font-inter),   sans-serif;  }
+.hero-grid,
+.settings-grid {
+  display: grid;
+}
+
+@media (max-width: 900px) {
+  .hero-grid,
+  .settings-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}

@@ -49,8 +49,8 @@ export function useDomain() {
       } else {
         setDomain(cleanDomain(record.website_url));
       }
-      } catch (err: any) {
-        setError(err.message);
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Unable to resolve domain");
         setDomain(FALLBACK_DOMAIN);
       } finally {
         setLoading(false);

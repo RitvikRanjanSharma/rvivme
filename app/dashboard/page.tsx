@@ -10,7 +10,6 @@ import {
   useState,
   useEffect,
   useRef,
-  useMemo,
 } from "react";
 import {
   AreaChart,
@@ -37,7 +36,6 @@ import {
   ArrowRight,
   ExternalLink,
   RefreshCw,
-  Lock,
   AlertCircle,
   XCircle,
 } from "lucide-react";
@@ -99,8 +97,6 @@ const TRAFFIC_DATA: TrafficDataPoint[] = [
   { month: "Aug",  actual: null,  forecast: 55800, lower: 49200, upper: 62400 },
   { month: "Sep+", actual: null,  forecast: 63100, lower: 54800, upper: 71500 },
 ];
-
-const FORECAST_SEPARATOR_INDEX = 6;
 
 const AI_METRICS: MetricCard[] = [
   {
@@ -502,10 +498,10 @@ function ConnectionBanner({
 // Dashboard header
 // ─────────────────────────────────────────────────────────────────────────────
 function DashboardHeader({ brandColor }: { brandColor: string }) {
-  const now = new Date();
-  const dateStr = now.toLocaleDateString("en-GB", {
+  const dateStr = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "UTC",
     weekday: "long", day: "numeric", month: "long", year: "numeric",
-  });
+  }).format(new Date());
 
   return (
     <motion.div
@@ -1092,6 +1088,13 @@ function TechnicalHealthBanner() {
 // ─────────────────────────────────────────────────────────────────────────────
 function ActionCenter({ brandColor }: { brandColor: string }) {
   const [selected, setSelected] = useState<string | null>(null);
+  const generatedDate = new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  })
+    .format(new Date())
+    .toUpperCase();
 
   return (
     <Section
@@ -1105,7 +1108,7 @@ function ActionCenter({ brandColor }: { brandColor: string }) {
             color:         "var(--text-tertiary)",
             letterSpacing: "0.1em",
           }}>
-            GENERATED {new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short" }).toUpperCase()}
+            GENERATED {generatedDate}
           </span>
         </div>
       }
@@ -1364,8 +1367,12 @@ export default function DashboardPage() {
   const gscConnected  = false;
 
   useEffect(() => {
-    const stored = localStorage.getItem("rvivme-brand");
-    if (stored) setBrandColor(stored);
+    const stored = window.localStorage.getItem("rvivme-brand");
+    if (stored) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setBrandColor(stored);
+    }
+
     const onStorage = (e: StorageEvent) => {
       if (e.key === "rvivme-brand" && e.newValue) setBrandColor(e.newValue);
     };

@@ -1,15 +1,8 @@
-// middleware.ts  (place in project ROOT, next to package.json)
-// =============================================================================
-// AI Marketing Labs — Route Protection Middleware
-// Unauthenticated users are redirected to /auth/login.
-// Authenticated users visiting /auth/* are redirected to /dashboard.
-// =============================================================================
-
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+const AUTH_ROUTES = ["/auth/login", "/auth/signup"];
 const PROTECTED_PREFIXES = ["/dashboard", "/keywords", "/competitors", "/settings"];
-const AUTH_ROUTES        = ["/auth/login", "/auth/signup"];
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -21,23 +14,26 @@ export async function middleware(request: NextRequest) {
       cookies: {
         getAll: () => request.cookies.getAll(),
         setAll: (cookiesToSet) => {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          );
+          for (const cookie of cookiesToSet) {
+            request.cookies.set(cookie.name, cookie.value);
+          }
+
           supabaseResponse = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
+
+          for (const cookie of cookiesToSet) {
+            supabaseResponse.cookies.set(cookie.name, cookie.value, cookie.options);
+          }
         },
       },
-    }
+    },
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const { pathname } = request.nextUrl;
 
-  // Redirect unauthenticated users away from protected routes
-  const isProtected = PROTECTED_PREFIXES.some((p) => pathname.startsWith(p));
+  const isProtected = PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix));
   if (isProtected && !user) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/auth/login";
@@ -45,8 +41,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Redirect authenticated users away from auth pages
-  const isAuthRoute = AUTH_ROUTES.some((p) => pathname.startsWith(p));
+  const isAuthRoute = AUTH_ROUTES.some((route) => pathname.startsWith(route));
   if (isAuthRoute && user) {
     const dashboardUrl = request.nextUrl.clone();
     dashboardUrl.pathname = "/dashboard";
@@ -57,7 +52,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
 };

@@ -1,830 +1,470 @@
 "use client";
 
-// app/settings/page.tsx
-// =============================================================================
-// AI Marketing Labs — Settings & Configuration Centre
-// Brand theming · API integrations · Profile · Billing · Data providers
-// =============================================================================
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Bell, CreditCard, Database, Palette, Plug, Shield, User } from "lucide-react";
+import { supabase, type Database as AppDatabase } from "@/lib/supabase";
 
-import { useState, useEffect, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { useSearchParams } from "next/navigation";
-import { supabase } from "@/lib/supabase";
-import {
-  User, Palette, Plug, CreditCard, Shield, Database,
-  CheckCircle2, XCircle, AlertCircle, ChevronRight,
-  Save, RefreshCw, ExternalLink, Eye, EyeOff, Zap,
-  Globe2, BarChart3, Cpu, Lock, Bell, Trash2,
-} from "lucide-react";
+type UserRow = AppDatabase["public"]["Tables"]["users"]["Row"];
+type TabId = "profile" | "branding" | "integrations" | "data" | "billing" | "security";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────────────────────
-type TabId = "profile" | "branding" | "integrations" | "data-providers" | "billing" | "security";
+const tabs = [
+  { id: "profile", label: "Profile", icon: User },
+  { id: "branding", label: "Branding", icon: Palette },
+  { id: "integrations", label: "Integrations", icon: Plug },
+  { id: "data", label: "Data", icon: Database },
+  { id: "billing", label: "Billing", icon: CreditCard },
+  { id: "security", label: "Security", icon: Shield },
+] as const;
 
-interface Integration {
-  id:       string;
-  name:     string;
-  desc:     string;
-  icon:     React.ElementType;
-  status:   "connected" | "disconnected" | "pending";
-  scopes:   string[];
-  lastSync: string | null;
+const brandPresets = ["#2563eb", "#f97316", "#10b981", "#e11d48", "#06b6d4", "#7c3aed"] as const;
+
+const defaultProfile: Pick<
+  UserRow,
+  "company_name" | "gsc_connected" | "ga4_connected" | "onboarding_complete" | "primary_color_hex" | "subscription_tier" | "theme_mode" | "website_url"
+> = {
+  company_name: "Rvivme",
+  website_url: "https://rvivme.example",
+  primary_color_hex: "#2563eb",
+  subscription_tier: "free",
+  ga4_connected: false,
+  gsc_connected: false,
+  theme_mode: "dark",
+  onboarding_complete: false,
+};
+
+function isTabId(value: string | null): value is TabId {
+  return tabs.some((tab) => tab.id === value);
 }
 
-interface DataProvider {
-  id:       string;
-  name:     string;
-  desc:     string;
-  status:   "active" | "inactive" | "error";
-  plan:     string;
-  units:    number;
-  unitCap:  number;
-  endpoint: string;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Data
-// ─────────────────────────────────────────────────────────────────────────────
-const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
-  { id: "profile",        label: "Profile",         icon: User       },
-  { id: "branding",       label: "Branding & Theme", icon: Palette    },
-  { id: "integrations",   label: "Integrations",     icon: Plug       },
-  { id: "data-providers", label: "Data Providers",   icon: Database   },
-  { id: "billing",        label: "Billing",          icon: CreditCard },
-  { id: "security",       label: "Security",         icon: Shield     },
-];
-
-const INTEGRATIONS: Integration[] = [
-  {
-    id: "ga4", name: "Google Analytics 4", desc: "Traffic, conversions, and user behaviour data",
-    icon: BarChart3, status: "disconnected", scopes: ["analytics.readonly"],
-    lastSync: null,
-  },
-  {
-    id: "gsc", name: "Google Search Console", desc: "Impressions, clicks, average position, CTR",
-    icon: Globe2, status: "disconnected", scopes: ["webmasters.readonly"],
-    lastSync: null,
-  },
-  {
-    id: "dataforseo", name: "DataForSEO", desc: "Keyword rankings, SERP data, backlinks, AI Overview detection",
-    icon: Cpu, status: "active" as any, scopes: ["serp", "keywords", "backlinks"],
-    lastSync: "09:41 GMT today",
-  },
-];
-
-const DATA_PROVIDERS: DataProvider[] = [
-  {
-    id: "dataforseo", name: "DataForSEO", desc: "Primary data intelligence layer — SERP, keywords, backlinks, AI Overview",
-    status: "active", plan: "Standard", units: 8420, unitCap: 50000, endpoint: "api.dataforseo.com",
-  },
-  {
-    id: "ahrefs", name: "Ahrefs API", desc: "Premium backlink index — configure for authority gap analysis",
-    status: "inactive", plan: "—", units: 0, unitCap: 0, endpoint: "apiv3.ahrefs.com",
-  },
-  {
-    id: "gsc-api", name: "Google Search Console API", desc: "First-party performance data — connect GSC to activate",
-    status: "error", plan: "Free", units: 0, unitCap: 25000, endpoint: "searchconsole.googleapis.com",
-  },
-];
-
-const BRAND_PRESETS = [
-  "#3b82f6", "#8b5cf6", "#ec4899", "#f97316",
-  "#10b981", "#ef4444", "#f59e0b", "#06b6d4",
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
-const SPRING = { type: "spring", stiffness: 260, damping: 30, mass: 0.9 } as const;
-function pv(delay = 0) {
-  return { hidden: { opacity: 0, y: 14 }, visible: { opacity: 1, y: 0, transition: { ...SPRING, delay } } };
-}
-
-function hexToRgb(hex: string): string {
-  const c = hex.replace("#", "");
-  return `${parseInt(c.slice(0,2),16)}, ${parseInt(c.slice(2,4),16)}, ${parseInt(c.slice(4,6),16)}`;
-}
-
-function Panel({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
-  return <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", ...style }}>{children}</div>;
-}
-
-function PanelHeader({ title, subtitle }: { title: string; subtitle?: string }) {
-  return (
-    <div style={{ padding: "18px 22px", borderBottom: "1px solid var(--border)" }}>
-      <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", marginBottom: subtitle ? "3px" : 0 }}>{title}</div>
-      {subtitle && <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", color: "var(--text-tertiary)" }}>{subtitle}</div>}
-    </div>
-  );
-}
-
-function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
-  return (
-    <div style={{ marginBottom: "20px" }}>
-      <label style={{ display: "block", fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>
-        {label}
-      </label>
-      {children}
-      {hint && <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "11px", color: "var(--text-tertiary)", marginTop: "5px" }}>{hint}</div>}
-    </div>
-  );
-}
-
-function Input({ value, onChange, placeholder, type = "text" }: { value: string; onChange: (v: string) => void; placeholder?: string; type?: string }) {
-  return (
-    <input
-      type={type}
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      placeholder={placeholder}
-      style={{
-        width: "100%", padding: "9px 12px",
-        fontFamily: "var(--font-inter), sans-serif", fontSize: "13px",
-        color: "var(--text-primary)", background: "var(--card)",
-        border: "1px solid var(--border)", borderRadius: "7px", outline: "none",
-        transition: "border-color 0.18s",
-      }}
-      onFocus={e => (e.currentTarget.style.borderColor = "var(--brand)")}
-      onBlur={e => (e.currentTarget.style.borderColor = "var(--border)")}
-    />
-  );
-}
-
-function SaveButton({ brandColor, onClick, label = "Save Changes" }: { 
-  brandColor: string; 
-  onClick?: () => void; 
-  label?: string 
+function SectionCard({
+  title,
+  description,
+  action,
+  children,
+}: {
+  title: string;
+  description: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
 }) {
-  const [saved, setSaved] = useState(false);
-
-  function handleClick() {
-    onClick?.();
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  }
-
   return (
-    <button
-      onClick={handleClick}
+    <section
       style={{
-        // ... existing styles stay exactly the same
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        borderRadius: "24px",
+        padding: "24px",
       }}
     >
-      {saved ? <CheckCircle2 size={13} /> : <Save size={13} />}
-      {saved ? "Saved" : label}
+      <div style={{ alignItems: "start", display: "flex", gap: "16px", justifyContent: "space-between", marginBottom: "20px" }}>
+        <div>
+          <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.6rem", letterSpacing: "-0.05em", margin: 0 }}>{title}</h2>
+          <p style={{ color: "var(--text-secondary)", lineHeight: 1.6, margin: "10px 0 0" }}>{description}</p>
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  type?: string;
+}) {
+  return (
+    <label style={{ display: "block" }}>
+      <span style={{ color: "var(--text-secondary)", display: "block", fontSize: "0.9rem", marginBottom: "8px" }}>{label}</span>
+      <input
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        style={{
+          background: "var(--card)",
+          border: "1px solid var(--border)",
+          borderRadius: "16px",
+          color: "var(--text-primary)",
+          padding: "14px 16px",
+          width: "100%",
+        }}
+      />
+    </label>
+  );
+}
+
+function SaveButton({
+  disabled,
+  label,
+  onClick,
+}: {
+  disabled?: boolean;
+  label: string;
+  onClick: () => void | Promise<void>;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => void onClick()}
+      disabled={disabled}
+      style={{
+        background: disabled ? "var(--muted)" : "linear-gradient(135deg, var(--brand), color-mix(in srgb, var(--brand) 55%, #081018))",
+        border: "none",
+        borderRadius: "999px",
+        color: "#ffffff",
+        cursor: disabled ? "not-allowed" : "pointer",
+        padding: "12px 18px",
+      }}
+    >
+      {label}
     </button>
   );
 }
 
-function StatusBadge({ status }: { status: "connected" | "disconnected" | "pending" | "active" | "inactive" | "error" }) {
-  const cfg: Record<string, { label: string; color: string; bg: string }> = {
-    connected:    { label: "Connected",    color: "var(--signal-green)", bg: "rgba(0,230,118,0.10)"  },
-    active:       { label: "Active",       color: "var(--signal-green)", bg: "rgba(0,230,118,0.10)"  },
-    disconnected: { label: "Disconnected", color: "var(--text-tertiary)", bg: "var(--card)"          },
-    inactive:     { label: "Inactive",     color: "var(--text-tertiary)", bg: "var(--card)"          },
-    pending:      { label: "Pending",      color: "var(--signal-amber)", bg: "rgba(255,171,0,0.10)"  },
-    error:        { label: "Error",        color: "var(--signal-red)",   bg: "rgba(255,23,68,0.10)"  },
+export default function SettingsPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const activeTab: TabId = isTabId(requestedTab) ? requestedTab : "profile";
+
+  const [companyName, setCompanyName] = useState(defaultProfile.company_name);
+  const [websiteUrl, setWebsiteUrl] = useState(defaultProfile.website_url);
+  const [fullName, setFullName] = useState("Marketing Operator");
+  const [email, setEmail] = useState("team@rvivme.com");
+  const [brandColor, setBrandColor] = useState(defaultProfile.primary_color_hex);
+  const [profile, setProfile] = useState(defaultProfile);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const setTab = (tab: TabId) => {
+    router.replace(`/settings?tab=${tab}`);
   };
-  const c = cfg[status];
-  return (
-    <span style={{
-      fontFamily: "var(--font-dm-mono), monospace", fontSize: "9px", fontWeight: 500,
-      color: c.color, background: c.bg, border: `1px solid ${c.color}30`,
-      padding: "2px 8px", borderRadius: "100px", letterSpacing: "0.08em", textTransform: "uppercase",
-    }}>{c.label}</span>
-  );
-}
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tab panels
-// ─────────────────────────────────────────────────────────────────────────────
+  const loadProfile = useCallback(async () => {
+    setLoading(true);
+    setStatusMessage(null);
 
-function ProfileTab({ brandColor }: { brandColor: string }) {
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
-const [company,  setCompany]  = useState("");
-const [website,  setWebsite]  = useState("");
-const [email,    setEmail]    = useState("");
-const [fullName, setFullName] = useState("");
-const [loading,  setLoading]  = useState(true);
-
-useEffect(() => {
-  async function loadProfile() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data } = await supabase
-      .from("users")
-      .select("company_name, website_url")
-      .eq("id", user.id)
-      .single();
-
-    const profile = data as { company_name: string; website_url: string } | null;
-    setCompany(profile?.company_name  ?? "");
-    setWebsite(profile?.website_url   ?? "");
-    setEmail(user.email               ?? "");
-    setFullName(user.user_metadata?.full_name ?? "");
-    setLoading(false);
-  }
-  loadProfile();
-}, []);
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      <motion.div variants={pv(0.1)} initial="hidden" animate="visible">
-        <Panel>
-          <PanelHeader title="Organisation Profile" subtitle="Your company details are used across all reports and exports." />
-          <div style={{ padding: "22px" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
-              <Field label="Full Name">
-                <Input value={fullName} onChange={setFullName} placeholder="Your full name" />
-              </Field>
-              <Field label="Email Address">
-                <Input value={email} onChange={setEmail} placeholder="admin@yourcompany.com" type="email" />
-              </Field>
-              <Field label="Company Name">
-                <Input value={company} onChange={setCompany} placeholder="Your company name" />
-              </Field>
-              <Field label="Primary Website URL">
-                <Input value={website} onChange={setWebsite} placeholder="https://yourwebsite.com" />
-              </Field>
-            </div>
-            <SaveButton
-              brandColor={brandColor}
-              label="Save Changes"
-              onClick={async () => {
-                const { data: { user } } = await supabase.auth.getUser();
-                if (!user) return;
-                await supabase
-                  .from("users")
-                  .update({ company_name: company, website_url: website } as { company_name: string; website_url: string })
-                  .eq("id", user.id);
-              }}
-            />
-          </div>
-        </Panel>
-      </motion.div>
-
-      <motion.div variants={pv(0.18)} initial="hidden" animate="visible">
-        <Panel>
-          <PanelHeader title="Danger Zone" subtitle="Irreversible account operations." />
-          <div style={{ padding: "22px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div>
-              <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "3px" }}>Delete Account</div>
-              <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", color: "var(--text-tertiary)" }}>Permanently deletes all data including keywords, competitors, and predictions. This action cannot be undone.</div>
-            </div>
-            <button style={{
-              display: "flex", alignItems: "center", gap: "5px",
-              fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", fontWeight: 600,
-              color: "var(--signal-red)", background: "rgba(255,23,68,0.08)",
-              border: "1px solid rgba(255,23,68,0.25)", borderRadius: "7px",
-              padding: "8px 14px", cursor: "pointer", transition: "all 0.18s", flexShrink: 0,
-            }}>
-              <Trash2 size={12} /> Delete Account
-            </button>
-          </div>
-        </Panel>
-      </motion.div>
-    </div>
-  );
-}
-
-function BrandingTab({ brandColor, onBrandChange }: { brandColor: string; onBrandChange: (hex: string) => void }) {
-  const [hex, setHex]   = useState(brandColor);
-  const [mode, setMode] = useState<"dark" | "light">("dark");
-
-  function apply(color: string) {
-    const clean = color.startsWith("#") ? color : `#${color}`;
-    if (/^#[0-9A-Fa-f]{6}$/.test(clean)) {
-      setHex(clean);
-      onBrandChange(clean);
+    if (authError || !user) {
+      setLoading(false);
+      setStatusMessage(authError?.message ?? "Sign in to manage settings.");
+      return;
     }
-  }
 
-  useEffect(() => {
-    const stored = localStorage.getItem("rvivme-theme") as "dark" | "light" | null;
-    if (stored) setMode(stored);
+    setEmail(user.email ?? "");
+    setFullName((user.user_metadata?.full_name as string | undefined) ?? "");
+
+    const { data, error } = await supabase.from("users").select("*").eq("id", user.id).single();
+    const userProfile = data as UserRow | null;
+
+    if (error || !userProfile) {
+      setLoading(false);
+      setStatusMessage(error?.message ?? "Unable to load workspace profile.");
+      return;
+    }
+
+    setProfile(userProfile);
+    setCompanyName(userProfile.company_name);
+    setWebsiteUrl(userProfile.website_url);
+    setBrandColor(userProfile.primary_color_hex);
+    window.localStorage.setItem("rvivme-brand", userProfile.primary_color_hex);
+    window.localStorage.setItem("rvivme-theme", userProfile.theme_mode);
+    document.documentElement.style.setProperty("--brand", userProfile.primary_color_hex);
+    setLoading(false);
   }, []);
 
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      <motion.div variants={pv(0.1)} initial="hidden" animate="visible">
-        <Panel>
-          <PanelHeader title="Brand Colour" subtitle="Sets the primary accent across charts, buttons, and active states throughout the platform." />
-          <div style={{ padding: "22px" }}>
-            {/* Live preview swatch */}
-            <div style={{
-              padding: "20px 24px", background: "var(--card)", border: "1px solid var(--border)",
-              borderRadius: "10px", marginBottom: "22px",
-              display: "flex", alignItems: "center", gap: "20px",
-            }}>
-              <div style={{
-                width: "56px", height: "56px", borderRadius: "12px",
-                background: hex, boxShadow: `0 0 24px rgba(${hexToRgb(hex)},0.45)`,
-                flexShrink: 0, transition: "background 0.2s, box-shadow 0.2s",
-              }} />
-              <div>
-                <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "13px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "3px" }}>
-                  Current Brand Colour
-                </div>
-                <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "13px", color: hex }}>{hex.toUpperCase()}</div>
-              </div>
-              <div style={{ marginLeft: "auto", display: "flex", gap: "8px" }}>
-                <button style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", fontWeight: 500, color: "var(--text-secondary)", background: "transparent", border: "1px solid var(--border)", borderRadius: "6px", padding: "6px 12px", cursor: "pointer" }}>
-                  Extract from Logo
-                </button>
-              </div>
-            </div>
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadProfile();
+  }, [loadProfile]);
 
-            {/* Presets */}
-            <Field label="Colour Presets">
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                {BRAND_PRESETS.map(preset => (
-                  <button
-                    key={preset}
-                    onClick={() => apply(preset)}
-                    style={{
-                      width: "32px", height: "32px", borderRadius: "8px",
-                      background: preset, border: `2px solid ${hex === preset ? "var(--text-primary)" : "transparent"}`,
-                      cursor: "pointer", transition: "transform 0.15s, border-color 0.15s",
-                      boxShadow: hex === preset ? `0 0 12px rgba(${hexToRgb(preset)},0.5)` : "none",
-                    }}
-                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.transform = "scale(1.1)"}
-                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.transform = "scale(1)"}
-                  />
-                ))}
-              </div>
-            </Field>
+  const saveProfile = useCallback(async () => {
+    setSaving(true);
+    setStatusMessage(null);
 
-            {/* Hex input */}
-            <Field label="Custom Hex Value" hint="Enter any valid 6-digit hex colour code.">
-              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                <div style={{
-                  width: "36px", height: "36px", borderRadius: "7px",
-                  background: hex, flexShrink: 0, border: "1px solid var(--border)",
-                  transition: "background 0.15s",
-                }} />
-                <div style={{ flex: 1 }}>
-                  <Input
-                    value={hex}
-                    onChange={v => apply(v)}
-                    placeholder="#3b82f6"
-                  />
-                </div>
-              </div>
-            </Field>
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-            <SaveButton brandColor={brandColor} onClick={() => onBrandChange(hex)} label="Apply Brand Colour" />
-          </div>
-        </Panel>
-      </motion.div>
+    if (!user) {
+      setSaving(false);
+      setStatusMessage("You need to sign in again before saving.");
+      return;
+    }
 
-      <motion.div variants={pv(0.18)} initial="hidden" animate="visible">
-        <Panel>
-          <PanelHeader title="Interface Mode" subtitle="Toggle between dark and light mode." />
-          <div style={{ padding: "22px", display: "flex", gap: "12px" }}>
-            {(["dark", "light"] as const).map(m => (
-              <button
-                key={m}
-                onClick={() => {
-                  setMode(m);
-                  localStorage.setItem("rvivme-theme", m);
-                  document.documentElement.classList.toggle("dark", m === "dark");
-                  document.documentElement.classList.toggle("light", m === "light");
-                }}
-                style={{
-                  flex: 1, padding: "14px", borderRadius: "9px", cursor: "pointer",
-                  border: `1px solid ${mode === m ? brandColor : "var(--border)"}`,
-                  background: mode === m ? `rgba(var(--brand-rgb), 0.08)` : "var(--card)",
-                  transition: "all 0.2s",
-                }}
-              >
-                <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "13px", fontWeight: 700, color: mode === m ? brandColor : "var(--text-secondary)", textTransform: "capitalize", marginBottom: "3px" }}>
-                  {m} Mode
-                </div>
-                <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "11px", color: "var(--text-tertiary)" }}>
-                  {m === "dark" ? "Obsidian black — default" : "Clean white surfaces"}
-                </div>
-              </button>
-            ))}
-          </div>
-        </Panel>
-      </motion.div>
-    </div>
+    const { error } = await supabase
+      .from("users")
+      .update({
+        company_name: companyName,
+        website_url: websiteUrl,
+      } as never)
+      .eq("id", user.id);
+
+    if (!error) {
+      const { error: authUpdateError } = await supabase.auth.updateUser({
+        data: { full_name: fullName },
+      });
+
+      setStatusMessage(authUpdateError ? authUpdateError.message : "Profile saved.");
+    } else {
+      setStatusMessage(error.message);
+    }
+
+    setSaving(false);
+    void loadProfile();
+  }, [companyName, fullName, loadProfile, websiteUrl]);
+
+  const saveBranding = useCallback(async () => {
+    setSaving(true);
+    setStatusMessage(null);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setSaving(false);
+      setStatusMessage("You need to sign in again before saving.");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("users")
+      .update({
+        primary_color_hex: brandColor,
+        theme_mode: profile.theme_mode,
+      } as never)
+      .eq("id", user.id);
+
+    if (error) {
+      setStatusMessage(error.message);
+    } else {
+      window.localStorage.setItem("rvivme-brand", brandColor);
+      document.documentElement.style.setProperty("--brand", brandColor);
+      setStatusMessage("Brand settings saved.");
+    }
+
+    setSaving(false);
+    void loadProfile();
+  }, [brandColor, loadProfile, profile.theme_mode]);
+
+  const metrics = useMemo(
+    () => [
+      { label: "Connected sources", value: `${Number(profile.ga4_connected) + Number(profile.gsc_connected)} live` },
+      { label: "Subscription", value: profile.subscription_tier },
+      { label: "Onboarding", value: profile.onboarding_complete ? "Complete" : "In progress" },
+    ],
+    [profile.ga4_connected, profile.gsc_connected, profile.onboarding_complete, profile.subscription_tier],
   );
-}
 
-function IntegrationsTab({ brandColor }: { brandColor: string }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-      {INTEGRATIONS.map((intg, i) => {
-        const Icon = intg.icon;
-        const connected = intg.status === "connected" || (intg.status as string) === "active";
+  const renderContent = () => {
+    switch (activeTab) {
+      case "profile":
         return (
-          <motion.div key={intg.id} variants={pv(0.08 + i * 0.07)} initial="hidden" animate="visible">
-            <Panel style={{ padding: "20px 22px" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "14px", flex: 1 }}>
-                  <div style={{
-                    width: "42px", height: "42px", borderRadius: "10px",
-                    background: connected ? `rgba(var(--brand-rgb),0.10)` : "var(--card)",
-                    border: `1px solid ${connected ? `rgba(var(--brand-rgb),0.25)` : "var(--border)"}`,
-                    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                  }}>
-                    <Icon size={18} color={connected ? brandColor : "var(--text-tertiary)"} />
-                  </div>
-                  <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "3px" }}>
-                      <span style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)" }}>{intg.name}</span>
-                      <StatusBadge status={intg.status as any} />
-                    </div>
-                    <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", color: "var(--text-tertiary)", marginBottom: "4px" }}>{intg.desc}</div>
-                    {intg.lastSync && (
-                      <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>
-                        LAST SYNC: {intg.lastSync}
-                      </div>
-                    )}
-                    <div style={{ display: "flex", gap: "4px", marginTop: "6px", flexWrap: "wrap" }}>
-                      {intg.scopes.map(s => (
-                        <span key={s} style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "9px", color: "var(--text-tertiary)", background: "var(--card)", border: "1px solid var(--border)", padding: "1px 6px", borderRadius: "100px", letterSpacing: "0.06em" }}>
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
-                  {connected ? (
-                    <>
-                      <button style={{ display: "flex", alignItems: "center", gap: "4px", fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", background: "transparent", border: "1px solid var(--border)", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", letterSpacing: "0.06em" }}>
-                        <RefreshCw size={10} /> SYNC
-                      </button>
-                      <button style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--signal-red)", background: "rgba(255,23,68,0.08)", border: "1px solid rgba(255,23,68,0.20)", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", letterSpacing: "0.06em" }}>
-                        DISCONNECT
-                      </button>
-                    </>
-                  ) : (
-                    <button style={{
-                      display: "flex", alignItems: "center", gap: "5px",
-                      fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", fontWeight: 600,
-                      color: "#fff", background: `linear-gradient(135deg, ${brandColor}, color-mix(in srgb, ${brandColor} 60%, #000))`,
-                      border: "none", borderRadius: "7px", padding: "8px 14px", cursor: "pointer",
-                      boxShadow: "0 0 12px var(--brand-glow)", transition: "all 0.2s",
-                    }}>
-                      <Plug size={12} /> Connect
-                    </button>
-                  )}
-                </div>
-              </div>
-            </Panel>
-          </motion.div>
+          <SectionCard
+            title="Workspace profile"
+            description="These values are stored in Supabase and used across reports, onboarding, and platform defaults."
+            action={<SaveButton disabled={saving || loading} label={saving ? "Saving..." : "Save profile"} onClick={saveProfile} />}
+          >
+            <div style={{ display: "grid", gap: "16px", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
+              <Field label="Full name" value={fullName} onChange={setFullName} />
+              <Field label="Email" value={email} onChange={setEmail} type="email" />
+              <Field label="Company name" value={companyName} onChange={setCompanyName} />
+              <Field label="Primary domain" value={websiteUrl} onChange={setWebsiteUrl} />
+            </div>
+          </SectionCard>
         );
-      })}
-    </div>
-  );
-}
-
-function DataProvidersTab({ brandColor }: { brandColor: string }) {
-  const [showKey, setShowKey] = useState<string | null>(null);
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-      {DATA_PROVIDERS.map((dp, i) => (
-        <motion.div key={dp.id} variants={pv(0.08 + i * 0.07)} initial="hidden" animate="visible">
-          <Panel style={{ padding: "20px 22px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px" }}>
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "3px" }}>
-                  <span style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)" }}>{dp.name}</span>
-                  <StatusBadge status={dp.status} />
-                  {dp.plan !== "—" && (
-                    <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "9px", color: brandColor, background: `rgba(var(--brand-rgb),0.08)`, border: `1px solid rgba(var(--brand-rgb),0.18)`, padding: "1px 6px", borderRadius: "100px", letterSpacing: "0.06em" }}>
-                      {dp.plan}
-                    </span>
-                  )}
-                </div>
-                <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", color: "var(--text-tertiary)" }}>{dp.desc}</div>
-                <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", marginTop: "4px", letterSpacing: "0.06em" }}>
-                  ENDPOINT: {dp.endpoint}
-                </div>
-              </div>
-              {dp.status === "active" && (
-                <div style={{ textAlign: "right", flexShrink: 0 }}>
-                  <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "18px", fontWeight: 500, color: "var(--text-primary)", lineHeight: 1, marginBottom: "2px" }}>
-                    {dp.units.toLocaleString()}
-                  </div>
-                  <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "9px", color: "var(--text-tertiary)", letterSpacing: "0.08em" }}>
-                    / {dp.unitCap.toLocaleString()} UNITS
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {dp.unitCap > 0 && (
-              <div style={{ marginBottom: "14px" }}>
-                <div style={{ height: "4px", background: "var(--border)", borderRadius: "2px", overflow: "hidden" }}>
-                  <div style={{
-                    height: "100%",
-                    width: `${Math.round((dp.units / dp.unitCap) * 100)}%`,
-                    background: dp.status === "error" ? "var(--signal-red)" : dp.status === "active" ? brandColor : "var(--text-tertiary)",
-                    borderRadius: "2px", transition: "width 0.6s ease",
-                  }} />
-                </div>
-                <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "9px", color: "var(--text-tertiary)", marginTop: "4px", letterSpacing: "0.06em" }}>
-                  {Math.round((dp.units / dp.unitCap) * 100)}% OF MONTHLY ALLOCATION CONSUMED
-                </div>
-              </div>
-            )}
-
-            {/* API key field */}
-            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-              <input
-                type={showKey === dp.id ? "text" : "password"}
-                defaultValue={dp.status === "active" ? "dk_live_••••••••••••••••••••••••" : ""}
-                placeholder={dp.status !== "active" ? "Enter API key to activate..." : undefined}
-                style={{
-                  flex: 1, padding: "8px 12px",
-                  fontFamily: "var(--font-dm-mono), monospace", fontSize: "12px",
-                  color: "var(--text-primary)", background: "var(--card)",
-                  border: "1px solid var(--border)", borderRadius: "7px", outline: "none",
-                }}
-              />
-              <button
-                onClick={() => setShowKey(showKey === dp.id ? null : dp.id)}
-                style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: "7px", width: "34px", height: "34px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--text-tertiary)", flexShrink: 0 }}
-              >
-                {showKey === dp.id ? <EyeOff size={13} /> : <Eye size={13} />}
-              </button>
-              <button style={{
-                fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", fontWeight: 600,
-                color: dp.status === "active" ? "var(--text-secondary)" : "#fff",
-                background: dp.status === "active"
-                  ? "transparent"
-                  : `linear-gradient(135deg, ${brandColor}, color-mix(in srgb, ${brandColor} 60%, #000))`,
-                border: dp.status === "active" ? "1px solid var(--border)" : "none",
-                borderRadius: "7px", padding: "8px 14px", cursor: "pointer",
-                boxShadow: dp.status !== "active" ? "0 0 12px var(--brand-glow)" : "none",
-                transition: "all 0.2s", flexShrink: 0,
-              }}>
-                {dp.status === "active" ? "Update Key" : "Activate"}
-              </button>
-            </div>
-          </Panel>
-        </motion.div>
-      ))}
-    </div>
-  );
-}
-
-function BillingTab({ brandColor }: { brandColor: string }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      <motion.div variants={pv(0.1)} initial="hidden" animate="visible">
-        <Panel>
-          <PanelHeader title="Current Plan" />
-          <div style={{ padding: "22px" }}>
-            <div style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              padding: "18px 20px", background: `rgba(var(--brand-rgb),0.06)`,
-              border: `1px solid rgba(var(--brand-rgb),0.20)`, borderRadius: "10px", marginBottom: "20px",
-            }}>
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                  <Zap size={14} color={brandColor} />
-                  <span style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "16px", fontWeight: 800, color: "var(--text-primary)" }}>Professional</span>
-                </div>
-                <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", color: "var(--text-tertiary)" }}>
-                  500 employees · 6 months forecast · Priority support
-                </div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "24px", fontWeight: 500, color: "var(--text-primary)" }}>£899</div>
-                <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>PER MONTH</div>
+      case "branding":
+        return (
+          <SectionCard
+            title="Brand system"
+            description="Primary color and theme preferences are now read from and written back to your user profile."
+            action={<SaveButton disabled={saving || loading} label={saving ? "Saving..." : "Save branding"} onClick={saveBranding} />}
+          >
+            <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "16px" }}>
+              {brandPresets.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setBrandColor(preset)}
+                  style={{
+                    background: preset,
+                    border: brandColor === preset ? "3px solid white" : "1px solid rgba(255,255,255,0.2)",
+                    borderRadius: "18px",
+                    cursor: "pointer",
+                    height: "54px",
+                    width: "54px",
+                  }}
+                />
+              ))}
+              <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "18px", padding: "12px 16px" }}>
+                <p style={{ color: "var(--text-tertiary)", fontSize: "0.85rem", margin: 0 }}>Current accent</p>
+                <p style={{ fontFamily: "var(--font-mono)", margin: "6px 0 0" }}>{brandColor.toUpperCase()}</p>
               </div>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "20px" }}>
+          </SectionCard>
+        );
+      case "integrations":
+        return (
+          <SectionCard title="Integrations" description="Connection status is now reflecting the actual booleans stored on your user record.">
+            <div style={{ display: "grid", gap: "14px" }}>
               {[
-                { label: "Next Billing Date",  value: "14 May 2026"   },
-                { label: "Payment Method",     value: "Visa ···· 4242" },
-                { label: "Billing Cycle",      value: "Monthly"       },
-                { label: "Account Status",     value: "Active"        },
-              ].map(item => (
-                <div key={item.label} style={{ padding: "12px 14px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "8px" }}>
-                  <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "11px", color: "var(--text-tertiary)", marginBottom: "4px" }}>{item.label}</div>
-                  <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "13px", color: "var(--text-primary)", fontWeight: 500 }}>{item.value}</div>
+                { name: "Google Search Console", status: profile.gsc_connected ? "Connected" : "Pending connection" },
+                { name: "GA4", status: profile.ga4_connected ? "Connected" : "Ready to connect" },
+                { name: "DataForSEO", status: "Configured via environment variables" },
+              ].map((integration) => (
+                <div
+                  key={integration.name}
+                  style={{ alignItems: "center", background: "var(--card)", borderRadius: "18px", display: "flex", justifyContent: "space-between", padding: "16px 18px" }}
+                >
+                  <div>
+                    <p style={{ margin: 0 }}>{integration.name}</p>
+                    <p style={{ color: "var(--text-secondary)", margin: "6px 0 0" }}>{integration.status}</p>
+                  </div>
                 </div>
               ))}
             </div>
-            <div style={{ display: "flex", gap: "8px" }}>
-              <button style={{
-                display: "flex", alignItems: "center", gap: "5px",
-                fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", fontWeight: 600,
-                color: "#fff", background: `linear-gradient(135deg, ${brandColor}, color-mix(in srgb, ${brandColor} 60%, #000))`,
-                border: "none", borderRadius: "7px", padding: "8px 16px", cursor: "pointer",
-                boxShadow: "0 0 12px var(--brand-glow)",
-              }}>
-                Upgrade to Enterprise
-              </button>
-              <button style={{
-                fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", fontWeight: 500,
-                color: "var(--text-secondary)", background: "transparent",
-                border: "1px solid var(--border)", borderRadius: "7px", padding: "8px 14px", cursor: "pointer",
-              }}>
-                Download Invoice
-              </button>
-            </div>
-          </div>
-        </Panel>
-      </motion.div>
-    </div>
-  );
-}
-
-function SecurityTab({ brandColor }: { brandColor: string }) {
-  const [current, setCurrent]  = useState("");
-  const [newPw, setNewPw]      = useState("");
-  const [confirm, setConfirm]  = useState("");
-  const [twoFa, setTwoFa]      = useState(false);
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      <motion.div variants={pv(0.1)} initial="hidden" animate="visible">
-        <Panel>
-          <PanelHeader title="Change Password" />
-          <div style={{ padding: "22px" }}>
-            <Field label="Current Password">
-              <Input value={current} onChange={setCurrent} type="password" placeholder="••••••••••••" />
-            </Field>
-            <Field label="New Password" hint="Minimum 12 characters. Must include uppercase, number, and symbol.">
-              <Input value={newPw} onChange={setNewPw} type="password" placeholder="••••••••••••" />
-            </Field>
-            <Field label="Confirm New Password">
-              <Input value={confirm} onChange={setConfirm} type="password" placeholder="••••••••••••" />
-            </Field>
-            <SaveButton brandColor={brandColor} label="Update Password" />
-          </div>
-        </Panel>
-      </motion.div>
-
-      <motion.div variants={pv(0.18)} initial="hidden" animate="visible">
-        <Panel>
-          <PanelHeader title="Two-Factor Authentication" subtitle="Adds an additional layer of security to your account." />
-          <div style={{ padding: "22px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div>
-              <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-secondary)", marginBottom: "4px" }}>
-                Authenticator App (TOTP)
-              </div>
-              <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: twoFa ? "var(--signal-green)" : "var(--text-tertiary)", letterSpacing: "0.06em" }}>
-                {twoFa ? "ENABLED" : "DISABLED"}
-              </div>
-            </div>
-            <button
-              onClick={() => setTwoFa(!twoFa)}
-              style={{
-                width: "44px", height: "24px", borderRadius: "100px",
-                background: twoFa ? brandColor : "var(--muted)",
-                border: "none", cursor: "pointer",
-                position: "relative", transition: "background 0.25s",
-                boxShadow: twoFa ? "0 0 10px var(--brand-glow)" : "none",
-              }}
-            >
-              <div style={{
-                position: "absolute", top: "3px",
-                left: twoFa ? "23px" : "3px",
-                width: "18px", height: "18px", borderRadius: "50%",
-                background: "#fff", transition: "left 0.25s",
-              }} />
-            </button>
-          </div>
-        </Panel>
-      </motion.div>
-
-      <motion.div variants={pv(0.26)} initial="hidden" animate="visible">
-        <Panel>
-          <PanelHeader title="Active Sessions" subtitle="Devices currently signed in to your account." />
-          <div style={{ padding: "22px" }}>
-            {[
-              { device: "Chrome · macOS Ventura", ip: "82.44.18.201",    location: "London, GB",     current: true  },
-              { device: "Safari · iPhone 15 Pro",  ip: "82.44.18.201",    location: "London, GB",     current: false },
-              { device: "Firefox · Windows 11",    ip: "193.122.44.8",    location: "Manchester, GB", current: false },
-            ].map((s, i) => (
-              <div key={i} style={{
-                display: "flex", justifyContent: "space-between", alignItems: "center",
-                padding: "12px 0", borderBottom: i < 2 ? "1px solid var(--border)" : "none",
-              }}>
-                <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: "2px" }}>
-                    <span style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 500, color: "var(--text-primary)" }}>{s.device}</span>
-                    {s.current && (
-                      <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "9px", color: "var(--signal-green)", background: "rgba(0,230,118,0.10)", border: "1px solid rgba(0,230,118,0.20)", padding: "1px 6px", borderRadius: "100px", letterSpacing: "0.06em" }}>CURRENT</span>
-                    )}
-                  </div>
-                  <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.04em" }}>
-                    {s.ip} · {s.location}
-                  </div>
+          </SectionCard>
+        );
+      case "data":
+        return (
+          <SectionCard title="Data operations" description="This section is pulling from your connected profile state and current app configuration.">
+            <div style={{ display: "grid", gap: "14px", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+              {[
+                { label: "Theme mode", value: profile.theme_mode },
+                { label: "Primary color", value: profile.primary_color_hex },
+                { label: "Site domain", value: profile.website_url },
+              ].map((item) => (
+                <div key={item.label} style={{ background: "var(--card)", borderRadius: "18px", padding: "18px" }}>
+                  <p style={{ color: "var(--text-tertiary)", fontSize: "0.85rem", margin: 0 }}>{item.label}</p>
+                  <p style={{ fontFamily: "var(--font-display)", fontSize: "1.5rem", margin: "8px 0 0" }}>{item.value}</p>
                 </div>
-                {!s.current && (
-                  <button style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--signal-red)", background: "rgba(255,23,68,0.08)", border: "1px solid rgba(255,23,68,0.20)", borderRadius: "5px", padding: "4px 10px", cursor: "pointer", letterSpacing: "0.06em" }}>
-                    REVOKE
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        </Panel>
-      </motion.div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Page
-// ─────────────────────────────────────────────────────────────────────────────
-export default function SettingsPage() {
-  const [brandColor, setBrandColor] = useState("#3b82f6");
-const searchParams = useSearchParams();
-const [activeTab, setActiveTab]   = useState<TabId>(
-  (searchParams.get("tab") as TabId) ?? "profile"
-);
-
-  useEffect(() => {
-    const stored = localStorage.getItem("rvivme-brand");
-    if (stored) setBrandColor(stored);
-  }, []);
-
-  function handleBrandChange(hex: string) {
-    setBrandColor(hex);
-    localStorage.setItem("rvivme-brand", hex);
-    document.documentElement.style.setProperty("--brand", hex);
-    const rgb = hex.replace("#", "");
-    const r = parseInt(rgb.slice(0,2),16), g = parseInt(rgb.slice(2,4),16), b = parseInt(rgb.slice(4,6),16);
-    document.documentElement.style.setProperty("--brand-rgb", `${r}, ${g}, ${b}`);
-    document.documentElement.style.setProperty("--brand-glow", `rgba(${r},${g},${b},0.30)`);
-  }
-
-  const content: Record<TabId, React.ReactNode> = {
-    profile:        <ProfileTab brandColor={brandColor} />,
-    branding:       <BrandingTab brandColor={brandColor} onBrandChange={handleBrandChange} />,
-    integrations:   <IntegrationsTab brandColor={brandColor} />,
-    "data-providers": <DataProvidersTab brandColor={brandColor} />,
-    billing:        <BillingTab brandColor={brandColor} />,
-    security:       <SecurityTab brandColor={brandColor} />,
+              ))}
+            </div>
+          </SectionCard>
+        );
+      case "billing":
+        return (
+          <SectionCard title="Billing" description="Billing status is now reading from the real subscription tier stored on your account.">
+            <div style={{ display: "grid", gap: "14px", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+              {[
+                { label: "Plan", value: profile.subscription_tier },
+                { label: "Workspace status", value: profile.onboarding_complete ? "Active" : "Setup pending" },
+                { label: "Theme preference", value: profile.theme_mode },
+              ].map((item) => (
+                <div key={item.label} style={{ background: "var(--card)", borderRadius: "18px", padding: "18px" }}>
+                  <p style={{ color: "var(--text-tertiary)", fontSize: "0.85rem", margin: 0 }}>{item.label}</p>
+                  <p style={{ fontFamily: "var(--font-display)", fontSize: "1.5rem", margin: "8px 0 0" }}>{item.value}</p>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
+        );
+      case "security":
+        return (
+          <SectionCard title="Security" description="Security posture now reflects your authenticated account state and workspace flags.">
+            <div style={{ display: "grid", gap: "14px" }}>
+              {[
+                `Signed in as ${email || "unknown user"}`,
+                `Onboarding ${profile.onboarding_complete ? "completed" : "not completed"}`,
+                `Theme preference stored as ${profile.theme_mode}`,
+              ].map((line) => (
+                <div key={line} style={{ background: "var(--card)", borderRadius: "18px", padding: "16px 18px" }}>
+                  {line}
+                </div>
+              ))}
+            </div>
+          </SectionCard>
+        );
+    }
   };
 
   return (
-    <div style={{ background: "var(--bg)", minHeight: "100vh", padding: "32px 24px 80px", maxWidth: "1100px", margin: "0 auto" }}>
-      <motion.div variants={pv(0)} initial="hidden" animate="visible" style={{ marginBottom: "28px" }}>
-        <h1 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "clamp(1.5rem,3vw,2rem)", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.03em", lineHeight: 1, marginBottom: "6px" }}>
-          Settings
-        </h1>
-        <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>
-          PLATFORM CONFIGURATION · AI MARKETING LABS
-        </span>
-      </motion.div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: "20px", alignItems: "start" }}>
-        {/* Sidebar tabs */}
-        <motion.div variants={pv(0.08)} initial="hidden" animate="visible">
-          <Panel style={{ padding: "8px" }}>
-            {TABS.map(tab => {
-              const Icon = tab.icon;
-              const active = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  style={{
-                    width: "100%", display: "flex", alignItems: "center", gap: "9px",
-                    padding: "9px 12px", borderRadius: "7px", border: "none", cursor: "pointer",
-                    fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: active ? 600 : 400,
-                    color: active ? brandColor : "var(--text-secondary)",
-                    background: active ? `rgba(var(--brand-rgb),0.08)` : "transparent",
-                    transition: "all 0.18s", textAlign: "left",
-                    marginBottom: "2px",
-                  }}
-                  onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = "var(--card)"; (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"; } }}
-                  onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; } }}
-                >
-                  <Icon size={14} />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </Panel>
-        </motion.div>
-
-        {/* Tab content */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, x: 8 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -8 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
+    <div style={{ margin: "0 auto", maxWidth: "1280px", padding: "40px 24px 80px" }}>
+      <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "14px", justifyContent: "space-between", marginBottom: "28px" }}>
+        <div>
+          <p style={{ color: "var(--brand)", fontFamily: "var(--font-mono)", letterSpacing: "0.08em", margin: 0, textTransform: "uppercase" }}>
+            Settings
+          </p>
+          <h1 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(2rem, 5vw, 3.4rem)", letterSpacing: "-0.06em", margin: "8px 0 0" }}>
+            Tune the workspace around your team.
+          </h1>
+        </div>
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button
+            type="button"
+            onClick={() => void loadProfile()}
+            style={{ alignItems: "center", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "999px", color: "var(--text-secondary)", display: "flex", gap: "8px", padding: "12px 16px" }}
           >
-            {content[activeTab]}
-          </motion.div>
-        </AnimatePresence>
+            <Bell size={16} />
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {statusMessage ? (
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "18px", color: "var(--text-secondary)", marginBottom: "18px", padding: "14px 16px" }}>
+          {statusMessage}
+        </div>
+      ) : null}
+
+      <div className="settings-grid" style={{ display: "grid", gap: "24px", gridTemplateColumns: "260px minmax(0, 1fr)" }}>
+        <aside style={{ alignSelf: "start", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "24px", padding: "12px" }}>
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const active = tab.id === activeTab;
+
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setTab(tab.id)}
+                style={{
+                  alignItems: "center",
+                  background: active ? "rgba(var(--brand-rgb), 0.12)" : "transparent",
+                  border: "none",
+                  borderRadius: "16px",
+                  color: active ? "var(--brand)" : "var(--text-secondary)",
+                  cursor: "pointer",
+                  display: "flex",
+                  gap: "10px",
+                  padding: "14px 16px",
+                  textAlign: "left",
+                  width: "100%",
+                }}
+              >
+                <Icon size={16} />
+                {tab.label}
+              </button>
+            );
+          })}
+
+          <div style={{ background: "var(--card)", borderRadius: "18px", marginTop: "14px", padding: "16px" }}>
+            {metrics.map((metric) => (
+              <div key={metric.label} style={{ marginBottom: metric.label === metrics.at(-1)?.label ? 0 : "14px" }}>
+                <p style={{ color: "var(--text-tertiary)", fontSize: "0.78rem", margin: 0 }}>{metric.label}</p>
+                <p style={{ fontFamily: "var(--font-mono)", margin: "6px 0 0" }}>{loading ? "Loading..." : metric.value}</p>
+              </div>
+            ))}
+          </div>
+        </aside>
+
+        <div>{renderContent()}</div>
       </div>
     </div>
   );

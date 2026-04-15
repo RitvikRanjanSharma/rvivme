@@ -91,6 +91,67 @@ export type Database = {
         Insert: Partial<Database["public"]["Tables"]["ai_strategies"]["Row"]>;
         Update: Partial<Database["public"]["Tables"]["ai_strategies"]["Row"]>;
       };
+      blog_posts: {
+        Row: {
+          id: string;
+          author_id: string;
+          title: string;
+          slug: string;
+          excerpt: string;
+          content: string;
+          cover_image_url: string | null;
+          read_time_minutes: number;
+          category:
+            | "seo_strategy"
+            | "geo_optimisation"
+            | "technical_seo"
+            | "content_marketing"
+            | "business_insights"
+            | "platform_updates"
+            | "case_studies"
+            | "industry_news";
+          meta_title: string | null;
+          meta_description: string | null;
+          focus_keyword: string | null;
+          secondary_keywords: string[] | null;
+          canonical_url: string | null;
+          author_name: string;
+          author_bio: string | null;
+          author_avatar_url: string | null;
+          status: "draft" | "scheduled" | "published" | "archived";
+          published_at: string | null;
+          scheduled_for: string | null;
+          view_count: number;
+          featured: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["blog_posts"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["blog_posts"]["Row"]>;
+      };
+      newsletter_subscribers: {
+        Row: {
+          id: string;
+          email: string;
+          confirmed: boolean;
+          confirm_token: string | null;
+          source: string;
+          subscribed_at: string;
+          unsubscribed_at: string | null;
+          is_active: boolean;
+        };
+        Insert: {
+          email: string;
+          source?: string;
+          confirmed?: boolean;
+          confirm_token?: string | null;
+          subscribed_at?: string;
+          unsubscribed_at?: string | null;
+          is_active?: boolean;
+          id?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["newsletter_subscribers"]["Row"]>;
+      };
     };
   };
 };

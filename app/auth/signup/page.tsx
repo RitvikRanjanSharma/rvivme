@@ -9,7 +9,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Zap, Mail, Lock, Eye, EyeOff, AlertCircle, Building2, Globe } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -28,7 +27,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 export default function SignupPage() {
-  const router = useRouter();
   const brandColor = "#3b82f6";
 
   const [companyName, setCompanyName] = useState("");
