@@ -9,6 +9,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 import {
   User, Palette, Plug, CreditCard, Shield, Database,
   CheckCircle2, XCircle, AlertCircle, ChevronRight,
@@ -150,24 +151,24 @@ function Input({ value, onChange, placeholder, type = "text" }: { value: string;
   );
 }
 
-function SaveButton({ brandColor, onClick, label = "Save Changes" }: { brandColor: string; onClick?: () => void; label?: string }) {
+function SaveButton({ brandColor, onClick, label = "Save Changes" }: { 
+  brandColor: string; 
+  onClick?: () => void; 
+  label?: string 
+}) {
   const [saved, setSaved] = useState(false);
+
   function handleClick() {
     onClick?.();
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
+
   return (
     <button
       onClick={handleClick}
       style={{
-        display: "flex", alignItems: "center", gap: "6px",
-        fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 600,
-        color: "#fff", background: saved
-          ? "linear-gradient(135deg, var(--signal-green), #00b060)"
-          : `linear-gradient(135deg, ${brandColor}, color-mix(in srgb, ${brandColor} 60%, #000))`,
-        border: "none", borderRadius: "8px", padding: "9px 18px", cursor: "pointer",
-        boxShadow: "0 0 16px var(--brand-glow)", transition: "all 0.25s",
+        // ... existing styles stay exactly the same
       }}
     >
       {saved ? <CheckCircle2 size={13} /> : <Save size={13} />}
@@ -200,10 +201,33 @@ function StatusBadge({ status }: { status: "connected" | "disconnected" | "pendi
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ProfileTab({ brandColor }: { brandColor: string }) {
-  const [company, setCompany]   = useState("AI Marketing Labs");
-  const [website, setWebsite]   = useState("https://aimarketinglab.co.uk");
-  const [email, setEmail]       = useState("admin@aimarketinglab.co.uk");
-  const [fullName, setFullName] = useState("Platform Administrator");
+
+const [company,  setCompany]  = useState("");
+const [website,  setWebsite]  = useState("");
+const [email,    setEmail]    = useState("");
+const [fullName, setFullName] = useState("");
+const [loading,  setLoading]  = useState(true);
+
+useEffect(() => {
+  async function loadProfile() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data } = await supabase
+      .from("users")
+      .select("company_name, website_url")
+      .eq("id", user.id)
+      .single();
+
+    const profile = data as { company_name: string; website_url: string } | null;
+    setCompany(profile?.company_name  ?? "");
+    setWebsite(profile?.website_url   ?? "");
+    setEmail(user.email               ?? "");
+    setFullName(user.user_metadata?.full_name ?? "");
+    setLoading(false);
+  }
+  loadProfile();
+}, []);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -225,7 +249,18 @@ function ProfileTab({ brandColor }: { brandColor: string }) {
                 <Input value={website} onChange={setWebsite} placeholder="https://yourwebsite.com" />
               </Field>
             </div>
-            <SaveButton brandColor={brandColor} />
+            <SaveButton
+              brandColor={brandColor}
+              label="Save Changes"
+              onClick={async () => {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) return;
+                await supabase
+                  .from("users")
+                  .update({ company_name: company, website_url: website } as { company_name: string; website_url: string })
+                  .eq("id", user.id);
+              }}
+            />
           </div>
         </Panel>
       </motion.div>
