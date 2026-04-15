@@ -2,114 +2,99 @@
 
 // app/auth/signup/page.tsx
 // =============================================================================
-// AI Marketing Labs — Signup Page
-// Email + password with company name + website URL captured at registration.
-// These are passed as user_metadata and picked up by the DB trigger.
+// AI Marketing Labs — Signup
+// Editorial minimal · Same visual language as login
 // =============================================================================
 
 import { useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Zap, Mail, Lock, Eye, EyeOff, AlertCircle, Building2, Globe } from "lucide-react";
+import { ArrowRight, Eye, EyeOff } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
-const SPRING = { type: "spring", stiffness: 260, damping: 28, mass: 0.9 } as const;
+const EASE = [0.16, 1, 0.3, 1] as const;
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
   return (
-    <div style={{ marginBottom: "14px" }}>
-      <label style={{ display: "block", fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>
+    <div style={{ marginBottom: "18px" }}>
+      <label style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: "8px" }}>
         {label}
       </label>
       {children}
+      {hint && <span style={{ fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--text-tertiary)", marginTop: "5px", display: "block" }}>{hint}</span>}
     </div>
   );
 }
 
-export default function SignupPage() {
-  const brandColor = "#3b82f6";
+function TextInput({ value, onChange, placeholder, type = "text" }: { value: string; onChange: (v: string) => void; placeholder?: string; type?: string }) {
+  return (
+    <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+      style={{ width: "100%", padding: "11px 14px", fontFamily: type === "password" ? "var(--font-mono)" : "var(--font-body)", fontSize: "14px", color: "var(--text-primary)", background: "var(--surface)", border: "1px solid var(--border-strong)", borderRadius: "8px", outline: "none", transition: "border-color 0.16s", boxSizing: "border-box" as const }}
+      onFocus={e => e.currentTarget.style.borderColor = "var(--brand)"}
+      onBlur={e =>  e.currentTarget.style.borderColor = "var(--border-strong)"}
+    />
+  );
+}
 
-  const [companyName, setCompanyName] = useState("");
-  const [websiteUrl,  setWebsiteUrl]  = useState("https://");
-  const [email,       setEmail]       = useState("");
-  const [password,    setPassword]    = useState("");
-  const [showPw,      setShowPw]      = useState(false);
-  const [loading,     setLoading]     = useState(false);
-  const [error,       setError]       = useState<string | null>(null);
-  const [success,     setSuccess]     = useState(false);
+export default function SignupPage() {
+  const [company,  setCompany]  = useState("");
+  const [website,  setWebsite]  = useState("https://");
+  const [email,    setEmail]    = useState("");
+  const [password, setPassword] = useState("");
+  const [showPw,   setShowPw]   = useState(false);
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState<string | null>(null);
+  const [success,  setSuccess]  = useState(false);
 
   function validate(): string | null {
-    if (!companyName.trim()) return "Company name is required.";
-    if (!/^https?:\/\/.+/.test(websiteUrl)) return "Please enter a valid URL starting with https://";
-    if (!email.includes("@")) return "Please enter a valid email address.";
-    if (password.length < 12) return "Password must be at least 12 characters.";
-    if (!/[A-Z]/.test(password)) return "Password must include at least one uppercase letter.";
-    if (!/[0-9]/.test(password)) return "Password must include at least one number.";
+    if (!company.trim())                   return "Company name is required.";
+    if (!/^https?:\/\/.+/.test(website))   return "Enter a valid URL starting with https://";
+    if (!email.includes("@"))              return "Enter a valid email address.";
+    if (password.length < 12)             return "Password must be at least 12 characters.";
+    if (!/[A-Z]/.test(password))          return "Password must include at least one uppercase letter.";
+    if (!/[0-9]/.test(password))          return "Password must include at least one number.";
     return null;
   }
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
-    const validationError = validate();
-    if (validationError) { setError(validationError); return; }
-
+    const err = validate();
+    if (err) { setError(err); return; }
     setLoading(true);
     setError(null);
-
-    const { error: authError } = await supabase.auth.signUp({
-      email,
-      password,
+    const { error: authErr } = await supabase.auth.signUp({
+      email, password,
       options: {
-        data: {
-          company_name: companyName.trim(),
-          website_url:  websiteUrl.trim(),
-        },
+        data: { company_name: company.trim(), website_url: website.trim() },
         emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     });
-
-    if (authError) {
-      setError(authError.message);
-      setLoading(false);
-      return;
-    }
-
+    if (authErr) { setError(authErr.message); setLoading(false); return; }
     setSuccess(true);
   }
 
   async function handleGoogle() {
     setLoading(true);
-    setError(null);
-    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+    const { error: oauthErr } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
-    if (oauthError) {
-      setError(oauthError.message);
-      setLoading(false);
-    }
+    if (oauthErr) { setError(oauthErr.message); setLoading(false); }
   }
 
   if (success) {
     return (
-      <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px" }}>
-        <motion.div
-          initial={{ opacity: 0, scale: 0.96 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ ...SPRING }}
-          style={{ maxWidth: "400px", textAlign: "center" }}
-        >
-          <div style={{ width: "56px", height: "56px", borderRadius: "16px", background: "rgba(0,230,118,0.12)", border: "1px solid rgba(0,230,118,0.3)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
-            <Zap size={24} color="var(--signal-green)" />
-          </div>
-          <h2 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "22px", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.025em", marginBottom: "10px" }}>
-            Check your email
+      <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", padding: "40px" }}>
+        <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: EASE }} style={{ maxWidth: "400px", textAlign: "center" }}>
+          <div style={{ width: "48px", height: "1px", background: "var(--brand)", margin: "0 auto 32px" }} />
+          <h2 style={{ fontFamily: "var(--font-display)", fontSize: "2.4rem", letterSpacing: "-0.04em", lineHeight: 1, fontWeight: 400, color: "var(--text-primary)", marginBottom: "16px" }}>
+            Check your inbox.
           </h2>
-          <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "14px", color: "var(--text-secondary)", lineHeight: 1.7 }}>
-            We sent a verification link to <strong style={{ color: "var(--text-primary)" }}>{email}</strong>. Click it to activate your RVIVME account and access the platform.
+          <p style={{ fontFamily: "var(--font-body)", fontSize: "15px", color: "var(--text-secondary)", lineHeight: 1.7, marginBottom: "32px" }}>
+            We sent a verification link to <strong style={{ color: "var(--text-primary)", fontWeight: 500 }}>{email}</strong>. Click it to activate your account.
           </p>
-          <Link href="/auth/login" style={{ display: "inline-block", marginTop: "24px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: brandColor, textDecoration: "none", fontWeight: 600 }}>
-            Back to login
+          <Link href="/auth/login" style={{ fontFamily: "var(--font-body)", fontSize: "14px", color: "var(--text-tertiary)", textDecoration: "underline", textUnderlineOffset: "3px" }}>
+            Back to sign in
           </Link>
         </motion.div>
       </div>
@@ -117,133 +102,126 @@ export default function SignupPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px", position: "relative", overflow: "hidden" }}>
-      <div style={{ position: "absolute", top: "-20%", left: "50%", transform: "translateX(-50%)", width: "600px", height: "400px", background: `radial-gradient(ellipse, rgba(var(--brand-rgb), 0.08) 0%, transparent 70%)`, pointerEvents: "none" }} />
-
+    <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "stretch" }}>
+      {/* Left panel */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ ...SPRING, delay: 0.1 }}
-        style={{ width: "100%", maxWidth: "440px", position: "relative" }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 1 }}
+        style={{ flex: "0 0 40%", background: "var(--surface)", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", justifyContent: "space-between", padding: "40px", position: "relative", overflow: "hidden" }}
+        className="hide-mobile"
       >
-        {/* Logo */}
-        <div style={{ textAlign: "center", marginBottom: "28px" }}>
-          <Link href="/" style={{ textDecoration: "none", display: "inline-flex", flexDirection: "column", alignItems: "center", gap: "10px" }}>
-            <div style={{ width: "44px", height: "44px", borderRadius: "12px", background: `linear-gradient(135deg, ${brandColor}, color-mix(in srgb, ${brandColor} 55%, #000))`, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 20px var(--brand-glow)" }}>
-              <Zap size={20} color="#fff" strokeWidth={2.5} />
-            </div>
-            <span style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "22px", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.025em" }}>
-              RV<span style={{ color: brandColor }}>IVM</span>E
-            </span>
-          </Link>
-          <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "14px", color: "var(--text-secondary)", marginTop: "8px" }}>
-            Create your intelligence platform account
+        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 80% 60% at 80% 20%, rgba(37,99,235,0.08) 0%, transparent 60%)", pointerEvents: "none" }} />
+
+        <Link href="/" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: "10px" }}>
+          <div style={{ width: "30px", height: "30px", borderRadius: "8px", background: "var(--brand)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2L14 12H2L8 2Z" fill="white" fillOpacity="0.9"/></svg>
+          </div>
+          <span style={{ fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>AI Marketing Labs</span>
+        </Link>
+
+        <div style={{ position: "relative", zIndex: 1 }}>
+          <p style={{ fontFamily: "var(--font-display)", fontSize: "clamp(1.8rem, 2.5vw, 2.6rem)", letterSpacing: "-0.04em", lineHeight: 1.05, color: "var(--text-primary)", fontWeight: 400, marginBottom: "20px" }}>
+            Intelligence from day one.
           </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            {["Real GA4 traffic data", "Search Console integration", "AI 6-month forecast", "GEO citation tracking"].map(item => (
+              <div key={item} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: "var(--brand)", flexShrink: 0 }} />
+                <span style={{ fontFamily: "var(--font-body)", fontSize: "14px", color: "var(--text-secondary)" }}>{item}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "14px", padding: "28px" }}>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.1em", color: "var(--text-tertiary)" }}>aimarketinglab.co.uk</span>
+      </motion.div>
+
+      {/* Right — form */}
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 32px" }}>
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: EASE, delay: 0.1 }}
+          style={{ width: "100%", maxWidth: "400px" }}
+        >
+          <div style={{ marginBottom: "36px" }}>
+            <h1 style={{ fontFamily: "var(--font-display)", fontSize: "2rem", letterSpacing: "-0.04em", lineHeight: 1, color: "var(--text-primary)", fontWeight: 400, marginBottom: "10px" }}>
+              Create account
+            </h1>
+            <p style={{ fontFamily: "var(--font-body)", fontSize: "14px", color: "var(--text-secondary)" }}>
+              Already have one?{" "}
+              <Link href="/auth/login" style={{ color: "var(--text-primary)", textDecoration: "underline", textUnderlineOffset: "3px" }}>Sign in</Link>
+            </p>
+          </div>
+
           {error && (
-            <motion.div
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 14px", background: "rgba(255,23,68,0.08)", border: "1px solid rgba(255,23,68,0.25)", borderRadius: "8px", marginBottom: "20px" }}
+            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+              style={{ padding: "12px 14px", background: "rgba(255,23,68,0.08)", border: "1px solid rgba(255,23,68,0.20)", borderRadius: "8px", marginBottom: "20px", fontFamily: "var(--font-body)", fontSize: "13px", color: "var(--signal-red)" }}
             >
-              <AlertCircle size={13} color="var(--signal-red)" />
-              <span style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--signal-red)" }}>{error}</span>
+              {error}
             </motion.div>
           )}
 
           {/* Google */}
-          <button
-            onClick={handleGoogle}
-            disabled={loading}
-            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "10px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "8px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", cursor: "pointer", marginBottom: "16px", transition: "border-color 0.18s, background 0.18s" }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = brandColor; (e.currentTarget as HTMLElement).style.background = "var(--surface-raised)"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLElement).style.background = "var(--card)"; }}
+          <button onClick={handleGoogle} disabled={loading}
+            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", padding: "12px", background: "var(--surface)", border: "1px solid var(--border-strong)", borderRadius: "8px", fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: 500, color: "var(--text-primary)", cursor: "pointer", marginBottom: "24px", transition: "background 0.16s" }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--surface-2)"}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "var(--surface)"}
           >
-            <Globe size={15} /> Continue with Google
+            <svg width="16" height="16" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+            </svg>
+            Continue with Google
           </button>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "24px" }}>
             <div style={{ flex: 1, height: "1px", background: "var(--border)" }} />
-            <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.08em" }}>OR</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.1em" }}>OR</span>
             <div style={{ flex: 1, height: "1px", background: "var(--border)" }} />
           </div>
 
           <form onSubmit={handleSignup}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 14px" }}>
-              <Field label="Company Name">
-                <div style={{ position: "relative" }}>
-                  <Building2 size={13} color="var(--text-tertiary)" style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
-                  <input
-                    value={companyName} onChange={e => setCompanyName(e.target.value)} required placeholder="Acme Corp"
-                    style={{ width: "100%", padding: "9px 12px 9px 34px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-primary)", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "7px", outline: "none", boxSizing: "border-box", transition: "border-color 0.18s" }}
-                    onFocus={e => (e.currentTarget.style.borderColor = brandColor)}
-                    onBlur={e => (e.currentTarget.style.borderColor = "var(--border)")}
-                  />
-                </div>
+              <Field label="Company">
+                <TextInput value={company} onChange={setCompany} placeholder="Acme Ltd" />
               </Field>
-              <Field label="Website URL">
-                <div style={{ position: "relative" }}>
-                  <Globe size={13} color="var(--text-tertiary)" style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
-                  <input
-                    value={websiteUrl} onChange={e => setWebsiteUrl(e.target.value)} required placeholder="https://acme.com"
-                    style={{ width: "100%", padding: "9px 12px 9px 34px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-primary)", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "7px", outline: "none", boxSizing: "border-box", transition: "border-color 0.18s" }}
-                    onFocus={e => (e.currentTarget.style.borderColor = brandColor)}
-                    onBlur={e => (e.currentTarget.style.borderColor = "var(--border)")}
-                  />
-                </div>
+              <Field label="Website">
+                <TextInput value={website} onChange={setWebsite} placeholder="https://acme.com" />
               </Field>
             </div>
-
-            <Field label="Email Address">
-              <div style={{ position: "relative" }}>
-                <Mail size={13} color="var(--text-tertiary)" style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
-                <input
-                  type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="admin@acme.com"
-                  style={{ width: "100%", padding: "9px 12px 9px 34px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-primary)", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "7px", outline: "none", boxSizing: "border-box", transition: "border-color 0.18s" }}
-                  onFocus={e => (e.currentTarget.style.borderColor = brandColor)}
-                  onBlur={e => (e.currentTarget.style.borderColor = "var(--border)")}
-                />
-              </div>
+            <Field label="Email">
+              <TextInput type="email" value={email} onChange={setEmail} placeholder="you@company.com" />
             </Field>
-
-            <Field label="Password">
+            <Field label="Password" hint="12+ characters · 1 uppercase · 1 number">
               <div style={{ position: "relative" }}>
-                <Lock size={13} color="var(--text-tertiary)" style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
-                <input
-                  type={showPw ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} required placeholder="Min. 12 chars, uppercase + number"
-                  style={{ width: "100%", padding: "9px 38px 9px 34px", fontFamily: "var(--font-dm-mono), monospace", fontSize: "13px", color: "var(--text-primary)", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "7px", outline: "none", boxSizing: "border-box", transition: "border-color 0.18s" }}
-                  onFocus={e => (e.currentTarget.style.borderColor = brandColor)}
-                  onBlur={e => (e.currentTarget.style.borderColor = "var(--border)")}
+                <input type={showPw ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••••••"
+                  style={{ width: "100%", padding: "11px 42px 11px 14px", fontFamily: "var(--font-mono)", fontSize: "14px", color: "var(--text-primary)", background: "var(--surface)", border: "1px solid var(--border-strong)", borderRadius: "8px", outline: "none", transition: "border-color 0.16s", boxSizing: "border-box" as const }}
+                  onFocus={e => e.currentTarget.style.borderColor = "var(--brand)"}
+                  onBlur={e =>  e.currentTarget.style.borderColor = "var(--border-strong)"}
                 />
-                <button type="button" onClick={() => setShowPw(!showPw)} style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", color: "var(--text-tertiary)", display: "flex", alignItems: "center" }}>
-                  {showPw ? <EyeOff size={13} /> : <Eye size={13} />}
+                <button type="button" onClick={() => setShowPw(!showPw)} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", color: "var(--text-tertiary)", display: "flex" }}>
+                  {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
                 </button>
               </div>
-              <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "11px", color: "var(--text-tertiary)", marginTop: "5px" }}>
-                Minimum 12 characters · 1 uppercase · 1 number
-              </div>
             </Field>
 
-            <button
-              type="submit" disabled={loading}
-              style={{ width: "100%", padding: "11px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontFamily: "var(--font-inter), sans-serif", fontSize: "14px", fontWeight: 700, color: "#fff", background: loading ? "var(--muted)" : `linear-gradient(135deg, ${brandColor}, color-mix(in srgb, ${brandColor} 60%, #000))`, border: "none", borderRadius: "8px", cursor: loading ? "not-allowed" : "pointer", boxShadow: loading ? "none" : "0 0 20px var(--brand-glow)", transition: "all 0.25s" }}
+            <button type="submit" disabled={loading}
+              style={{ width: "100%", padding: "13px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: 500, color: "#fff", background: loading ? "var(--muted)" : "var(--brand)", border: "none", borderRadius: "8px", cursor: loading ? "not-allowed" : "pointer", marginTop: "4px", transition: "opacity 0.16s" }}
+              onMouseEnter={e => { if (!loading) (e.currentTarget as HTMLElement).style.opacity = "0.85"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
             >
-              {loading ? (
-                <div style={{ width: "14px", height: "14px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
-              ) : (
-                <><Zap size={14} strokeWidth={2.5} /> Create Account</>
-              )}
+              {loading
+                ? <div style={{ width: "14px", height: "14px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
+                : <>Create account <ArrowRight size={14} /></>
+              }
             </button>
           </form>
-        </div>
-
-        <p style={{ textAlign: "center", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-tertiary)", marginTop: "20px" }}>
-          Already have an account?{" "}
-          <Link href="/auth/login" style={{ color: brandColor, textDecoration: "none", fontWeight: 600 }}>Sign in</Link>
-        </p>
-      </motion.div>
+        </motion.div>
+      </div>
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>

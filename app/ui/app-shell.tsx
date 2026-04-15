@@ -1,404 +1,432 @@
 "use client";
 
+// app/ui/app-shell.tsx
+// =============================================================================
+// AI Marketing Labs — App Shell
+// Editorial minimal nav · Aino-inspired · Purposeful motion
+// =============================================================================
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import {
-  BarChart3,
-  Bell,
-  ChevronDown,
-  FileText,
-  LogOut,
-  Moon,
-  Search,
-  Settings,
-  Sun,
-  User,
-  Users,
-  Zap,
-} from "lucide-react";
+  createContext, useContext, useEffect, useMemo, useState, useRef,
+} from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { LogOut, Settings, User, ChevronDown, Sun, Moon } from "lucide-react";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Theme context
+// ─────────────────────────────────────────────────────────────────────────────
 type ThemeMode = "dark" | "light";
-
-type ThemeContextValue = {
-  brandColor: string;
-  mode: ThemeMode;
-  setBrandColor: (value: string) => void;
-  toggleMode: () => void;
+type ThemeCtx = {
+  brandColor:    string;
+  mode:          ThemeMode;
+  setBrandColor: (v: string) => void;
+  toggleMode:    () => void;
 };
 
-const NAV_ITEMS = [
-  { href: "/", label: "Home", icon: Zap },
-  { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
-  { href: "/keywords", label: "Keywords", icon: Search },
-  { href: "/competitors", label: "Competitors", icon: Users },
-  { href: "/blog", label: "Blog", icon: FileText },
-] as const;
-
-const ThemeContext = createContext<ThemeContextValue | null>(null);
-const DEFAULT_THEME_MODE: ThemeMode = "dark";
-const DEFAULT_BRAND_COLOR = "#2563eb";
+const ThemeContext = createContext<ThemeCtx | null>(null);
 
 function hexToRgb(hex: string) {
-  const cleaned = hex.replace("#", "");
-  const normalized = cleaned.length === 6 ? cleaned : "2563eb";
-  const r = Number.parseInt(normalized.slice(0, 2), 16);
-  const g = Number.parseInt(normalized.slice(2, 4), 16);
-  const b = Number.parseInt(normalized.slice(4, 6), 16);
-  return `${r}, ${g}, ${b}`;
+  const c = hex.replace("#", "");
+  return `${parseInt(c.slice(0,2),16)}, ${parseInt(c.slice(2,4),16)}, ${parseInt(c.slice(4,6),16)}`;
 }
 
-function applyTheme(mode: ThemeMode, brandColor: string) {
-  const root = document.documentElement;
-  root.classList.toggle("light", mode === "light");
-  root.classList.toggle("dark", mode === "dark");
-  root.style.setProperty("--brand", brandColor);
-  root.style.setProperty("--brand-rgb", hexToRgb(brandColor));
-  root.style.setProperty("--brand-glow", `rgba(${hexToRgb(brandColor)}, 0.28)`);
+function applyTheme(mode: ThemeMode, brand: string) {
+  const r = document.documentElement;
+  r.classList.toggle("light", mode === "light");
+  r.classList.toggle("dark",  mode === "dark");
+  r.style.setProperty("--brand",      brand);
+  r.style.setProperty("--brand-rgb",  hexToRgb(brand));
+  r.style.setProperty("--brand-glow", `rgba(${hexToRgb(brand)}, 0.20)`);
 }
 
 function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [mode, setMode] = useState<ThemeMode>(DEFAULT_THEME_MODE);
-  const [brandColor, setBrandColorState] = useState<string>(DEFAULT_BRAND_COLOR);
+  const [mode,  setMode]  = useState<ThemeMode>("dark");
+  const [brand, setBrand] = useState("#2563eb");
 
   useEffect(() => {
-    const storedMode = window.localStorage.getItem("rvivme-theme");
-    const storedBrandColor = window.localStorage.getItem("rvivme-brand");
-
-    if (storedMode === "light" || storedMode === "dark") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setMode(storedMode);
-    }
-
-    if (storedBrandColor) {
-      setBrandColorState(storedBrandColor);
-    }
+    const m = localStorage.getItem("aiml-mode") as ThemeMode | null;
+    const b = localStorage.getItem("aiml-brand");
+    if (m) setMode(m);
+    if (b) setBrand(b);
   }, []);
 
   useEffect(() => {
-    applyTheme(mode, brandColor);
-    window.localStorage.setItem("rvivme-theme", mode);
-    window.localStorage.setItem("rvivme-brand", brandColor);
-  }, [brandColor, mode]);
+    applyTheme(mode, brand);
+    localStorage.setItem("aiml-mode",  mode);
+    localStorage.setItem("aiml-brand", brand);
+    // Keep legacy keys in sync so dashboard components still work
+    localStorage.setItem("rvivme-theme", mode);
+    localStorage.setItem("rvivme-brand", brand);
+  }, [mode, brand]);
 
-  useEffect(() => {
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key === "rvivme-brand" && event.newValue) {
-        setBrandColorState(event.newValue);
-      }
-
-      if (event.key === "rvivme-theme" && event.newValue) {
-        setMode(event.newValue === "light" ? "light" : "dark");
-      }
-    };
-
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
-  }, []);
-
-  const value = useMemo<ThemeContextValue>(
-    () => ({
-      brandColor,
-      mode,
-      setBrandColor: setBrandColorState,
-      toggleMode: () => setMode((current) => (current === "dark" ? "light" : "dark")),
-    }),
-    [brandColor, mode],
-  );
+  const value = useMemo<ThemeCtx>(() => ({
+    brandColor:    brand,
+    mode,
+    setBrandColor: setBrand,
+    toggleMode:    () => setMode(m => m === "dark" ? "light" : "dark"),
+  }), [brand, mode]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
-function useTheme() {
-  const context = useContext(ThemeContext);
-
-  if (!context) {
-    throw new Error("useTheme must be used within ThemeProvider");
-  }
-
-  return context;
+export function useTheme() {
+  const ctx = useContext(ThemeContext);
+  if (!ctx) throw new Error("useTheme must be within ThemeProvider");
+  return ctx;
 }
 
-function ProfileMenu() {
+// ─────────────────────────────────────────────────────────────────────────────
+// Nav items — two separate sets for public vs app
+// ─────────────────────────────────────────────────────────────────────────────
+const PUBLIC_NAV = [
+  { href: "/",            label: "Home"       },
+  { href: "/blog",        label: "Intelligence"},
+  { href: "/dashboard",   label: "Platform"   },
+] as const;
+
+const APP_NAV = [
+  { href: "/dashboard",   label: "Dashboard"  },
+  { href: "/keywords",    label: "Keywords"   },
+  { href: "/competitors", label: "Competitors"},
+  { href: "/blog",        label: "Blog"       },
+] as const;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Profile menu
+// ─────────────────────────────────────────────────────────────────────────────
+function ProfileMenu({ brand }: { brand: string }) {
   const [open, setOpen] = useState(false);
-  const { brandColor } = useTheme();
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function close(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
 
   return (
-    <div style={{ position: "relative" }}>
+    <div ref={ref} style={{ position: "relative" }}>
       <button
-        type="button"
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => setOpen(o => !o)}
         style={{
+          display:    "flex",
           alignItems: "center",
-          background: "var(--surface)",
-          border: "1px solid var(--border)",
-          borderRadius: "999px",
-          color: "var(--text-primary)",
-          cursor: "pointer",
-          display: "flex",
-          gap: "10px",
-          padding: "6px 10px 6px 6px",
+          gap:        "8px",
+          background: "transparent",
+          border:     `1px solid var(--border-strong)`,
+          borderRadius: "100px",
+          padding:    "5px 12px 5px 5px",
+          cursor:     "pointer",
+          color:      "var(--text-primary)",
+          transition: "border-color 0.2s",
         }}
+        onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = brand}
+        onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--border-strong)"}
       >
-        <span
-          style={{
-            alignItems: "center",
-            background: `linear-gradient(135deg, ${brandColor}, color-mix(in srgb, ${brandColor} 65%, #081018))`,
-            borderRadius: "50%",
-            color: "#ffffff",
-            display: "inline-flex",
-            fontFamily: "var(--font-display)",
-            fontSize: "0.8rem",
-            fontWeight: 700,
-            height: "32px",
-            justifyContent: "center",
-            width: "32px",
-          }}
-        >
-          RV
+        <div style={{
+          width:        "26px",
+          height:       "26px",
+          borderRadius: "50%",
+          background:   brand,
+          display:      "flex",
+          alignItems:   "center",
+          justifyContent: "center",
+          fontFamily:   "var(--font-mono)",
+          fontSize:     "10px",
+          fontWeight:   500,
+          color:        "#fff",
+          letterSpacing: "0.04em",
+          flexShrink:   0,
+        }}>AI</div>
+        <span style={{ fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 500 }}>
+          Workspace
         </span>
-        <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>Workspace</span>
-        <ChevronDown size={16} />
+        <ChevronDown size={12} style={{ opacity: 0.5 }} />
       </button>
 
       <AnimatePresence>
-        {open ? (
+        {open && (
           <motion.div
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.98, y: -6 }}
-            initial={{ opacity: 0, scale: 0.98, y: -6 }}
+            initial={{ opacity: 0, y: -8, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{   opacity: 0, y: -8, scale: 0.97 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
             style={{
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
-              borderRadius: "16px",
-              boxShadow: "0 16px 40px rgba(0, 0, 0, 0.22)",
-              padding: "8px",
-              position: "absolute",
-              right: 0,
-              top: "calc(100% + 10px)",
-              width: "200px",
-              zIndex: 30,
+              position:     "absolute",
+              top:          "calc(100% + 8px)",
+              right:        0,
+              width:        "180px",
+              background:   "var(--surface)",
+              border:       "1px solid var(--border-strong)",
+              borderRadius: "12px",
+              overflow:     "hidden",
+              zIndex:       200,
             }}
           >
             {[
-              { href: "/settings?tab=profile", icon: User, label: "Profile" },
-              { href: "/settings?tab=branding", icon: Settings, label: "Branding" },
-              { href: "/auth/signout", icon: LogOut, label: "Sign out" },
-            ].map((item) => {
+              { label: "Profile",   icon: User,     href: "/settings?tab=profile"  },
+              { label: "Branding",  icon: Settings,  href: "/settings?tab=branding" },
+              { label: "Sign out",  icon: LogOut,    href: "/auth/signout", danger: true },
+            ].map((item, i) => {
               const Icon = item.icon;
-
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   onClick={() => setOpen(false)}
                   style={{
+                    display:    "flex",
                     alignItems: "center",
-                    borderRadius: "12px",
-                    color: "var(--text-secondary)",
-                    display: "flex",
-                    gap: "10px",
-                    padding: "10px 12px",
+                    gap:        "10px",
+                    padding:    "11px 14px",
+                    fontFamily: "var(--font-body)",
+                    fontSize:   "13px",
+                    color:      (item as any).danger ? "var(--signal-red)" : "var(--text-secondary)",
                     textDecoration: "none",
+                    borderTop:  i > 0 ? "1px solid var(--border)" : "none",
+                    transition: "background 0.12s, color 0.12s",
+                  }}
+                  onMouseEnter={e => {
+                    (e.currentTarget as HTMLElement).style.background = "var(--muted)";
+                    if (!(item as any).danger) (e.currentTarget as HTMLElement).style.color = "var(--text-primary)";
+                  }}
+                  onMouseLeave={e => {
+                    (e.currentTarget as HTMLElement).style.background = "transparent";
+                    (e.currentTarget as HTMLElement).style.color = (item as any).danger ? "var(--signal-red)" : "var(--text-secondary)";
                   }}
                 >
-                  <Icon size={15} />
-                  <span>{item.label}</span>
+                  <Icon size={13} />
+                  {item.label}
                 </Link>
               );
             })}
           </motion.div>
-        ) : null}
+        )}
       </AnimatePresence>
     </div>
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Header
+// ─────────────────────────────────────────────────────────────────────────────
 function Header() {
   const pathname = usePathname();
   const { brandColor, mode, toggleMode } = useTheme();
-  const isAuthRoute = pathname.startsWith("/auth");
+  const [scrolled, setScrolled] = useState(false);
 
-  if (isAuthRoute) {
-    return null;
-  }
+  const isAuth   = pathname.startsWith("/auth");
+  const isApp    = pathname.startsWith("/dashboard") ||
+                   pathname.startsWith("/keywords")  ||
+                   pathname.startsWith("/competitors")||
+                   pathname.startsWith("/settings");
+
+  useEffect(() => {
+    const fn = () => setScrolled(window.scrollY > 20);
+    window.addEventListener("scroll", fn, { passive: true });
+    return () => window.removeEventListener("scroll", fn);
+  }, []);
+
+  if (isAuth) return null;
+
+  const navItems = isApp ? APP_NAV : PUBLIC_NAV;
 
   return (
-    <header
-      style={{
-        backdropFilter: "blur(18px)",
-        background: "color-mix(in srgb, var(--bg) 84%, transparent)",
-        borderBottom: "1px solid var(--border)",
-        position: "sticky",
-        top: 0,
-        zIndex: 20,
-      }}
-    >
-      <div
-        style={{
-          alignItems: "center",
-          display: "flex",
-          gap: "20px",
-          justifyContent: "space-between",
-          margin: "0 auto",
-          maxWidth: "1280px",
-          padding: "16px 24px",
-        }}
-      >
-        <Link
-          href="/"
-          style={{ alignItems: "center", color: "inherit", display: "flex", gap: "12px", textDecoration: "none" }}
-        >
-          <span
-            style={{
-              alignItems: "center",
-              background: `linear-gradient(135deg, ${brandColor}, color-mix(in srgb, ${brandColor} 70%, #081018))`,
-              borderRadius: "16px",
-              boxShadow: "0 0 28px var(--brand-glow)",
-              color: "#ffffff",
-              display: "inline-flex",
-              height: "42px",
-              justifyContent: "center",
-              width: "42px",
-            }}
-          >
-            <Zap size={20} />
-          </span>
-          <span>
-            <span
+    <header style={{
+      position:       "fixed",
+      top:            0,
+      left:           0,
+      right:          0,
+      zIndex:         100,
+      height:         "60px",
+      display:        "flex",
+      alignItems:     "center",
+      justifyContent: "space-between",
+      padding:        "0 32px",
+      background:     scrolled ? "var(--nav-bg)" : "transparent",
+      backdropFilter: scrolled ? "blur(20px) saturate(160%)" : "none",
+      borderBottom:   scrolled ? "1px solid var(--border)" : "1px solid transparent",
+      transition:     "background 0.4s var(--ease-in-out), border-color 0.4s var(--ease-in-out)",
+    }}>
+      {/* Logo */}
+      <Link href="/" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: "10px" }}>
+        <div style={{
+          width:          "32px",
+          height:         "32px",
+          borderRadius:   "8px",
+          background:     brand,
+          display:        "flex",
+          alignItems:     "center",
+          justifyContent: "center",
+          flexShrink:     0,
+        }}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M8 2L14 12H2L8 2Z" fill="white" fillOpacity="0.9"/>
+          </svg>
+        </div>
+        <span style={{
+          fontFamily:    "var(--font-body)",
+          fontSize:      "14px",
+          fontWeight:    600,
+          color:         "var(--text-primary)",
+          letterSpacing: "-0.01em",
+        }}>
+          AI Marketing Labs
+        </span>
+      </Link>
+
+      {/* Nav */}
+      <nav style={{ display: "flex", alignItems: "center", gap: "0px" }}>
+        {navItems.map(({ href, label }) => {
+          const active = pathname === href || (href !== "/" && pathname.startsWith(href));
+          return (
+            <Link
+              key={href}
+              href={href}
               style={{
-                display: "block",
-                fontFamily: "var(--font-display)",
-                fontSize: "1.15rem",
-                fontWeight: 800,
-                letterSpacing: "-0.04em",
+                fontFamily:   "var(--font-body)",
+                fontSize:     "13px",
+                fontWeight:   500,
+                color:        active ? "var(--text-primary)" : "var(--text-secondary)",
+                textDecoration: "none",
+                padding:      "8px 14px",
+                borderRadius: "8px",
+                transition:   "color 0.16s, background 0.16s",
+                background:   active ? "var(--muted)" : "transparent",
+              }}
+              onMouseEnter={e => {
+                if (!active) {
+                  (e.currentTarget as HTMLElement).style.color = "var(--text-primary)";
+                  (e.currentTarget as HTMLElement).style.background = "var(--muted)";
+                }
+              }}
+              onMouseLeave={e => {
+                if (!active) {
+                  (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)";
+                  (e.currentTarget as HTMLElement).style.background = "transparent";
+                }
               }}
             >
-              Rvivme
-            </span>
-            <span style={{ color: "var(--text-secondary)", display: "block", fontSize: "0.8rem" }}>
-              AI marketing intelligence
-            </span>
-          </span>
-        </Link>
+              {label}
+            </Link>
+          );
+        })}
+      </nav>
 
-        <nav style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "6px", justifyContent: "center" }}>
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
+      {/* Right */}
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <button
+          onClick={toggleMode}
+          style={{
+            width:        "34px",
+            height:       "34px",
+            display:      "flex",
+            alignItems:   "center",
+            justifyContent: "center",
+            background:   "transparent",
+            border:       "1px solid var(--border)",
+            borderRadius: "8px",
+            cursor:       "pointer",
+            color:        "var(--text-secondary)",
+            transition:   "border-color 0.16s, color 0.16s",
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border-strong)"; (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; }}
+        >
+          <AnimatePresence mode="wait">
+            <motion.div key={mode} initial={{ opacity: 0, rotate: -20 }} animate={{ opacity: 1, rotate: 0 }} exit={{ opacity: 0, rotate: 20 }} transition={{ duration: 0.15 }}>
+              {mode === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+            </motion.div>
+          </AnimatePresence>
+        </button>
 
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                style={{
-                  alignItems: "center",
-                  background: active ? "rgba(var(--brand-rgb), 0.12)" : "transparent",
-                  border: active ? "1px solid rgba(var(--brand-rgb), 0.24)" : "1px solid transparent",
-                  borderRadius: "999px",
-                  color: active ? brandColor : "var(--text-secondary)",
-                  display: "flex",
-                  gap: "8px",
-                  padding: "10px 14px",
-                  textDecoration: "none",
-                }}
-              >
-                <Icon size={14} />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div style={{ alignItems: "center", display: "flex", gap: "10px" }}>
-          <button
-            type="button"
-            style={{
-              alignItems: "center",
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
-              borderRadius: "999px",
-              color: "var(--text-secondary)",
-              display: "inline-flex",
-              height: "40px",
-              justifyContent: "center",
-              width: "40px",
+        {isApp
+          ? <ProfileMenu brand={brandColor} />
+          : (
+            <Link href="/auth/login" style={{
+              fontFamily:   "var(--font-body)",
+              fontSize:     "13px",
+              fontWeight:   500,
+              color:        "#fff",
+              background:   brandColor,
+              textDecoration: "none",
+              padding:      "8px 18px",
+              borderRadius: "100px",
+              transition:   "opacity 0.16s",
             }}
-          >
-            <Bell size={16} />
-          </button>
-
-          <button
-            type="button"
-            onClick={toggleMode}
-            style={{
-              alignItems: "center",
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
-              borderRadius: "999px",
-              color: "var(--text-secondary)",
-              cursor: "pointer",
-              display: "inline-flex",
-              height: "40px",
-              justifyContent: "center",
-              width: "40px",
-            }}
-          >
-            {mode === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-          </button>
-
-          <ProfileMenu />
-        </div>
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "0.85"}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
+            >
+              Sign in
+            </Link>
+          )
+        }
       </div>
     </header>
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Footer — minimal, editorial
+// ─────────────────────────────────────────────────────────────────────────────
 function Footer() {
   const pathname = usePathname();
+  const isAuth   = pathname.startsWith("/auth");
+  const isApp    = pathname.startsWith("/dashboard") || pathname.startsWith("/keywords") || pathname.startsWith("/competitors") || pathname.startsWith("/settings");
 
-  if (pathname.startsWith("/auth")) {
-    return null;
-  }
+  if (isAuth || isApp) return null;
 
   return (
-    <footer style={{ borderTop: "1px solid var(--border)", marginTop: "48px" }}>
-      <div
-        style={{
-          alignItems: "center",
-          color: "var(--text-secondary)",
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "16px",
-          justifyContent: "space-between",
-          margin: "0 auto",
-          maxWidth: "1280px",
-          padding: "20px 24px 36px",
-        }}
-      >
-        <p style={{ margin: 0 }}>Built for modern SEO, GEO, and AI-assisted growth teams.</p>
-        <div style={{ display: "flex", gap: "14px" }}>
-          <Link href="/blog" style={{ color: "inherit", textDecoration: "none" }}>
-            Insights
+    <footer style={{
+      borderTop:  "1px solid var(--border)",
+      padding:    "32px",
+      display:    "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      flexWrap:   "wrap",
+      gap:        "16px",
+    }}>
+      <span style={{ fontFamily: "var(--font-body)", fontSize: "13px", color: "var(--text-tertiary)" }}>
+        © {new Date().getFullYear()} AI Marketing Labs
+      </span>
+      <div style={{ display: "flex", gap: "24px" }}>
+        {[
+          { href: "/blog",      label: "Intelligence" },
+          { href: "/dashboard", label: "Platform"     },
+          { href: "/settings",  label: "Settings"     },
+        ].map(({ href, label }) => (
+          <Link key={href} href={href} style={{ fontFamily: "var(--font-body)", fontSize: "13px", color: "var(--text-tertiary)", textDecoration: "none", transition: "color 0.16s" }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text-tertiary)"}
+          >
+            {label}
           </Link>
-          <Link href="/settings" style={{ color: "inherit", textDecoration: "none" }}>
-            Settings
-          </Link>
-        </div>
+        ))}
       </div>
     </footer>
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Shell export
+// ─────────────────────────────────────────────────────────────────────────────
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isAuthRoute = pathname.startsWith("/auth");
+  const isAuth   = pathname.startsWith("/auth");
 
   return (
     <ThemeProvider>
       <Header />
-      <main style={{ minHeight: isAuthRoute ? "100vh" : "calc(100vh - 81px)" }}>{children}</main>
+      <main style={{
+        paddingTop: isAuth ? "0" : "60px",
+        minHeight:  "100vh",
+      }}>
+        {children}
+      </main>
       <Footer />
     </ThemeProvider>
   );

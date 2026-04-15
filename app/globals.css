@@ -2,89 +2,177 @@
 @tailwind components;
 @tailwind utilities;
 
-:root,
-.dark {
-  --brand: #2563eb;
-  --brand-rgb: 37, 99, 235;
-  --brand-glow: rgba(37, 99, 235, 0.28);
+/* ─────────────────────────────────────────────────────────────────────────────
+   AI Marketing Labs — Design System
+   Editorial · Intelligence · Dark-first
+───────────────────────────────────────────────────────────────────────────── */
 
-  --bg: #071018;
-  --surface: #0d1721;
-  --surface-raised: #13202b;
-  --card: #121d28;
-  --border: rgba(148, 163, 184, 0.16);
-  --muted: rgba(148, 163, 184, 0.26);
+:root {
+  /* Brand */
+  --brand:         #2563eb;
+  --brand-rgb:     37, 99, 235;
+  --brand-glow:    rgba(37, 99, 235, 0.20);
 
-  --text-primary: #f8fafc;
-  --text-secondary: #a3b4c7;
-  --text-tertiary: #6b7c8f;
+  /* Surfaces */
+  --bg:            #080808;
+  --surface:       #0e0e0e;
+  --surface-2:     #141414;
+  --card:          #111111;
+  --border:        rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --muted:         rgba(255, 255, 255, 0.05);
 
+  /* Nav */
+  --nav-bg:        rgba(8, 8, 8, 0.88);
+
+  /* Text */
+  --text-primary:   #f8f8f5;
+  --text-secondary: rgba(248, 248, 245, 0.50);
+  --text-tertiary:  rgba(248, 248, 245, 0.28);
+
+  /* Signals */
+  --signal-green: #00e676;
+  --signal-amber: #ffab00;
+  --signal-red:   #ff1744;
+  --signal-blue:  #2979ff;
+
+  /* Chart */
+  --chart-grid:   rgba(255, 255, 255, 0.04);
+  --chart-axis:   rgba(255, 255, 255, 0.08);
+  --chart-tick:   rgba(255, 255, 255, 0.28);
+
+  /* Font stacks */
   --font-display: "Georgia", "Times New Roman", serif;
-  --font-body: "Segoe UI", "Inter", system-ui, sans-serif;
-  --font-mono: "Consolas", "SFMono-Regular", monospace;
+  --font-body:    "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono:    "DM Mono", "Consolas", "SFMono-Regular", monospace;
+
+  /* Timing */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out:   cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Light mode */
 .light {
-  --bg: #eef4fb;
-  --surface: #ffffff;
-  --surface-raised: #f8fbff;
-  --card: #f3f7fc;
-  --border: rgba(15, 23, 42, 0.1);
-  --muted: rgba(15, 23, 42, 0.16);
+  --bg:            #f5f5f0;
+  --surface:       #ffffff;
+  --surface-2:     #f0f0eb;
+  --card:          #f8f8f5;
+  --border:        rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.14);
+  --muted:         rgba(0, 0, 0, 0.04);
 
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-tertiary: #64748b;
+  --nav-bg:        rgba(245, 245, 240, 0.88);
+
+  --text-primary:   #0a0a08;
+  --text-secondary: rgba(10, 10, 8, 0.50);
+  --text-tertiary:  rgba(10, 10, 8, 0.28);
+
+  --chart-grid:   rgba(0, 0, 0, 0.04);
+  --chart-axis:   rgba(0, 0, 0, 0.08);
+  --chart-tick:   rgba(0, 0, 0, 0.28);
 }
 
-*,
-*::before,
-*::after {
+/* ─────────────────────────────────────────────────────────────────────────────
+   Reset
+───────────────────────────────────────────────────────────────────────────── */
+*, *::before, *::after {
   box-sizing: border-box;
+  margin:     0;
+  padding:    0;
 }
 
 html {
-  font-size: 16px;
+  font-size:       16px;
+  scroll-behavior: smooth;
+}
+
+html[data-scroll-behavior="smooth"] {
   scroll-behavior: smooth;
 }
 
 body {
-  background: var(--bg);
-  color: var(--text-primary);
-  font-family: var(--font-body);
-  margin: 0;
-  min-width: 320px;
+  background:              var(--bg);
+  color:                   var(--text-primary);
+  font-family:             var(--font-body);
+  -webkit-font-smoothing:  antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x:              hidden;
+  line-height:             1.6;
 }
 
-a,
-button,
-input,
-textarea,
-select {
-  font: inherit;
-}
+/* ─────────────────────────────────────────────────────────────────────────────
+   Scrollbar
+───────────────────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
 
-button {
-  cursor: pointer;
-}
-
+/* ─────────────────────────────────────────────────────────────────────────────
+   Selection
+───────────────────────────────────────────────────────────────────────────── */
 ::selection {
   background: rgba(var(--brand-rgb), 0.18);
+  color:      var(--text-primary);
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   Focus
+───────────────────────────────────────────────────────────────────────────── */
 :focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
+  outline:        2px solid var(--brand);
+  outline-offset: 3px;
+  border-radius:  3px;
 }
 
-.hero-grid,
-.settings-grid {
-  display: grid;
+/* ─────────────────────────────────────────────────────────────────────────────
+   Typography utilities
+───────────────────────────────────────────────────────────────────────────── */
+.display {
+  font-family:    var(--font-display);
+  letter-spacing: -0.04em;
+  line-height:    0.92;
+  font-weight:    400;
 }
 
-@media (max-width: 900px) {
-  .hero-grid,
-  .settings-grid {
-    grid-template-columns: minmax(0, 1fr) !important;
-  }
+.mono {
+  font-family:    var(--font-mono);
+  letter-spacing: 0.04em;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Animations
+───────────────────────────────────────────────────────────────────────────── */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.75); }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Responsive grid helpers
+───────────────────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .hide-mobile { display: none !important; }
+}
+
+@media (min-width: 769px) {
+  .hide-desktop { display: none !important; }
 }
