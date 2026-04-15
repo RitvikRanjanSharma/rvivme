@@ -115,7 +115,6 @@ function Intro({ onComplete }: { onComplete: () => void }) {
           lineHeight:    1,
           color:         "var(--text-primary)",
           fontWeight:    400,
-          tabularNums:   true as any,
           fontVariantNumeric: "tabular-nums",
         }}
       >
