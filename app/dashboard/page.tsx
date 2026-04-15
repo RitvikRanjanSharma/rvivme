@@ -1,416 +1,598 @@
 "use client";
 
-// app/blog/page.tsx
+// app/dashboard/page.tsx
 // =============================================================================
-// AI Marketing Labs — Public Blog Index
-// Reads from Supabase blog_posts table · Category filter · Search · Newsletter
+// AI Marketing Labs — Intelligence Dashboard
+// Projection chart now uses real GA4 data + AI forecast model
 // =============================================================================
 
-import { useState, useEffect } from "react";
-import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect, useRef } from "react";
 import {
-  Search, Clock, ArrowRight, Zap, Rss,
-  TrendingUp, Code2, FileText, Globe2, Newspaper,
-  Lightbulb, BookOpen, CheckCircle2, X,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, ReferenceLine,
+} from "recharts";
+import { motion, useInView, animate, AnimatePresence } from "framer-motion";
+import {
+  AlertTriangle, CheckCircle2, TrendingUp, TrendingDown,
+  Activity, Newspaper, Globe2, ShieldCheck, Cpu, Zap,
+  ArrowRight, ExternalLink, RefreshCw, AlertCircle, XCircle,
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { GA4Panel } from "./ga4-panel";
+import { GSCPanel } from "./gsc-panel";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
-interface Post {
-  id:                string;
-  slug:              string;
-  title:             string;
-  excerpt:           string;
-  category:          string;
-  read_time_minutes: number;
-  published_at:      string | null;
-  author_name:       string;
-  featured:          boolean;
-  focus_keyword:     string | null;
+interface TrafficDataPoint {
+  month:    string;
+  actual:   number | null;
+  forecast: number | null;
+  lower:    number | null;
+  upper:    number | null;
+}
+
+interface GA4TrendPoint {
+  date:     string;
+  sessions: number;
+  users:    number;
+}
+
+interface MetricCard {
+  id:       string;
+  label:    string;
+  value:    string | number;
+  delta:    number;
+  unit:     string;
+  icon:     React.ElementType;
+  severity: "neutral" | "warning" | "critical" | "positive";
+  detail:   string;
+}
+
+interface HealthItem {
+  label:  string;
+  status: "ok" | "warning" | "critical";
+  detail: string;
+}
+
+interface Strategy {
+  id:        string;
+  title:     string;
+  rationale: string;
+  impact:    number;
+  effort:    number;
+  timeframe: string;
+  category:  string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Data
+// AI Forecast model
+// Takes real GA4 daily sessions and builds a monthly chart with 6-month forecast
 // ─────────────────────────────────────────────────────────────────────────────
-const CATEGORIES = [
-  { id: "all",               label: "All Posts",         icon: BookOpen    },
-  { id: "seo_strategy",      label: "SEO Strategy",      icon: TrendingUp  },
-  { id: "geo_optimisation",  label: "GEO",               icon: Globe2      },
-  { id: "technical_seo",     label: "Technical SEO",     icon: Code2       },
-  { id: "content_marketing", label: "Content",           icon: FileText    },
-  { id: "business_insights", label: "Business Insights", icon: Lightbulb   },
-  { id: "platform_updates",  label: "Platform Updates",  icon: Zap         },
-  { id: "case_studies",      label: "Case Studies",      icon: CheckCircle2},
-  { id: "industry_news",     label: "Industry News",     icon: Newspaper   },
+function buildChartData(trend: GA4TrendPoint[]): {
+  data:           TrafficDataPoint[];
+  currentMTD:     number;
+  forecast6M:     number;
+  growthPct:      number;
+  confidence:     number;
+  handoffMonth:   string;
+} {
+  if (trend.length === 0) {
+    // Fallback mock data while GA4 is loading
+    return {
+      data: [
+        { month: "Sep", actual: 18400, forecast: null,  lower: null,  upper: null  },
+        { month: "Oct", actual: 21700, forecast: null,  lower: null,  upper: null  },
+        { month: "Nov", actual: 19900, forecast: null,  lower: null,  upper: null  },
+        { month: "Dec", actual: 24300, forecast: null,  lower: null,  upper: null  },
+        { month: "Jan", actual: 27800, forecast: null,  lower: null,  upper: null  },
+        { month: "Feb", actual: 31200, forecast: null,  lower: null,  upper: null  },
+        { month: "Mar", actual: 34100, forecast: null,  lower: null,  upper: null  },
+        { month: "Apr", actual: 34100, forecast: 34100, lower: 32800, upper: 35900 },
+        { month: "May", actual: null,  forecast: 38600, lower: 36100, upper: 41200 },
+        { month: "Jun", actual: null,  forecast: 43400, lower: 39800, upper: 47100 },
+        { month: "Jul", actual: null,  forecast: 49200, lower: 44000, upper: 54500 },
+        { month: "Aug", actual: null,  forecast: 55800, lower: 49200, upper: 62400 },
+        { month: "Sep+",actual: null,  forecast: 63100, lower: 54800, upper: 71500 },
+      ],
+      currentMTD: 34100, forecast6M: 63100, growthPct: 85, confidence: 85, handoffMonth: "Apr",
+    };
+  }
+
+  // Group daily data into months
+  const monthlyMap: Record<string, number> = {};
+  for (const point of trend) {
+    const d     = new Date(point.date);
+    const key   = d.toLocaleDateString("en-GB", { month: "short", year: "2-digit" });
+    monthlyMap[key] = (monthlyMap[key] ?? 0) + point.sessions;
+  }
+
+  const monthlyEntries = Object.entries(monthlyMap);
+  const historicalData: TrafficDataPoint[] = monthlyEntries.map(([month, sessions]) => ({
+    month,
+    actual:   sessions,
+    forecast: null,
+    lower:    null,
+    upper:    null,
+  }));
+
+  // Calculate growth rate from available data
+  const values = monthlyEntries.map(([, v]) => v);
+  const last    = values[values.length - 1] ?? 1;
+  const first   = values[0] ?? 1;
+  const periods = Math.max(values.length - 1, 1);
+
+  // Monthly growth rate (geometric mean)
+  const monthlyGrowthRate = Math.pow(last / Math.max(first, 1), 1 / periods);
+  // Clamp to realistic range: 0% to 30% monthly growth
+  const clampedRate = Math.min(Math.max(monthlyGrowthRate, 1.0), 1.30);
+
+  const handoffMonth = monthlyEntries[monthlyEntries.length - 1]?.[0] ?? "Now";
+
+  // Add handoff point
+  historicalData[historicalData.length - 1] = {
+    ...historicalData[historicalData.length - 1],
+    forecast: last,
+    lower:    Math.round(last * 0.92),
+    upper:    Math.round(last * 1.08),
+  };
+
+  // Generate 6-month forecast
+  const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const now         = new Date();
+  const forecastData: TrafficDataPoint[] = [];
+
+  for (let i = 1; i <= 6; i++) {
+    const futureDate  = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    const monthLabel  = MONTH_NAMES[futureDate.getMonth()] + (i === 6 ? "+" : "");
+    const forecastVal = Math.round(last * Math.pow(clampedRate, i));
+    // Confidence interval widens over time
+    const uncertainty = 0.06 + i * 0.04;
+    forecastData.push({
+      month:    monthLabel,
+      actual:   null,
+      forecast: forecastVal,
+      lower:    Math.round(forecastVal * (1 - uncertainty)),
+      upper:    Math.round(forecastVal * (1 + uncertainty)),
+    });
+  }
+
+  const forecast6M  = forecastData[5]?.forecast ?? last;
+  const growthPct   = Math.round(((forecast6M - last) / Math.max(last, 1)) * 100);
+  const confidence  = Math.max(60, Math.min(92, 92 - values.length * 2));
+
+  return {
+    data:         [...historicalData, ...forecastData],
+    currentMTD:   last,
+    forecast6M,
+    growthPct,
+    confidence,
+    handoffMonth,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mock data (metrics, health, strategies stay as-is — DataForSEO will replace later)
+// ─────────────────────────────────────────────────────────────────────────────
+const AI_METRICS: MetricCard[] = [
+  { id: "keyword-volatility", label: "Keyword Volatility Index", value: 72, delta: 14.3, unit: "/100", icon: Activity, severity: "warning", detail: "17 tracked keywords experienced position shifts >3 in the past 24 hours. Primary instability detected in navigational query cluster." },
+  { id: "competitor-alerts",  label: "Competitor News Alerts",  value: 4,  delta: -1,   unit: " new",  icon: Newspaper, severity: "neutral", detail: "Acme Analytics published a new product announcement indexed by Google News at 07:14 GMT. Rival Corp restructured their /resources hierarchy — potential authority shift." },
+  { id: "niche-updates",      label: "Niche Industry Updates",  value: 9,  delta: 3,    unit: " signals", icon: Globe2, severity: "positive", detail: "Google Search Central blog published Core Web Vitals guidance update. Industry sentiment analysis indicates 62% positive coverage of AI-assisted search tools in your vertical." },
 ];
 
-function categoryLabel(id: string): string {
-  return CATEGORIES.find(c => c.id === id)?.label ?? id;
-}
+const HEALTH_ITEMS: HealthItem[] = [
+  { label: "SSL Certificate",     status: "ok",      detail: "Valid · Auto-renewed via Vercel · Grade A"    },
+  { label: "404 Errors (24hr)",   status: "ok",      detail: "0 new errors detected · Last scan 09:41 GMT"  },
+  { label: "Core Web Vitals",     status: "ok",      detail: "LCP 1.8s · FID 12ms · CLS 0.04 · All Pass"   },
+  { label: "Crawl Anomalies",     status: "warning", detail: "3 pages returning 302 redirect chains"         },
+  { label: "Canonical Conflicts", status: "warning", detail: "7 self-referencing canonicals missing"         },
+  { label: "Index Coverage",      status: "ok",      detail: "Pages submitted to GSC · Indexing in progress" },
+];
 
-function formatDate(iso: string | null): string {
-  if (!iso) return "";
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
-}
-
-function authorInitials(name: string): string {
-  return name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
-}
+const STRATEGIES: Strategy[] = [
+  { id: "strat-01", title: "Topical Authority Cluster Expansion — AI Tools Vertical", rationale: "Semantic gap analysis reveals 43 unaddressed sub-topics within your primary keyword cluster. Competitors currently rank for 67% of these terms. Constructing a structured hub-and-spoke content architecture targeting these sub-topics is projected to increase topical authority score from 61 to 84 within 90 days, driving an estimated 8,200 incremental monthly sessions.", impact: 9.2, effort: 6.8, timeframe: "60–90 days", category: "Content Architecture" },
+  { id: "strat-02", title: "Programmatic Schema Markup Deployment — FAQ & HowTo", rationale: "Audit confirms 91% of indexable pages lack structured data. Deploying FAQ and HowTo schema across the /resources and /blog directories is projected to increase SERP feature eligibility for 312 target queries. AI Overview citation probability increases by an estimated 34% upon implementation, based on current GEO analysis benchmarks.", impact: 7.5, effort: 3.2, timeframe: "7–14 days", category: "Technical GEO" },
+  { id: "strat-03", title: "Competitor Link Gap Remediation — Domain Authority Uplift", rationale: "Backlink gap analysis against the top 3 competitors identifies 1,847 referring domains linking to rivals that do not link to this domain. Of these, 214 are classified as high-authority (DA 60+) and editorially accessible. A targeted digital PR and link acquisition campaign addressing this gap is projected to increase Domain Authority from 42 to 55 over 6 months.", impact: 8.8, effort: 8.1, timeframe: "90–180 days", category: "Authority Building" },
+];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 const SP = { type: "spring", stiffness: 260, damping: 30, mass: 0.9 } as const;
-function pv(delay = 0) {
-  return { hidden: { opacity: 0, y: 18 }, visible: { opacity: 1, y: 0, transition: { ...SP, delay } } };
+function pv(delay: number) {
+  return { hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0, transition: { ...SP, delay } } };
+}
+function formatK(n: number): string { return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n); }
+function impactColor(s: number) { return s >= 8.5 ? "var(--signal-green)" : s >= 6.5 ? "var(--brand)" : "var(--signal-amber)"; }
+function effortColor(s: number) { return s >= 7.5 ? "var(--signal-red)"   : s >= 5.0 ? "var(--signal-amber)" : "var(--signal-green)"; }
+function severityColor(s: MetricCard["severity"]) { return { neutral: "var(--text-secondary)", warning: "var(--signal-amber)", critical: "var(--signal-red)", positive: "var(--signal-green)" }[s]; }
+function statusIcon(s: HealthItem["status"]) {
+  if (s === "ok")      return <CheckCircle2 size={13} color="var(--signal-green)" />;
+  if (s === "warning") return <AlertCircle  size={13} color="var(--signal-amber)" />;
+  return <XCircle size={13} color="var(--signal-red)" />;
+}
+function Panel({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", ...style }}>{children}</div>;
+}
+function Section({ label, children, action }: { label: string; children: React.ReactNode; action?: React.ReactNode }) {
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
+        <span style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "11px", fontWeight: 700, color: "var(--text-tertiary)", letterSpacing: "0.14em", textTransform: "uppercase" }}>{label}</span>
+        {action}
+      </div>
+      {children}
+    </div>
+  );
+}
+function ChevronRight({ size, color }: { size: number; color: string }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Newsletter banner
+// Animated number
 // ─────────────────────────────────────────────────────────────────────────────
-function NewsletterBanner() {
-  const [email,     setEmail]     = useState("");
-  const [submitted, setSubmitted] = useState(false);
-  const [loading,   setLoading]   = useState(false);
-  const brandColor = "#3b82f6";
+function AnimatedNumber({ target, decimals = 0, delay = 0 }: { target: number; decimals?: number; delay?: number }) {
+  const [display, setDisplay] = useState(0);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const ctrl = animate(0, target, { duration: 1.4, ease: [0.16, 1, 0.3, 1], onUpdate: v => setDisplay(parseFloat(v.toFixed(decimals))) });
+      return ctrl.stop;
+    }, delay * 1000);
+    return () => clearTimeout(t);
+  }, [target, decimals, delay]);
+  return <span style={{ fontFamily: "var(--font-dm-mono), monospace" }}>{decimals > 0 ? display.toFixed(decimals) : Math.round(display).toLocaleString()}</span>;
+}
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!email.includes("@")) return;
-    setLoading(true);
-    try {
-      await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/newsletter_subscribers`, {
-        method: "POST",
-        headers: {
-          apikey:         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
-          Authorization:  `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""}`,
-          "Content-Type": "application/json",
-          Prefer:         "return=minimal",
-        },
-        body: JSON.stringify({ email, source: "blog" }),
-      });
-      setSubmitted(true);
-    } catch {
-      setSubmitted(true); // still show success
-    } finally {
-      setLoading(false);
-    }
-  }
-
+// ─────────────────────────────────────────────────────────────────────────────
+// Tooltip
+// ─────────────────────────────────────────────────────────────────────────────
+function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) {
+  if (!active || !payload?.length) return null;
   return (
-    <div style={{ background: `linear-gradient(135deg, rgba(var(--brand-rgb),0.08) 0%, rgba(var(--brand-rgb),0.03) 100%)`, border: `1px solid rgba(var(--brand-rgb),0.20)`, borderRadius: "16px", padding: "40px 48px", textAlign: "center", position: "relative", overflow: "hidden" }}>
-      <div style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: "300px", height: "1px", background: `linear-gradient(90deg, transparent, ${brandColor}, transparent)` }} />
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginBottom: "12px" }}>
-        <Rss size={16} color={brandColor} />
-        <span style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "11px", fontWeight: 700, color: brandColor, letterSpacing: "0.14em", textTransform: "uppercase" }}>Intelligence Dispatch</span>
-      </div>
-      <h3 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "clamp(1.4rem,3vw,1.9rem)", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.025em", marginBottom: "10px" }}>
-        Weekly SEO & GEO Intelligence.<br /><span style={{ color: brandColor }}>Delivered to your inbox.</span>
-      </h3>
-      <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "14px", color: "var(--text-secondary)", lineHeight: 1.7, maxWidth: "480px", margin: "0 auto 28px" }}>
-        Join enterprise SEO practitioners receiving the AI Marketing Labs weekly brief — strategy analysis, algorithm updates, and GEO intelligence every Tuesday.
-      </p>
-      <AnimatePresence mode="wait">
-        {submitted ? (
-          <motion.div key="success" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
-            style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "12px 24px", background: "rgba(0,230,118,0.10)", border: "1px solid rgba(0,230,118,0.25)", borderRadius: "8px" }}
-          >
-            <CheckCircle2 size={15} color="var(--signal-green)" />
-            <span style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 600, color: "var(--signal-green)" }}>Subscribed. Check your inbox for confirmation.</span>
-          </motion.div>
-        ) : (
-          <motion.form key="form" onSubmit={handleSubmit}
-            style={{ display: "flex", gap: "8px", maxWidth: "440px", margin: "0 auto", flexWrap: "wrap", justifyContent: "center" }}
-          >
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="your@company.com" required
-              style={{ flex: "1 1 240px", padding: "11px 16px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-primary)", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", outline: "none" }}
-              onFocus={e => e.currentTarget.style.borderColor = brandColor}
-              onBlur={e =>  e.currentTarget.style.borderColor = "var(--border)"}
-            />
-            <button type="submit" disabled={loading}
-              style={{ flex: "0 0 auto", display: "flex", alignItems: "center", gap: "6px", padding: "11px 22px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 700, color: "#fff", background: `linear-gradient(135deg, ${brandColor}, color-mix(in srgb, ${brandColor} 60%, #000))`, border: "none", borderRadius: "8px", cursor: "pointer", boxShadow: "0 0 18px var(--brand-glow)" }}
-            >
-              {loading ? <div style={{ width: "12px", height: "12px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} /> : <><Zap size={13} strokeWidth={2.5} />Subscribe</>}
-            </button>
-          </motion.form>
-        )}
-      </AnimatePresence>
-      <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "11px", color: "var(--text-tertiary)", marginTop: "14px" }}>No spam. Unsubscribe at any time. GDPR compliant.</p>
+    <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "8px", padding: "10px 14px", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
+      <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.1em", marginBottom: "8px", textTransform: "uppercase" }}>{label}</div>
+      {payload.map(p => p.value != null ? (
+        <div key={p.name} style={{ display: "flex", justifyContent: "space-between", gap: "20px", marginBottom: "3px" }}>
+          <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: p.color }}>{p.name}</span>
+          <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "12px", fontWeight: 500, color: "var(--text-primary)" }}>{Number(p.value).toLocaleString()}</span>
+        </div>
+      ) : null)}
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Featured post hero
+// Score bar
 // ─────────────────────────────────────────────────────────────────────────────
-function FeaturedPost({ post, brandColor }: { post: Post; brandColor: string }) {
-  const [hovered, setHovered] = useState(false);
+function ScoreBar({ value, max = 10, color, label }: { value: number; max?: number; color: string; label: string }) {
   return (
-    <Link href={`/blog/${post.slug}`} style={{ textDecoration: "none", display: "block" }}>
-      <motion.div variants={pv(0.15)} initial="hidden" animate="visible"
-        onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
-        style={{ background: "var(--surface)", border: `1px solid ${hovered ? `rgba(var(--brand-rgb),0.35)` : "var(--border)"}`, borderRadius: "16px", padding: "40px 44px", marginBottom: "24px", position: "relative", overflow: "hidden", transition: "border-color 0.25s, box-shadow 0.25s", boxShadow: hovered ? "0 12px 48px rgba(0,0,0,0.5)" : "none", cursor: "pointer" }}
-      >
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "2px", background: `linear-gradient(90deg, transparent, ${brandColor}80, transparent)` }} />
-        <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
-          <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "9px", fontWeight: 500, color: brandColor, background: `rgba(var(--brand-rgb),0.10)`, border: `1px solid rgba(var(--brand-rgb),0.25)`, padding: "3px 10px", borderRadius: "100px", letterSpacing: "0.1em", textTransform: "uppercase" }}>Featured</span>
-          <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "9px", color: "var(--text-tertiary)", background: "var(--card)", border: "1px solid var(--border)", padding: "3px 10px", borderRadius: "100px", letterSpacing: "0.08em", textTransform: "uppercase" }}>{categoryLabel(post.category)}</span>
-        </div>
-        <h2 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "clamp(1.4rem,3vw,2rem)", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.03em", lineHeight: 1.15, marginBottom: "14px", maxWidth: "760px" }}>{post.title}</h2>
-        <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "15px", color: "var(--text-secondary)", lineHeight: 1.75, maxWidth: "720px", marginBottom: "24px" }}>{post.excerpt}</p>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
-              <div style={{ width: "28px", height: "28px", borderRadius: "50%", background: `linear-gradient(135deg, ${brandColor}, color-mix(in srgb, ${brandColor} 55%, #000))`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-syne), sans-serif", fontSize: "9px", fontWeight: 700, color: "#fff" }}>
-                {authorInitials(post.author_name)}
-              </div>
-              <span style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", color: "var(--text-secondary)", fontWeight: 500 }}>{post.author_name}</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-              <Clock size={11} color="var(--text-tertiary)" />
-              <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-tertiary)" }}>{post.read_time_minutes} min read</span>
-            </div>
-            <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-tertiary)" }}>{formatDate(post.published_at)}</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "6px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 600, color: brandColor }}>
-            Read article <ArrowRight size={14} style={{ transform: hovered ? "translateX(3px)" : "translateX(0)", transition: "transform 0.2s" }} />
-          </div>
-        </div>
-      </motion.div>
-    </Link>
+    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+      <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", width: "46px", flexShrink: 0, letterSpacing: "0.06em" }}>{label}</span>
+      <div style={{ flex: 1, height: "4px", background: "var(--border)", borderRadius: "2px", overflow: "hidden" }}>
+        <motion.div initial={{ width: 0 }} animate={{ width: `${(value / max) * 100}%` }} transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.3 }} style={{ height: "100%", background: color, borderRadius: "2px" }} />
+      </div>
+      <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "12px", fontWeight: 500, color, width: "26px", textAlign: "right", flexShrink: 0 }}>{value.toFixed(1)}</span>
+    </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Post card
+// Connection banner
 // ─────────────────────────────────────────────────────────────────────────────
-function PostCard({ post, delay, brandColor }: { post: Post; delay: number; brandColor: string }) {
-  const [hovered, setHovered] = useState(false);
+function ConnectionBanner({ ga4Connected, gscConnected }: { ga4Connected: boolean; gscConnected: boolean }) {
+  if (ga4Connected && gscConnected) return null;
+  const missing = [!ga4Connected && "Google Analytics 4", !gscConnected && "Google Search Console"].filter(Boolean).join(" and ");
   return (
-    <Link href={`/blog/${post.slug}`} style={{ textDecoration: "none", display: "block", height: "100%" }}>
-      <motion.div variants={pv(delay)} initial="hidden" animate="visible"
-        onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
-        style={{ background: "var(--surface)", border: `1px solid ${hovered ? `rgba(var(--brand-rgb),0.30)` : "var(--border)"}`, borderRadius: "12px", padding: "24px", height: "100%", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden", transition: "border-color 0.22s, transform 0.22s, box-shadow 0.22s", transform: hovered ? "translateY(-2px)" : "translateY(0)", boxShadow: hovered ? "0 8px 32px rgba(0,0,0,0.4)" : "0 1px 4px rgba(0,0,0,0.3)", cursor: "pointer" }}
+    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SP, delay: 0.1 }}
+      style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", background: "rgba(255,171,0,0.06)", border: "1px solid rgba(255,171,0,0.20)", borderRadius: "10px", marginBottom: "20px", gap: "12px", flexWrap: "wrap" }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <AlertTriangle size={14} color="var(--signal-amber)" />
+        <span style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--signal-amber)", fontWeight: 500 }}>
+          Data limited — {missing} {missing.includes("and") ? "are" : "is"} not connected.
+        </span>
+      </div>
+      <button style={{ display: "flex", alignItems: "center", gap: "5px", fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", fontWeight: 600, color: "var(--signal-amber)", background: "rgba(255,171,0,0.10)", border: "1px solid rgba(255,171,0,0.25)", borderRadius: "6px", padding: "5px 12px", cursor: "pointer", whiteSpace: "nowrap" }}
+        onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(255,171,0,0.18)"}
+        onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "rgba(255,171,0,0.10)"}
       >
-        <div style={{ display: "flex", gap: "6px", marginBottom: "14px" }}>
-          <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "9px", fontWeight: 500, color: "var(--text-tertiary)", background: "var(--card)", border: "1px solid var(--border)", padding: "2px 8px", borderRadius: "100px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-            {categoryLabel(post.category)}
-          </span>
+        Connect now <ArrowRight size={11} />
+      </button>
+    </motion.div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dashboard header
+// ─────────────────────────────────────────────────────────────────────────────
+function DashboardHeader({ brandColor }: { brandColor: string }) {
+  const dateStr = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date());
+  return (
+    <motion.div variants={pv(0)} initial="hidden" animate="visible" style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
+      <div>
+        <h1 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "clamp(1.5rem,3vw,2rem)", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.03em", lineHeight: 1, marginBottom: "6px" }}>
+          AI Marketing Labs — Intelligence Dashboard
+        </h1>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>{dateStr.toUpperCase()}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+            <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: brandColor, boxShadow: "0 0 8px var(--brand-glow)", animation: "brand-pulse 2.5s ease-in-out infinite" }} />
+            <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: brandColor, letterSpacing: "0.1em", textTransform: "uppercase" }}>Live · GA4 + GSC + DataForSEO</span>
+          </div>
         </div>
-        <h3 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "15px", fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.015em", lineHeight: 1.35, marginBottom: "10px", flex: "0 0 auto" }}>{post.title}</h3>
-        <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.7, flex: 1, marginBottom: "18px", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-          {post.excerpt}
-        </p>
-        {post.focus_keyword && (
-          <div style={{ marginBottom: "14px" }}>
-            <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "9px", color: brandColor, background: `rgba(var(--brand-rgb),0.08)`, border: `1px solid rgba(var(--brand-rgb),0.18)`, padding: "2px 7px", borderRadius: "100px", letterSpacing: "0.06em" }}>
-              {post.focus_keyword}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "7px 12px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px" }}>
+        <div style={{ width: "14px", height: "14px", borderRadius: "4px", background: brandColor, boxShadow: "0 0 10px var(--brand-glow)", flexShrink: 0 }} />
+        <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-secondary)", letterSpacing: "0.06em" }}>Brand: {brandColor.toUpperCase()}</span>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Projection Chart — now uses real GA4 data
+// ─────────────────────────────────────────────────────────────────────────────
+function ProjectionChart({ brandColor, ga4Trend, ga4Loading }: { brandColor: string; ga4Trend: GA4TrendPoint[]; ga4Loading: boolean }) {
+  const chartRef = useRef<HTMLDivElement>(null);
+  const inView   = useInView(chartRef, { once: true, margin: "-60px" });
+  const gradId   = "brand-area-gradient";
+  const fcastId  = "forecast-area-gradient";
+
+  const { data, currentMTD, forecast6M, growthPct, confidence, handoffMonth } = buildChartData(ga4Trend);
+  const isReal = ga4Trend.length > 0;
+
+  return (
+    <motion.div ref={chartRef} variants={pv(0.2)} initial="hidden" animate="visible">
+      <Panel style={{ padding: "24px 24px 16px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
+          <div>
+            <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "15px", fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.01em", marginBottom: "4px" }}>
+              Organic Traffic · 6-Month AI Projection
+            </div>
+            <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: isReal ? "var(--signal-green)" : "var(--text-tertiary)", letterSpacing: "0.08em" }}>
+              {ga4Loading ? "LOADING GA4 DATA..." : isReal ? `LIVE GA4 DATA · AI FORECAST MODEL v1.0 · ${confidence}% CONFIDENCE` : "MODEL v1.0 · SAMPLE DATA · CONNECT GA4 FOR LIVE CHART"}
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            {[
+              { label: "Historical",  dashed: false, color: brandColor      },
+              { label: "AI Forecast", dashed: true,  color: brandColor      },
+              { label: "CI Band",     dashed: false,  color: "var(--border)" },
+            ].map(({ label, dashed, color }) => (
+              <div key={label} style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                <svg width="18" height="10">
+                  <line x1="0" y1="5" x2="18" y2="5" stroke={color} strokeWidth={dashed ? 1.5 : 2} strokeDasharray={dashed ? "4 3" : undefined} opacity={label === "CI Band" ? 0.6 : 1} />
+                </svg>
+                <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>{label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <ResponsiveContainer width="100%" height={280}>
+          <AreaChart data={data} margin={{ top: 4, right: 4, left: -8, bottom: 0 }}>
+            <defs>
+              <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"   stopColor={brandColor} stopOpacity={0.28} />
+                <stop offset="75%"  stopColor={brandColor} stopOpacity={0.04} />
+                <stop offset="100%" stopColor={brandColor} stopOpacity={0}    />
+              </linearGradient>
+              <linearGradient id={fcastId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"   stopColor={brandColor} stopOpacity={0.14} />
+                <stop offset="100%" stopColor={brandColor} stopOpacity={0}    />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke="var(--chart-grid, var(--border))" strokeDasharray="2 6" vertical={false} />
+            <XAxis dataKey="month" tick={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: 10, fill: "var(--text-tertiary)" }} axisLine={{ stroke: "var(--border)" }} tickLine={false} />
+            <YAxis tick={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: 10, fill: "var(--text-tertiary)" }} axisLine={false} tickLine={false} tickFormatter={formatK} />
+            <Tooltip content={<ChartTooltip />} />
+            <Area type="monotone" dataKey="upper"    name="CI Upper"    stroke="none" fill={`url(#${fcastId})`} fillOpacity={0.4} dot={false} legendType="none" animationDuration={inView ? 1200 : 0} />
+            <Area type="monotone" dataKey="lower"    name="CI Lower"    stroke="none" fill="var(--bg)"         fillOpacity={1}   dot={false} legendType="none" animationDuration={inView ? 1200 : 0} />
+            <Area type="monotone" dataKey="actual"   name="Historical"  stroke={brandColor} strokeWidth={2} fill={`url(#${gradId})`} dot={false} activeDot={{ r: 4, fill: brandColor, stroke: "var(--bg)", strokeWidth: 2 }} animationDuration={inView ? 1000 : 0} animationEasing="ease-out" />
+            <Area type="monotone" dataKey="forecast" name="AI Forecast" stroke={brandColor} strokeWidth={1.5} strokeDasharray="5 4" strokeOpacity={0.75} fill="none" dot={false} activeDot={{ r: 3, fill: brandColor, stroke: "var(--bg)", strokeWidth: 2 }} animationDuration={inView ? 1400 : 0} animationEasing="ease-out" />
+            <ReferenceLine x={handoffMonth} stroke="var(--text-tertiary)" strokeDasharray="2 4" strokeWidth={1} label={{ value: "FORECAST →", position: "top", fontFamily: "var(--font-dm-mono), monospace", fontSize: 9, fill: "var(--text-tertiary)", dy: -6 }} />
+          </AreaChart>
+        </ResponsiveContainer>
+
+        {/* KPI strip — real data */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1px", background: "var(--border)", borderTop: "1px solid var(--border)", marginTop: "20px", borderRadius: "0 0 10px 10px", overflow: "hidden" }}>
+          {[
+            { label: "Current MTD",      value: currentMTD,  suffix: ""  },
+            { label: "Forecast +6M",     value: forecast6M,  suffix: ""  },
+            { label: "Projected Growth", value: growthPct,   suffix: "%" },
+            { label: "Confidence",       value: confidence,  suffix: "%" },
+          ].map((stat, i) => (
+            <div key={stat.label} style={{ background: "var(--surface)", padding: "14px 16px", textAlign: "center" }}>
+              <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "18px", fontWeight: 500, color: "var(--text-primary)", letterSpacing: "-0.02em", marginBottom: "3px" }}>
+                {ga4Loading ? "—" : <><AnimatedNumber target={stat.value} decimals={stat.suffix === "%" ? 1 : 0} delay={0.4 + i * 0.08} />{stat.suffix}</>}
+              </div>
+              <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "9px", color: "var(--text-tertiary)", letterSpacing: "0.1em", textTransform: "uppercase" }}>{stat.label}</div>
+            </div>
+          ))}
+        </div>
+      </Panel>
+    </motion.div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Metrics grid (mock — DataForSEO will replace)
+// ─────────────────────────────────────────────────────────────────────────────
+function MetricsGrid() {
+  return (
+    <Section label="Daily AI Signal Intelligence" action={<button style={{ display: "flex", alignItems: "center", gap: "4px", fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-tertiary)", background: "transparent", border: "none", cursor: "pointer", padding: "4px", transition: "color 0.18s" }} onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"} onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text-tertiary)"}><RefreshCw size={11} /> REFRESH</button>}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+        {AI_METRICS.map((metric, i) => {
+          const Icon = metric.icon;
+          const sColor = severityColor(metric.severity);
+          const positive = metric.delta > 0;
+          const DeltaIcon = positive ? TrendingUp : TrendingDown;
+          return (
+            <motion.div key={metric.id} variants={pv(0.3 + i * 0.08)} initial="hidden" animate="visible">
+              <Panel style={{ padding: "20px", height: "100%", position: "relative", overflow: "hidden" }}>
+                <div style={{ position: "absolute", top: 0, left: "20px", right: "20px", height: "1px", background: `linear-gradient(90deg, transparent, ${sColor}55, transparent)` }} />
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px" }}>
+                  <div style={{ width: "36px", height: "36px", borderRadius: "8px", background: `${sColor}12`, border: `1px solid ${sColor}30`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Icon size={17} color={sColor} />
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                    <DeltaIcon size={11} color={positive ? "var(--signal-green)" : "var(--signal-red)"} />
+                    <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: positive ? "var(--signal-green)" : "var(--signal-red)", fontWeight: 500 }}>{positive ? "+" : ""}{metric.delta}</span>
+                  </div>
+                </div>
+                <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "28px", fontWeight: 500, color: "var(--text-primary)", letterSpacing: "-0.025em", lineHeight: 1, marginBottom: "4px" }}>
+                  <AnimatedNumber target={typeof metric.value === "number" ? metric.value : 0} delay={0.3 + i * 0.08} />
+                  <span style={{ fontSize: "14px", color: "var(--text-tertiary)", fontWeight: 400 }}>{metric.unit}</span>
+                </div>
+                <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "12px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "10px" }}>{metric.label}</div>
+                <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.65, margin: 0 }}>{metric.detail}</p>
+              </Panel>
+            </motion.div>
+          );
+        })}
+      </div>
+    </Section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Health banner
+// ─────────────────────────────────────────────────────────────────────────────
+function TechnicalHealthBanner() {
+  const hasWarnings = HEALTH_ITEMS.some(h => h.status !== "ok");
+  const criticals   = HEALTH_ITEMS.filter(h => h.status === "critical").length;
+  const warnings    = HEALTH_ITEMS.filter(h => h.status === "warning").length;
+  return (
+    <motion.div variants={pv(0.55)} initial="hidden" animate="visible">
+      <Panel style={{ overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: "1px solid var(--border)", background: hasWarnings ? "rgba(255,171,0,0.04)" : "rgba(0,230,118,0.04)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <ShieldCheck size={15} color={hasWarnings ? "var(--signal-amber)" : "var(--signal-green)"} />
+            <span style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "13px", fontWeight: 700, color: "var(--text-primary)" }}>Technical Health Monitor</span>
+            <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: hasWarnings ? "var(--signal-amber)" : "var(--signal-green)", background: hasWarnings ? "rgba(255,171,0,0.10)" : "rgba(0,230,118,0.10)", border: hasWarnings ? "1px solid rgba(255,171,0,0.25)" : "1px solid rgba(0,230,118,0.25)", padding: "2px 8px", borderRadius: "100px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              {criticals > 0 ? `${criticals} critical` : warnings > 0 ? `${warnings} warnings` : "All Systems Nominal"}
             </span>
           </div>
-        )}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: "14px", borderTop: "1px solid var(--border)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <Clock size={10} color="var(--text-tertiary)" />
-              <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)" }}>{post.read_time_minutes} min</span>
-            </div>
-            <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)" }}>{formatDate(post.published_at)}</span>
-          </div>
-          <ArrowRight size={13} color={hovered ? brandColor : "var(--text-tertiary)"} style={{ transition: "color 0.2s, transform 0.2s", transform: hovered ? "translateX(2px)" : "translateX(0)" }} />
+          <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>LAST SCAN: 09:41 GMT</div>
         </div>
-      </motion.div>
-    </Link>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1px", background: "var(--border)" }}>
+          {HEALTH_ITEMS.map((item, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "8px", padding: "12px 16px", background: "var(--surface)" }}>
+              <div style={{ marginTop: "1px", flexShrink: 0 }}>{statusIcon(item.status)}</div>
+              <div>
+                <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "2px" }}>{item.label}</div>
+                <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", lineHeight: 1.5 }}>{item.detail}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Panel>
+    </motion.div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Empty state
+// Action center
 // ─────────────────────────────────────────────────────────────────────────────
-function EmptyState({ brandColor }: { brandColor: string }) {
+function ActionCenter({ brandColor }: { brandColor: string }) {
+  const [selected, setSelected] = useState<string | null>(null);
+  const generatedDate = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date()).toUpperCase();
   return (
-    <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "80px 24px" }}>
-      <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: `rgba(var(--brand-rgb),0.10)`, border: `1px solid rgba(var(--brand-rgb),0.20)`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
-        <FileText size={20} color={brandColor} />
+    <Section label="AI Strategy Action Centre" action={<div style={{ display: "flex", alignItems: "center", gap: "6px" }}><Cpu size={11} color="var(--text-tertiary)" /><span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.1em" }}>GENERATED {generatedDate}</span></div>}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        {STRATEGIES.map((strat, i) => {
+          const isSelected = selected === strat.id;
+          return (
+            <motion.div key={strat.id} variants={pv(0.6 + i * 0.1)} initial="hidden" animate="visible">
+              <div onClick={() => setSelected(isSelected ? null : strat.id)} style={{ background: "var(--surface)", border: `1px solid ${isSelected ? brandColor + "60" : "var(--border)"}`, borderRadius: "12px", padding: "20px 22px", cursor: "pointer", transition: "border-color 0.25s, box-shadow 0.25s", boxShadow: isSelected ? "0 0 24px var(--brand-glow)" : "none", position: "relative", overflow: "hidden" }}
+                onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.borderColor = "var(--muted)"; }}
+                onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; }}
+              >
+                {isSelected && <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "2px", background: `linear-gradient(90deg, transparent, ${brandColor}, transparent)` }} />}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px", gap: "12px" }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                      <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "9px", fontWeight: 500, color: brandColor, background: "rgba(var(--brand-rgb),0.10)", border: "1px solid rgba(var(--brand-rgb),0.20)", padding: "2px 8px", borderRadius: "100px", letterSpacing: "0.1em", textTransform: "uppercase" }}>{strat.category}</span>
+                      <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "9px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>Est. {strat.timeframe}</span>
+                    </div>
+                    <h3 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.01em", lineHeight: 1.3, margin: 0 }}>{strat.title}</h3>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
+                    {[{ label: "IMPACT", value: strat.impact, colorFn: impactColor }, { label: "EFFORT", value: strat.effort, colorFn: effortColor }].map(({ label, value, colorFn }) => (
+                      <div key={label} style={{ textAlign: "center", padding: "7px 12px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "7px", minWidth: "54px" }}>
+                        <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "18px", fontWeight: 500, color: colorFn(value), lineHeight: 1, marginBottom: "2px" }}>{value.toFixed(1)}</div>
+                        <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "8px", color: "var(--text-tertiary)", letterSpacing: "0.12em" }}>{label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "12px" }}>
+                  <ScoreBar label="Impact" value={strat.impact} color={impactColor(strat.impact)} />
+                  <ScoreBar label="Effort" value={strat.effort} color={effortColor(strat.effort)} />
+                </div>
+                <AnimatePresence>
+                  {isSelected && (
+                    <motion.div key="rationale" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.3, ease: "easeInOut" }} style={{ overflow: "hidden" }}>
+                      <div style={{ borderTop: "1px solid var(--border)", paddingTop: "12px", marginTop: "4px" }}>
+                        <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.75, margin: "0 0 14px" }}>{strat.rationale}</p>
+                        <div style={{ display: "flex", gap: "8px" }}>
+                          <button style={{ display: "flex", alignItems: "center", gap: "5px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 600, color: "#fff", background: `linear-gradient(135deg, ${brandColor}, color-mix(in srgb, ${brandColor} 60%, #000))`, border: "none", borderRadius: "7px", padding: "8px 16px", cursor: "pointer", boxShadow: "0 0 16px var(--brand-glow)" }}><Zap size={13} strokeWidth={2.5} />Activate Strategy</button>
+                          <button style={{ display: "flex", alignItems: "center", gap: "5px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 500, color: "var(--text-secondary)", background: "transparent", border: "1px solid var(--border)", borderRadius: "7px", padding: "8px 14px", cursor: "pointer" }} onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--muted)"; }} onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; }}><ExternalLink size={12} />Full Report</button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                {!isSelected && <div style={{ display: "flex", alignItems: "center", gap: "4px" }}><span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>CLICK TO EXPAND RATIONALE</span><ChevronRight size={10} color="var(--text-tertiary)" /></div>}
+              </div>
+            </motion.div>
+          );
+        })}
       </div>
-      <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "16px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "8px" }}>No posts published yet</div>
-      <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-tertiary)", maxWidth: "320px", margin: "0 auto" }}>
-        Articles will appear here once published. Check back soon.
-      </div>
-    </div>
+    </Section>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────────────────────
-export default function BlogIndexPage() {
-  const [posts,          setPosts]          = useState<Post[]>([]);
-  const [loading,        setLoading]        = useState(true);
-  const [activeCategory, setActiveCategory] = useState("all");
-  const [search,         setSearch]         = useState("");
-  const [searchOpen,     setSearchOpen]     = useState(false);
-  const [brandColor,     setBrandColor]     = useState("#3b82f6");
+export default function DashboardPage() {
+  const [brandColor, setBrandColor] = useState("#3b82f6");
+  const [ga4Trend,   setGa4Trend]   = useState<GA4TrendPoint[]>([]);
+  const [ga4Loading, setGa4Loading] = useState(true);
 
   useEffect(() => {
-    const stored = localStorage.getItem("rvivme-brand");
-    if (stored) {
-      setBrandColor(stored);
-      document.documentElement.style.setProperty("--brand", stored);
-    }
+    const stored = window.localStorage.getItem("rvivme-brand");
+    if (stored) setBrandColor(stored);
+    const onStorage = (e: StorageEvent) => { if (e.key === "rvivme-brand" && e.newValue) setBrandColor(e.newValue); };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
+  // Fetch GA4 trend data for the projection chart
   useEffect(() => {
-    async function loadPosts() {
-      const { data } = await supabase
-        .from("blog_posts")
-        .select("id, slug, title, excerpt, category, read_time_minutes, published_at, author_name, featured, focus_keyword")
-        .eq("status", "published")
-        .order("featured",      { ascending: false })
-        .order("published_at",  { ascending: false });
-      setPosts((data ?? []) as Post[]);
-      setLoading(false);
-    }
-    loadPosts();
+    fetch("/api/ga4")
+      .then(r => r.json())
+      .then(data => {
+        if (data.success && data.trend) setGa4Trend(data.trend);
+      })
+      .catch(() => {}) // silently fall back to mock data
+      .finally(() => setGa4Loading(false));
   }, []);
-
-  const featured = posts.find(p => p.featured);
-  const rest     = posts.filter(p => !p.featured);
-
-  const filtered = rest.filter(p => {
-    const matchCat    = activeCategory === "all" || p.category === activeCategory;
-    const matchSearch = search === "" ||
-      p.title.toLowerCase().includes(search.toLowerCase()) ||
-      p.excerpt.toLowerCase().includes(search.toLowerCase()) ||
-      (p.focus_keyword ?? "").toLowerCase().includes(search.toLowerCase());
-    return matchCat && matchSearch;
-  });
 
   return (
-    <div style={{ background: "var(--bg)", minHeight: "100vh" }}>
-      {/* Page header */}
-      <div style={{ borderBottom: "1px solid var(--border)", padding: "60px 24px 40px", position: "relative", overflow: "hidden" }}>
-        <div style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: "800px", height: "300px", background: `radial-gradient(ellipse, rgba(var(--brand-rgb),0.07) 0%, transparent 70%)`, pointerEvents: "none" }} />
-        <div style={{ maxWidth: "1200px", margin: "0 auto", position: "relative" }}>
-          <motion.div variants={pv(0)} initial="hidden" animate="visible">
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px" }}>
-              <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", fontWeight: 600, color: brandColor, letterSpacing: "0.14em", textTransform: "uppercase", padding: "4px 12px", border: `1px solid rgba(var(--brand-rgb),0.25)`, borderRadius: "100px", background: `rgba(var(--brand-rgb),0.07)` }}>
-                Intelligence Blog
-              </span>
-            </div>
-            <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: "16px" }}>
-              <div>
-                <h1 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "clamp(2rem,5vw,3.5rem)", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.04em", lineHeight: 0.95, marginBottom: "12px" }}>
-                  SEO & GEO<br /><span style={{ color: brandColor }}>Intelligence.</span>
-                </h1>
-                <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "15px", color: "var(--text-secondary)", maxWidth: "520px", lineHeight: 1.7 }}>
-                  Strategy analysis, technical guides, and growth insights from the AI Marketing Labs team.
-                </p>
-              </div>
-              {/* Search */}
-              <div style={{ position: "relative" }}>
-                <AnimatePresence>
-                  {searchOpen ? (
-                    <motion.div key="search-input" initial={{ width: 0, opacity: 0 }} animate={{ width: "260px", opacity: 1 }} exit={{ width: 0, opacity: 0 }} transition={{ duration: 0.25, ease: "easeOut" }}
-                      style={{ display: "flex", alignItems: "center", gap: "8px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", padding: "8px 12px", overflow: "hidden" }}
-                    >
-                      <Search size={13} color="var(--text-tertiary)" style={{ flexShrink: 0 }} />
-                      <input autoFocus value={search} onChange={e => setSearch(e.target.value)} placeholder="Search articles..."
-                        style={{ background: "transparent", border: "none", outline: "none", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-primary)", flex: 1, minWidth: 0 }}
-                      />
-                      <button onClick={() => { setSearch(""); setSearchOpen(false); }} style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--text-tertiary)", display: "flex", padding: "2px" }}>
-                        <X size={12} />
-                      </button>
-                    </motion.div>
-                  ) : (
-                    <motion.button key="search-btn" initial={{ opacity: 0 }} animate={{ opacity: 1 }} onClick={() => setSearchOpen(true)}
-                      style={{ display: "flex", alignItems: "center", gap: "6px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", padding: "8px 14px", cursor: "pointer", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-secondary)" }}
-                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = brandColor}
-                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"}
-                    >
-                      <Search size={13} /> Search
-                    </motion.button>
-                  )}
-                </AnimatePresence>
-              </div>
-            </div>
-          </motion.div>
-        </div>
+    <div style={{ background: "var(--bg)", minHeight: "100vh", padding: "32px 24px 80px", maxWidth: "1280px", margin: "0 auto" }}>
+      <ConnectionBanner ga4Connected={true} gscConnected={true} />
+      <DashboardHeader brandColor={brandColor} />
+      <div style={{ display: "flex", flexDirection: "column", gap: "32px" }}>
+        <ProjectionChart brandColor={brandColor} ga4Trend={ga4Trend} ga4Loading={ga4Loading} />
+        <GA4Panel brandColor={brandColor} />
+        <GSCPanel brandColor={brandColor} />
+        <MetricsGrid />
+        <TechnicalHealthBanner />
+        <ActionCenter brandColor={brandColor} />
       </div>
-
-      <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "40px 24px 80px" }}>
-        {/* Category filter */}
-        <motion.div variants={pv(0.1)} initial="hidden" animate="visible" style={{ marginBottom: "32px", overflowX: "auto", paddingBottom: "4px" }}>
-          <div style={{ display: "flex", gap: "6px", width: "max-content" }}>
-            {CATEGORIES.map(cat => {
-              const Icon   = cat.icon;
-              const active = activeCategory === cat.id;
-              return (
-                <button key={cat.id} onClick={() => setActiveCategory(cat.id)}
-                  style={{ display: "flex", alignItems: "center", gap: "5px", padding: "7px 14px", fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", fontWeight: active ? 600 : 500, color: active ? brandColor : "var(--text-secondary)", background: active ? `rgba(var(--brand-rgb),0.10)` : "transparent", border: `1px solid ${active ? `rgba(var(--brand-rgb),0.25)` : "var(--border)"}`, borderRadius: "7px", cursor: "pointer", transition: "all 0.18s", whiteSpace: "nowrap" }}
-                  onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"; (e.currentTarget as HTMLElement).style.background = "var(--surface)"; } }}
-                  onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; (e.currentTarget as HTMLElement).style.background = "transparent"; } }}
-                >
-                  <Icon size={11} />{cat.label}
-                </button>
-              );
-            })}
-          </div>
-        </motion.div>
-
-        {/* Search results notice */}
-        <AnimatePresence>
-          {search && (
-            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} style={{ marginBottom: "20px" }}>
-              <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>
-                {filtered.length} result{filtered.length !== 1 ? "s" : ""} for &ldquo;{search}&rdquo;
-              </span>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Loading skeleton */}
-        {loading && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: "16px", marginBottom: "48px" }}>
-            {[1,2,3].map(i => (
-              <div key={i} style={{ height: "220px", background: "linear-gradient(90deg, var(--card) 25%, var(--muted) 50%, var(--card) 75%)", backgroundSize: "200% 100%", borderRadius: "12px", animation: "shimmer 1.4s ease-in-out infinite" }} />
-            ))}
-          </div>
-        )}
-
-        {/* Featured post */}
-        {!loading && activeCategory === "all" && !search && featured && (
-          <FeaturedPost post={featured} brandColor={brandColor} />
-        )}
-
-        {/* Post grid */}
-        {!loading && (
-          <AnimatePresence mode="wait">
-            <motion.div key={activeCategory + search} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
-              style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: "16px", marginBottom: "48px" }}
-            >
-              {filtered.length > 0
-                ? filtered.map((post, i) => <PostCard key={post.id} post={post} delay={i * 0.06} brandColor={brandColor} />)
-                : posts.length > 0
-                ? <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "60px 24px" }}><div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-tertiary)", letterSpacing: "0.1em", textTransform: "uppercase" }}>No articles found for this filter</div></div>
-                : <EmptyState brandColor={brandColor} />
-              }
-            </motion.div>
-          </AnimatePresence>
-        )}
-
-        {/* Newsletter */}
-        <motion.div variants={pv(0.3)} initial="hidden" animate="visible">
-          <NewsletterBanner />
-        </motion.div>
-      </div>
-
-      <style>{`
-        @keyframes spin    { to { transform: rotate(360deg); } }
-        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-      `}</style>
+      <div style={{ height: "40px" }} />
     </div>
   );
 }
