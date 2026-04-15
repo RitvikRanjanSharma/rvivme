@@ -39,6 +39,7 @@ import {
   AlertCircle,
   XCircle,
 } from "lucide-react";
+import { GA4Panel } from "./ga4-panel";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -1393,6 +1394,7 @@ export default function DashboardPage() {
 
       <div style={{ display: "flex", flexDirection: "column", gap: "32px" }}>
         <ProjectionChart brandColor={brandColor} />
+        <GA4Panel brandColor={brandColor} />
         <MetricsGrid />
         <TechnicalHealthBanner />
         <ActionCenter brandColor={brandColor} />
