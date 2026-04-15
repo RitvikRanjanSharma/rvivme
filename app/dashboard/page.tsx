@@ -18,6 +18,7 @@ import {
   ArrowRight, ExternalLink, RefreshCw, AlertCircle, XCircle,
 } from "lucide-react";
 import { GA4Panel } from "./ga4-panel";
+import { GSCPanel } from "./gsc-panel";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -316,7 +317,7 @@ function DashboardHeader({ brandColor }: { brandColor: string }) {
           <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>{dateStr.toUpperCase()}</span>
           <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
             <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: brandColor, boxShadow: "0 0 8px var(--brand-glow)", animation: "brand-pulse 2.5s ease-in-out infinite" }} />
-            <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: brandColor, letterSpacing: "0.1em", textTransform: "uppercase" }}>Live · GA4 + DataForSEO</span>
+            <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: brandColor, letterSpacing: "0.1em", textTransform: "uppercase" }}>Live · GA4 + GSC + DataForSEO</span>
           </div>
         </div>
       </div>
@@ -581,11 +582,12 @@ export default function DashboardPage() {
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100vh", padding: "32px 24px 80px", maxWidth: "1280px", margin: "0 auto" }}>
-      <ConnectionBanner ga4Connected={false} gscConnected={false} />
+      <ConnectionBanner ga4Connected={true} gscConnected={true} />
       <DashboardHeader brandColor={brandColor} />
       <div style={{ display: "flex", flexDirection: "column", gap: "32px" }}>
         <ProjectionChart brandColor={brandColor} ga4Trend={ga4Trend} ga4Loading={ga4Loading} />
         <GA4Panel brandColor={brandColor} />
+        <GSCPanel brandColor={brandColor} />
         <MetricsGrid />
         <TechnicalHealthBanner />
         <ActionCenter brandColor={brandColor} />
