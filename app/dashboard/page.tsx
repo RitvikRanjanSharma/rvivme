@@ -1,598 +1,629 @@
 "use client";
 
-// app/dashboard/page.tsx
+// app/dashboard/blog/page.tsx
 // =============================================================================
-// AI Marketing Labs — Intelligence Dashboard
-// Projection chart now uses real GA4 data + AI forecast model
+// AI Marketing Labs — Blog Admin
+// Real Supabase CRUD · TipTap rich text editor · SEO fields · Publish controls
 // =============================================================================
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, ReferenceLine,
-} from "recharts";
-import { motion, useInView, animate, AnimatePresence } from "framer-motion";
-import {
-  AlertTriangle, CheckCircle2, TrendingUp, TrendingDown,
-  Activity, Newspaper, Globe2, ShieldCheck, Cpu, Zap,
-  ArrowRight, ExternalLink, RefreshCw, AlertCircle, XCircle,
+  Plus, Eye, Edit3, Trash2, Search, Zap, ExternalLink,
+  Globe2, Lock, Calendar, Archive, CheckCircle2,
+  AlertCircle, RefreshCw, X, Tag, Clock, BarChart3,
 } from "lucide-react";
-import { GA4Panel } from "./ga4-panel";
-import { GSCPanel } from "./gsc-panel";
+import { supabase } from "@/lib/supabase";
+import { RichTextEditor } from "./editor";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
-interface TrafficDataPoint {
-  month:    string;
-  actual:   number | null;
-  forecast: number | null;
-  lower:    number | null;
-  upper:    number | null;
+type PostStatus   = "draft" | "scheduled" | "published" | "archived";
+type PostCategory =
+  | "seo_strategy" | "geo_optimisation" | "technical_seo"
+  | "content_marketing" | "business_insights" | "platform_updates"
+  | "case_studies" | "industry_news";
+
+interface BlogPost {
+  id:                 string;
+  author_id:          string;
+  title:              string;
+  slug:               string;
+  excerpt:            string;
+  content:            string;
+  category:           PostCategory;
+  status:             PostStatus;
+  focus_keyword:      string | null;
+  meta_title:         string | null;
+  meta_description:   string | null;
+  author_name:        string;
+  read_time_minutes:  number;
+  view_count:         number;
+  featured:           boolean;
+  published_at:       string | null;
+  updated_at:         string;
 }
-
-interface GA4TrendPoint {
-  date:     string;
-  sessions: number;
-  users:    number;
-}
-
-interface MetricCard {
-  id:       string;
-  label:    string;
-  value:    string | number;
-  delta:    number;
-  unit:     string;
-  icon:     React.ElementType;
-  severity: "neutral" | "warning" | "critical" | "positive";
-  detail:   string;
-}
-
-interface HealthItem {
-  label:  string;
-  status: "ok" | "warning" | "critical";
-  detail: string;
-}
-
-interface Strategy {
-  id:        string;
-  title:     string;
-  rationale: string;
-  impact:    number;
-  effort:    number;
-  timeframe: string;
-  category:  string;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// AI Forecast model
-// Takes real GA4 daily sessions and builds a monthly chart with 6-month forecast
-// ─────────────────────────────────────────────────────────────────────────────
-function buildChartData(trend: GA4TrendPoint[]): {
-  data:           TrafficDataPoint[];
-  currentMTD:     number;
-  forecast6M:     number;
-  growthPct:      number;
-  confidence:     number;
-  handoffMonth:   string;
-} {
-  if (trend.length === 0) {
-    // Fallback mock data while GA4 is loading
-    return {
-      data: [
-        { month: "Sep", actual: 18400, forecast: null,  lower: null,  upper: null  },
-        { month: "Oct", actual: 21700, forecast: null,  lower: null,  upper: null  },
-        { month: "Nov", actual: 19900, forecast: null,  lower: null,  upper: null  },
-        { month: "Dec", actual: 24300, forecast: null,  lower: null,  upper: null  },
-        { month: "Jan", actual: 27800, forecast: null,  lower: null,  upper: null  },
-        { month: "Feb", actual: 31200, forecast: null,  lower: null,  upper: null  },
-        { month: "Mar", actual: 34100, forecast: null,  lower: null,  upper: null  },
-        { month: "Apr", actual: 34100, forecast: 34100, lower: 32800, upper: 35900 },
-        { month: "May", actual: null,  forecast: 38600, lower: 36100, upper: 41200 },
-        { month: "Jun", actual: null,  forecast: 43400, lower: 39800, upper: 47100 },
-        { month: "Jul", actual: null,  forecast: 49200, lower: 44000, upper: 54500 },
-        { month: "Aug", actual: null,  forecast: 55800, lower: 49200, upper: 62400 },
-        { month: "Sep+",actual: null,  forecast: 63100, lower: 54800, upper: 71500 },
-      ],
-      currentMTD: 34100, forecast6M: 63100, growthPct: 85, confidence: 85, handoffMonth: "Apr",
-    };
-  }
-
-  // Group daily data into months
-  const monthlyMap: Record<string, number> = {};
-  for (const point of trend) {
-    const d     = new Date(point.date);
-    const key   = d.toLocaleDateString("en-GB", { month: "short", year: "2-digit" });
-    monthlyMap[key] = (monthlyMap[key] ?? 0) + point.sessions;
-  }
-
-  const monthlyEntries = Object.entries(monthlyMap);
-  const historicalData: TrafficDataPoint[] = monthlyEntries.map(([month, sessions]) => ({
-    month,
-    actual:   sessions,
-    forecast: null,
-    lower:    null,
-    upper:    null,
-  }));
-
-  // Calculate growth rate from available data
-  const values = monthlyEntries.map(([, v]) => v);
-  const last    = values[values.length - 1] ?? 1;
-  const first   = values[0] ?? 1;
-  const periods = Math.max(values.length - 1, 1);
-
-  // Monthly growth rate (geometric mean)
-  const monthlyGrowthRate = Math.pow(last / Math.max(first, 1), 1 / periods);
-  // Clamp to realistic range: 0% to 30% monthly growth
-  const clampedRate = Math.min(Math.max(monthlyGrowthRate, 1.0), 1.30);
-
-  const handoffMonth = monthlyEntries[monthlyEntries.length - 1]?.[0] ?? "Now";
-
-  // Add handoff point
-  historicalData[historicalData.length - 1] = {
-    ...historicalData[historicalData.length - 1],
-    forecast: last,
-    lower:    Math.round(last * 0.92),
-    upper:    Math.round(last * 1.08),
-  };
-
-  // Generate 6-month forecast
-  const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const now         = new Date();
-  const forecastData: TrafficDataPoint[] = [];
-
-  for (let i = 1; i <= 6; i++) {
-    const futureDate  = new Date(now.getFullYear(), now.getMonth() + i, 1);
-    const monthLabel  = MONTH_NAMES[futureDate.getMonth()] + (i === 6 ? "+" : "");
-    const forecastVal = Math.round(last * Math.pow(clampedRate, i));
-    // Confidence interval widens over time
-    const uncertainty = 0.06 + i * 0.04;
-    forecastData.push({
-      month:    monthLabel,
-      actual:   null,
-      forecast: forecastVal,
-      lower:    Math.round(forecastVal * (1 - uncertainty)),
-      upper:    Math.round(forecastVal * (1 + uncertainty)),
-    });
-  }
-
-  const forecast6M  = forecastData[5]?.forecast ?? last;
-  const growthPct   = Math.round(((forecast6M - last) / Math.max(last, 1)) * 100);
-  const confidence  = Math.max(60, Math.min(92, 92 - values.length * 2));
-
-  return {
-    data:         [...historicalData, ...forecastData],
-    currentMTD:   last,
-    forecast6M,
-    growthPct,
-    confidence,
-    handoffMonth,
-  };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Mock data (metrics, health, strategies stay as-is — DataForSEO will replace later)
-// ─────────────────────────────────────────────────────────────────────────────
-const AI_METRICS: MetricCard[] = [
-  { id: "keyword-volatility", label: "Keyword Volatility Index", value: 72, delta: 14.3, unit: "/100", icon: Activity, severity: "warning", detail: "17 tracked keywords experienced position shifts >3 in the past 24 hours. Primary instability detected in navigational query cluster." },
-  { id: "competitor-alerts",  label: "Competitor News Alerts",  value: 4,  delta: -1,   unit: " new",  icon: Newspaper, severity: "neutral", detail: "Acme Analytics published a new product announcement indexed by Google News at 07:14 GMT. Rival Corp restructured their /resources hierarchy — potential authority shift." },
-  { id: "niche-updates",      label: "Niche Industry Updates",  value: 9,  delta: 3,    unit: " signals", icon: Globe2, severity: "positive", detail: "Google Search Central blog published Core Web Vitals guidance update. Industry sentiment analysis indicates 62% positive coverage of AI-assisted search tools in your vertical." },
-];
-
-const HEALTH_ITEMS: HealthItem[] = [
-  { label: "SSL Certificate",     status: "ok",      detail: "Valid · Auto-renewed via Vercel · Grade A"    },
-  { label: "404 Errors (24hr)",   status: "ok",      detail: "0 new errors detected · Last scan 09:41 GMT"  },
-  { label: "Core Web Vitals",     status: "ok",      detail: "LCP 1.8s · FID 12ms · CLS 0.04 · All Pass"   },
-  { label: "Crawl Anomalies",     status: "warning", detail: "3 pages returning 302 redirect chains"         },
-  { label: "Canonical Conflicts", status: "warning", detail: "7 self-referencing canonicals missing"         },
-  { label: "Index Coverage",      status: "ok",      detail: "Pages submitted to GSC · Indexing in progress" },
-];
-
-const STRATEGIES: Strategy[] = [
-  { id: "strat-01", title: "Topical Authority Cluster Expansion — AI Tools Vertical", rationale: "Semantic gap analysis reveals 43 unaddressed sub-topics within your primary keyword cluster. Competitors currently rank for 67% of these terms. Constructing a structured hub-and-spoke content architecture targeting these sub-topics is projected to increase topical authority score from 61 to 84 within 90 days, driving an estimated 8,200 incremental monthly sessions.", impact: 9.2, effort: 6.8, timeframe: "60–90 days", category: "Content Architecture" },
-  { id: "strat-02", title: "Programmatic Schema Markup Deployment — FAQ & HowTo", rationale: "Audit confirms 91% of indexable pages lack structured data. Deploying FAQ and HowTo schema across the /resources and /blog directories is projected to increase SERP feature eligibility for 312 target queries. AI Overview citation probability increases by an estimated 34% upon implementation, based on current GEO analysis benchmarks.", impact: 7.5, effort: 3.2, timeframe: "7–14 days", category: "Technical GEO" },
-  { id: "strat-03", title: "Competitor Link Gap Remediation — Domain Authority Uplift", rationale: "Backlink gap analysis against the top 3 competitors identifies 1,847 referring domains linking to rivals that do not link to this domain. Of these, 214 are classified as high-authority (DA 60+) and editorially accessible. A targeted digital PR and link acquisition campaign addressing this gap is projected to increase Domain Authority from 42 to 55 over 6 months.", impact: 8.8, effort: 8.1, timeframe: "90–180 days", category: "Authority Building" },
-];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 const SP = { type: "spring", stiffness: 260, damping: 30, mass: 0.9 } as const;
-function pv(delay: number) {
+function pv(delay = 0) {
   return { hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0, transition: { ...SP, delay } } };
 }
-function formatK(n: number): string { return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n); }
-function impactColor(s: number) { return s >= 8.5 ? "var(--signal-green)" : s >= 6.5 ? "var(--brand)" : "var(--signal-amber)"; }
-function effortColor(s: number) { return s >= 7.5 ? "var(--signal-red)"   : s >= 5.0 ? "var(--signal-amber)" : "var(--signal-green)"; }
-function severityColor(s: MetricCard["severity"]) { return { neutral: "var(--text-secondary)", warning: "var(--signal-amber)", critical: "var(--signal-red)", positive: "var(--signal-green)" }[s]; }
-function statusIcon(s: HealthItem["status"]) {
-  if (s === "ok")      return <CheckCircle2 size={13} color="var(--signal-green)" />;
-  if (s === "warning") return <AlertCircle  size={13} color="var(--signal-amber)" />;
-  return <XCircle size={13} color="var(--signal-red)" />;
+
+function slugify(text: string): string {
+  return text.toLowerCase().trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 80);
 }
+
+function estimateReadTime(html: string): number {
+  const text = html.replace(/<[^>]*>/g, "");
+  const words = text.trim().split(/\s+/).length;
+  return Math.max(1, Math.round(words / 200));
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function categoryLabel(id: string): string {
+  const map: Record<string, string> = {
+    seo_strategy: "SEO Strategy", geo_optimisation: "GEO", technical_seo: "Technical SEO",
+    content_marketing: "Content", business_insights: "Business",
+    platform_updates: "Platform", case_studies: "Case Studies", industry_news: "News",
+  };
+  return map[id] ?? id;
+}
+
+function statusConfig(s: PostStatus) {
+  return {
+    published: { label: "Published", color: "var(--signal-green)", bg: "rgba(0,230,118,0.10)",  border: "rgba(0,230,118,0.25)",  icon: Globe2    },
+    scheduled: { label: "Scheduled", color: "var(--signal-amber)", bg: "rgba(255,171,0,0.10)", border: "rgba(255,171,0,0.25)", icon: Calendar  },
+    draft:     { label: "Draft",     color: "var(--text-tertiary)", bg: "var(--card)",          border: "var(--border)",        icon: Lock      },
+    archived:  { label: "Archived",  color: "var(--text-tertiary)", bg: "var(--card)",          border: "var(--border)",        icon: Archive   },
+  }[s];
+}
+
 function Panel({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", ...style }}>{children}</div>;
 }
-function Section({ label, children, action }: { label: string; children: React.ReactNode; action?: React.ReactNode }) {
+
+function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
-        <span style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "11px", fontWeight: 700, color: "var(--text-tertiary)", letterSpacing: "0.14em", textTransform: "uppercase" }}>{label}</span>
-        {action}
-      </div>
+    <div style={{ marginBottom: "16px" }}>
+      <label style={{ display: "block", fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>{label}</label>
       {children}
-    </div>
-  );
-}
-function ChevronRight({ size, color }: { size: number; color: string }) {
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Animated number
-// ─────────────────────────────────────────────────────────────────────────────
-function AnimatedNumber({ target, decimals = 0, delay = 0 }: { target: number; decimals?: number; delay?: number }) {
-  const [display, setDisplay] = useState(0);
-  useEffect(() => {
-    const t = setTimeout(() => {
-      const ctrl = animate(0, target, { duration: 1.4, ease: [0.16, 1, 0.3, 1], onUpdate: v => setDisplay(parseFloat(v.toFixed(decimals))) });
-      return ctrl.stop;
-    }, delay * 1000);
-    return () => clearTimeout(t);
-  }, [target, decimals, delay]);
-  return <span style={{ fontFamily: "var(--font-dm-mono), monospace" }}>{decimals > 0 ? display.toFixed(decimals) : Math.round(display).toLocaleString()}</span>;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Tooltip
-// ─────────────────────────────────────────────────────────────────────────────
-function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "8px", padding: "10px 14px", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
-      <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.1em", marginBottom: "8px", textTransform: "uppercase" }}>{label}</div>
-      {payload.map(p => p.value != null ? (
-        <div key={p.name} style={{ display: "flex", justifyContent: "space-between", gap: "20px", marginBottom: "3px" }}>
-          <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: p.color }}>{p.name}</span>
-          <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "12px", fontWeight: 500, color: "var(--text-primary)" }}>{Number(p.value).toLocaleString()}</span>
-        </div>
-      ) : null)}
+      {hint && <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "11px", color: "var(--text-tertiary)", marginTop: "4px" }}>{hint}</div>}
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Score bar
-// ─────────────────────────────────────────────────────────────────────────────
-function ScoreBar({ value, max = 10, color, label }: { value: number; max?: number; color: string; label: string }) {
+function Input({ value, onChange, placeholder, type = "text" }: { value: string; onChange: (v: string) => void; placeholder?: string; type?: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-      <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", width: "46px", flexShrink: 0, letterSpacing: "0.06em" }}>{label}</span>
-      <div style={{ flex: 1, height: "4px", background: "var(--border)", borderRadius: "2px", overflow: "hidden" }}>
-        <motion.div initial={{ width: 0 }} animate={{ width: `${(value / max) * 100}%` }} transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.3 }} style={{ height: "100%", background: color, borderRadius: "2px" }} />
-      </div>
-      <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "12px", fontWeight: 500, color, width: "26px", textAlign: "right", flexShrink: 0 }}>{value.toFixed(1)}</span>
+    <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+      style={{ width: "100%", padding: "9px 12px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-primary)", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "7px", outline: "none", transition: "border-color 0.18s", boxSizing: "border-box" as const }}
+      onFocus={e => e.currentTarget.style.borderColor = "var(--brand)"}
+      onBlur={e =>  e.currentTarget.style.borderColor = "var(--border)"}
+    />
+  );
+}
+
+function Textarea({ value, onChange, placeholder, rows = 3 }: { value: string; onChange: (v: string) => void; placeholder?: string; rows?: number }) {
+  return (
+    <textarea value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} rows={rows}
+      style={{ width: "100%", padding: "9px 12px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-primary)", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "7px", outline: "none", transition: "border-color 0.18s", resize: "vertical", boxSizing: "border-box" as const, lineHeight: 1.6 }}
+      onFocus={e => e.currentTarget.style.borderColor = "var(--brand)"}
+      onBlur={e =>  e.currentTarget.style.borderColor = "var(--border)"}
+    />
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KPI strip
+// ─────────────────────────────────────────────────────────────────────────────
+function BlogKpis({ posts, brandColor }: { posts: BlogPost[]; brandColor: string }) {
+  const published  = posts.filter(p => p.status === "published");
+  const drafts     = posts.filter(p => p.status === "draft");
+  const totalViews = published.reduce((s, p) => s + p.view_count, 0);
+  const kpis = [
+    { label: "Total Posts",    value: posts.length,     color: brandColor              },
+    { label: "Published",      value: published.length, color: "var(--signal-green)"  },
+    { label: "Drafts",         value: drafts.length,    color: "var(--signal-amber)"  },
+    { label: "Total Views",    value: totalViews,       color: brandColor              },
+  ];
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginBottom: "24px" }}>
+      {kpis.map((k, i) => (
+        <motion.div key={k.label} variants={pv(0.08 + i * 0.06)} initial="hidden" animate="visible">
+          <Panel style={{ padding: "16px 18px" }}>
+            <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "24px", fontWeight: 500, color: k.color, letterSpacing: "-0.02em", lineHeight: 1, marginBottom: "4px" }}>{k.value.toLocaleString()}</div>
+            <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "11px", fontWeight: 600, color: "var(--text-secondary)" }}>{k.label}</div>
+          </Panel>
+        </motion.div>
+      ))}
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Connection banner
+// Posts table
 // ─────────────────────────────────────────────────────────────────────────────
-function ConnectionBanner({ ga4Connected, gscConnected }: { ga4Connected: boolean; gscConnected: boolean }) {
-  if (ga4Connected && gscConnected) return null;
-  const missing = [!ga4Connected && "Google Analytics 4", !gscConnected && "Google Search Console"].filter(Boolean).join(" and ");
-  return (
-    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SP, delay: 0.1 }}
-      style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", background: "rgba(255,171,0,0.06)", border: "1px solid rgba(255,171,0,0.20)", borderRadius: "10px", marginBottom: "20px", gap: "12px", flexWrap: "wrap" }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-        <AlertTriangle size={14} color="var(--signal-amber)" />
-        <span style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--signal-amber)", fontWeight: 500 }}>
-          Data limited — {missing} {missing.includes("and") ? "are" : "is"} not connected.
-        </span>
-      </div>
-      <button style={{ display: "flex", alignItems: "center", gap: "5px", fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", fontWeight: 600, color: "var(--signal-amber)", background: "rgba(255,171,0,0.10)", border: "1px solid rgba(255,171,0,0.25)", borderRadius: "6px", padding: "5px 12px", cursor: "pointer", whiteSpace: "nowrap" }}
-        onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(255,171,0,0.18)"}
-        onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "rgba(255,171,0,0.10)"}
-      >
-        Connect now <ArrowRight size={11} />
-      </button>
-    </motion.div>
-  );
-}
+function PostsTable({ posts, brandColor, onEdit, onDelete, onStatusChange }: {
+  posts:          BlogPost[];
+  brandColor:     string;
+  onEdit:         (post: BlogPost) => void;
+  onDelete:       (id: string) => void;
+  onStatusChange: (id: string, status: PostStatus) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<PostStatus | "all">("all");
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Dashboard header
-// ─────────────────────────────────────────────────────────────────────────────
-function DashboardHeader({ brandColor }: { brandColor: string }) {
-  const dateStr = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date());
+  const filtered = posts.filter(p => {
+    const matchQuery  = !query || p.title.toLowerCase().includes(query.toLowerCase()) || (p.focus_keyword ?? "").toLowerCase().includes(query.toLowerCase());
+    const matchFilter = filter === "all" || p.status === filter;
+    return matchQuery && matchFilter;
+  });
+
   return (
-    <motion.div variants={pv(0)} initial="hidden" animate="visible" style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
-      <div>
-        <h1 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "clamp(1.5rem,3vw,2rem)", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.03em", lineHeight: 1, marginBottom: "6px" }}>
-          AI Marketing Labs — Intelligence Dashboard
-        </h1>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>{dateStr.toUpperCase()}</span>
-          <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-            <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: brandColor, boxShadow: "0 0 8px var(--brand-glow)", animation: "brand-pulse 2.5s ease-in-out infinite" }} />
-            <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: brandColor, letterSpacing: "0.1em", textTransform: "uppercase" }}>Live · GA4 + GSC + DataForSEO</span>
+    <motion.div variants={pv(0.24)} initial="hidden" animate="visible">
+      <Panel>
+        {/* Table header */}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "16px 20px", borderBottom: "1px solid var(--border)", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, minWidth: "200px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "7px", padding: "8px 12px" }}>
+            <Search size={13} color="var(--text-tertiary)" />
+            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search posts..." style={{ background: "transparent", border: "none", outline: "none", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-primary)", width: "100%" }} />
           </div>
-        </div>
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "7px 12px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px" }}>
-        <div style={{ width: "14px", height: "14px", borderRadius: "4px", background: brandColor, boxShadow: "0 0 10px var(--brand-glow)", flexShrink: 0 }} />
-        <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-secondary)", letterSpacing: "0.06em" }}>Brand: {brandColor.toUpperCase()}</span>
-      </div>
-    </motion.div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Projection Chart — now uses real GA4 data
-// ─────────────────────────────────────────────────────────────────────────────
-function ProjectionChart({ brandColor, ga4Trend, ga4Loading }: { brandColor: string; ga4Trend: GA4TrendPoint[]; ga4Loading: boolean }) {
-  const chartRef = useRef<HTMLDivElement>(null);
-  const inView   = useInView(chartRef, { once: true, margin: "-60px" });
-  const gradId   = "brand-area-gradient";
-  const fcastId  = "forecast-area-gradient";
-
-  const { data, currentMTD, forecast6M, growthPct, confidence, handoffMonth } = buildChartData(ga4Trend);
-  const isReal = ga4Trend.length > 0;
-
-  return (
-    <motion.div ref={chartRef} variants={pv(0.2)} initial="hidden" animate="visible">
-      <Panel style={{ padding: "24px 24px 16px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
-          <div>
-            <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "15px", fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.01em", marginBottom: "4px" }}>
-              Organic Traffic · 6-Month AI Projection
-            </div>
-            <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: isReal ? "var(--signal-green)" : "var(--text-tertiary)", letterSpacing: "0.08em" }}>
-              {ga4Loading ? "LOADING GA4 DATA..." : isReal ? `LIVE GA4 DATA · AI FORECAST MODEL v1.0 · ${confidence}% CONFIDENCE` : "MODEL v1.0 · SAMPLE DATA · CONNECT GA4 FOR LIVE CHART"}
-            </div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            {[
-              { label: "Historical",  dashed: false, color: brandColor      },
-              { label: "AI Forecast", dashed: true,  color: brandColor      },
-              { label: "CI Band",     dashed: false,  color: "var(--border)" },
-            ].map(({ label, dashed, color }) => (
-              <div key={label} style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                <svg width="18" height="10">
-                  <line x1="0" y1="5" x2="18" y2="5" stroke={color} strokeWidth={dashed ? 1.5 : 2} strokeDasharray={dashed ? "4 3" : undefined} opacity={label === "CI Band" ? 0.6 : 1} />
-                </svg>
-                <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>{label}</span>
-              </div>
+          <div style={{ display: "flex", gap: "6px" }}>
+            {(["all", "published", "draft", "scheduled", "archived"] as const).map(f => (
+              <button key={f} onClick={() => setFilter(f)} style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", padding: "5px 10px", borderRadius: "5px", border: `1px solid ${filter === f ? brandColor : "var(--border)"}`, background: filter === f ? `rgba(var(--brand-rgb),0.10)` : "transparent", color: filter === f ? brandColor : "var(--text-tertiary)", cursor: "pointer", letterSpacing: "0.06em", textTransform: "capitalize" }}>
+                {f}
+              </button>
             ))}
           </div>
         </div>
 
-        <ResponsiveContainer width="100%" height={280}>
-          <AreaChart data={data} margin={{ top: 4, right: 4, left: -8, bottom: 0 }}>
-            <defs>
-              <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%"   stopColor={brandColor} stopOpacity={0.28} />
-                <stop offset="75%"  stopColor={brandColor} stopOpacity={0.04} />
-                <stop offset="100%" stopColor={brandColor} stopOpacity={0}    />
-              </linearGradient>
-              <linearGradient id={fcastId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%"   stopColor={brandColor} stopOpacity={0.14} />
-                <stop offset="100%" stopColor={brandColor} stopOpacity={0}    />
-              </linearGradient>
-            </defs>
-            <CartesianGrid stroke="var(--chart-grid, var(--border))" strokeDasharray="2 6" vertical={false} />
-            <XAxis dataKey="month" tick={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: 10, fill: "var(--text-tertiary)" }} axisLine={{ stroke: "var(--border)" }} tickLine={false} />
-            <YAxis tick={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: 10, fill: "var(--text-tertiary)" }} axisLine={false} tickLine={false} tickFormatter={formatK} />
-            <Tooltip content={<ChartTooltip />} />
-            <Area type="monotone" dataKey="upper"    name="CI Upper"    stroke="none" fill={`url(#${fcastId})`} fillOpacity={0.4} dot={false} legendType="none" animationDuration={inView ? 1200 : 0} />
-            <Area type="monotone" dataKey="lower"    name="CI Lower"    stroke="none" fill="var(--bg)"         fillOpacity={1}   dot={false} legendType="none" animationDuration={inView ? 1200 : 0} />
-            <Area type="monotone" dataKey="actual"   name="Historical"  stroke={brandColor} strokeWidth={2} fill={`url(#${gradId})`} dot={false} activeDot={{ r: 4, fill: brandColor, stroke: "var(--bg)", strokeWidth: 2 }} animationDuration={inView ? 1000 : 0} animationEasing="ease-out" />
-            <Area type="monotone" dataKey="forecast" name="AI Forecast" stroke={brandColor} strokeWidth={1.5} strokeDasharray="5 4" strokeOpacity={0.75} fill="none" dot={false} activeDot={{ r: 3, fill: brandColor, stroke: "var(--bg)", strokeWidth: 2 }} animationDuration={inView ? 1400 : 0} animationEasing="ease-out" />
-            <ReferenceLine x={handoffMonth} stroke="var(--text-tertiary)" strokeDasharray="2 4" strokeWidth={1} label={{ value: "FORECAST →", position: "top", fontFamily: "var(--font-dm-mono), monospace", fontSize: 9, fill: "var(--text-tertiary)", dy: -6 }} />
-          </AreaChart>
-        </ResponsiveContainer>
-
-        {/* KPI strip — real data */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1px", background: "var(--border)", borderTop: "1px solid var(--border)", marginTop: "20px", borderRadius: "0 0 10px 10px", overflow: "hidden" }}>
-          {[
-            { label: "Current MTD",      value: currentMTD,  suffix: ""  },
-            { label: "Forecast +6M",     value: forecast6M,  suffix: ""  },
-            { label: "Projected Growth", value: growthPct,   suffix: "%" },
-            { label: "Confidence",       value: confidence,  suffix: "%" },
-          ].map((stat, i) => (
-            <div key={stat.label} style={{ background: "var(--surface)", padding: "14px 16px", textAlign: "center" }}>
-              <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "18px", fontWeight: 500, color: "var(--text-primary)", letterSpacing: "-0.02em", marginBottom: "3px" }}>
-                {ga4Loading ? "—" : <><AnimatedNumber target={stat.value} decimals={stat.suffix === "%" ? 1 : 0} delay={0.4 + i * 0.08} />{stat.suffix}</>}
-              </div>
-              <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "9px", color: "var(--text-tertiary)", letterSpacing: "0.1em", textTransform: "uppercase" }}>{stat.label}</div>
-            </div>
-          ))}
-        </div>
-      </Panel>
-    </motion.div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Metrics grid (mock — DataForSEO will replace)
-// ─────────────────────────────────────────────────────────────────────────────
-function MetricsGrid() {
-  return (
-    <Section label="Daily AI Signal Intelligence" action={<button style={{ display: "flex", alignItems: "center", gap: "4px", fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-tertiary)", background: "transparent", border: "none", cursor: "pointer", padding: "4px", transition: "color 0.18s" }} onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"} onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text-tertiary)"}><RefreshCw size={11} /> REFRESH</button>}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
-        {AI_METRICS.map((metric, i) => {
-          const Icon = metric.icon;
-          const sColor = severityColor(metric.severity);
-          const positive = metric.delta > 0;
-          const DeltaIcon = positive ? TrendingUp : TrendingDown;
-          return (
-            <motion.div key={metric.id} variants={pv(0.3 + i * 0.08)} initial="hidden" animate="visible">
-              <Panel style={{ padding: "20px", height: "100%", position: "relative", overflow: "hidden" }}>
-                <div style={{ position: "absolute", top: 0, left: "20px", right: "20px", height: "1px", background: `linear-gradient(90deg, transparent, ${sColor}55, transparent)` }} />
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px" }}>
-                  <div style={{ width: "36px", height: "36px", borderRadius: "8px", background: `${sColor}12`, border: `1px solid ${sColor}30`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <Icon size={17} color={sColor} />
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                    <DeltaIcon size={11} color={positive ? "var(--signal-green)" : "var(--signal-red)"} />
-                    <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: positive ? "var(--signal-green)" : "var(--signal-red)", fontWeight: 500 }}>{positive ? "+" : ""}{metric.delta}</span>
-                  </div>
-                </div>
-                <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "28px", fontWeight: 500, color: "var(--text-primary)", letterSpacing: "-0.025em", lineHeight: 1, marginBottom: "4px" }}>
-                  <AnimatedNumber target={typeof metric.value === "number" ? metric.value : 0} delay={0.3 + i * 0.08} />
-                  <span style={{ fontSize: "14px", color: "var(--text-tertiary)", fontWeight: 400 }}>{metric.unit}</span>
-                </div>
-                <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "12px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "10px" }}>{metric.label}</div>
-                <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.65, margin: 0 }}>{metric.detail}</p>
-              </Panel>
-            </motion.div>
-          );
-        })}
-      </div>
-    </Section>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Health banner
-// ─────────────────────────────────────────────────────────────────────────────
-function TechnicalHealthBanner() {
-  const hasWarnings = HEALTH_ITEMS.some(h => h.status !== "ok");
-  const criticals   = HEALTH_ITEMS.filter(h => h.status === "critical").length;
-  const warnings    = HEALTH_ITEMS.filter(h => h.status === "warning").length;
-  return (
-    <motion.div variants={pv(0.55)} initial="hidden" animate="visible">
-      <Panel style={{ overflow: "hidden" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: "1px solid var(--border)", background: hasWarnings ? "rgba(255,171,0,0.04)" : "rgba(0,230,118,0.04)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <ShieldCheck size={15} color={hasWarnings ? "var(--signal-amber)" : "var(--signal-green)"} />
-            <span style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "13px", fontWeight: 700, color: "var(--text-primary)" }}>Technical Health Monitor</span>
-            <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: hasWarnings ? "var(--signal-amber)" : "var(--signal-green)", background: hasWarnings ? "rgba(255,171,0,0.10)" : "rgba(0,230,118,0.10)", border: hasWarnings ? "1px solid rgba(255,171,0,0.25)" : "1px solid rgba(0,230,118,0.25)", padding: "2px 8px", borderRadius: "100px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-              {criticals > 0 ? `${criticals} critical` : warnings > 0 ? `${warnings} warnings` : "All Systems Nominal"}
-            </span>
+        {/* Table */}
+        {filtered.length === 0 ? (
+          <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--text-tertiary)", fontFamily: "var(--font-dm-mono), monospace", fontSize: "12px" }}>
+            {posts.length === 0 ? "No posts yet. Create your first post." : "No posts match your search."}
           </div>
-          <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>LAST SCAN: 09:41 GMT</div>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1px", background: "var(--border)" }}>
-          {HEALTH_ITEMS.map((item, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "8px", padding: "12px 16px", background: "var(--surface)" }}>
-              <div style={{ marginTop: "1px", flexShrink: 0 }}>{statusIcon(item.status)}</div>
-              <div>
-                <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "2px" }}>{item.label}</div>
-                <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", lineHeight: 1.5 }}>{item.detail}</div>
-              </div>
-            </div>
-          ))}
-        </div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ borderCollapse: "collapse", width: "100%" }}>
+              <thead>
+                <tr>
+                  {["Title", "Status", "Category", "Keyword", "Published", "Views", "Actions"].map(h => (
+                    <th key={h} style={{ borderBottom: "1px solid var(--border)", padding: "10px 14px", textAlign: "left", fontFamily: "var(--font-dm-mono), monospace", fontSize: "9px", color: "var(--text-tertiary)", letterSpacing: "0.1em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((post, i) => {
+                  const sc = statusConfig(post.status);
+                  const StatusIcon = sc.icon;
+                  return (
+                    <tr key={post.id} style={{ borderBottom: i < filtered.length - 1 ? "1px solid var(--border)" : "none" }}
+                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.02)"}
+                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
+                    >
+                      <td style={{ padding: "14px", maxWidth: "280px" }}>
+                        <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: "2px" }}>{post.title || "Untitled"}</div>
+                        <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)" }}>{post.slug}</div>
+                      </td>
+                      <td style={{ padding: "14px", whiteSpace: "nowrap" }}>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: sc.color, background: sc.bg, border: `1px solid ${sc.border}`, padding: "3px 8px", borderRadius: "100px", letterSpacing: "0.06em" }}>
+                          <StatusIcon size={9} />{sc.label}
+                        </span>
+                      </td>
+                      <td style={{ padding: "14px", whiteSpace: "nowrap" }}>
+                        <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)" }}>{categoryLabel(post.category)}</span>
+                      </td>
+                      <td style={{ padding: "14px", maxWidth: "160px" }}>
+                        <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>{post.focus_keyword ?? "—"}</span>
+                      </td>
+                      <td style={{ padding: "14px", whiteSpace: "nowrap" }}>
+                        <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-secondary)" }}>{formatDate(post.published_at)}</span>
+                      </td>
+                      <td style={{ padding: "14px" }}>
+                        <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-primary)", fontWeight: 500 }}>{post.view_count.toLocaleString()}</span>
+                      </td>
+                      <td style={{ padding: "14px" }}>
+                        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                          <button onClick={() => onEdit(post)} title="Edit post" style={{ width: "28px", height: "28px", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer", color: "var(--text-secondary)", transition: "all 0.15s" }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = brandColor; (e.currentTarget as HTMLElement).style.color = brandColor; }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; }}
+                          ><Edit3 size={12} /></button>
+
+                          {post.status === "published" && (
+                            <Link href={`/blog/${post.slug}`} target="_blank" title="View post" style={{ width: "28px", height: "28px", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--text-secondary)", transition: "all 0.15s", textDecoration: "none" }}
+                              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--signal-green)"; (e.currentTarget as HTMLElement).style.color = "var(--signal-green)"; }}
+                              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; }}
+                            ><ExternalLink size={12} /></Link>
+                          )}
+
+                          {post.status === "draft" && (
+                            <button onClick={() => onStatusChange(post.id, "published")} title="Publish" style={{ display: "flex", alignItems: "center", gap: "4px", fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--signal-green)", background: "rgba(0,230,118,0.08)", border: "1px solid rgba(0,230,118,0.25)", borderRadius: "6px", padding: "4px 8px", cursor: "pointer", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>
+                              <Globe2 size={10} /> PUBLISH
+                            </button>
+                          )}
+
+                          {post.status === "published" && (
+                            <button onClick={() => onStatusChange(post.id, "draft")} title="Unpublish" style={{ display: "flex", alignItems: "center", gap: "4px", fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", background: "transparent", border: "1px solid var(--border)", borderRadius: "6px", padding: "4px 8px", cursor: "pointer", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>
+                              <Lock size={10} /> UNPUBLISH
+                            </button>
+                          )}
+
+                          <button onClick={() => { if (window.confirm("Delete this post? This cannot be undone.")) onDelete(post.id); }} title="Delete" style={{ width: "28px", height: "28px", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "1px solid transparent", borderRadius: "6px", cursor: "pointer", color: "var(--text-tertiary)", transition: "all 0.15s" }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,23,68,0.3)"; (e.currentTarget as HTMLElement).style.color = "var(--signal-red)"; (e.currentTarget as HTMLElement).style.background = "rgba(255,23,68,0.08)"; }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-tertiary)"; (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                          ><Trash2 size={12} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Panel>
     </motion.div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Action center
+// Post editor modal
 // ─────────────────────────────────────────────────────────────────────────────
-function ActionCenter({ brandColor }: { brandColor: string }) {
-  const [selected, setSelected] = useState<string | null>(null);
-  const generatedDate = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date()).toUpperCase();
+function PostEditor({ post, onClose, onSaved, brandColor }: {
+  post:       BlogPost | null; // null = new post
+  onClose:    () => void;
+  onSaved:    () => void;
+  brandColor: string;
+}) {
+  const isNew = !post;
+
+  const [title,           setTitle]           = useState(post?.title           ?? "");
+  const [slug,            setSlug]            = useState(post?.slug            ?? "");
+  const [excerpt,         setExcerpt]         = useState(post?.excerpt         ?? "");
+  const [content,         setContent]         = useState(post?.content         ?? "");
+  const [category,        setCategory]        = useState<PostCategory>(post?.category ?? "seo_strategy");
+  const [focusKeyword,    setFocusKeyword]    = useState(post?.focus_keyword   ?? "");
+  const [metaTitle,       setMetaTitle]       = useState(post?.meta_title      ?? "");
+  const [metaDescription, setMetaDescription] = useState(post?.meta_description ?? "");
+  const [featured,        setFeatured]        = useState(post?.featured        ?? false);
+  const [status,          setStatus]          = useState<PostStatus>(post?.status ?? "draft");
+  const [saving,          setSaving]          = useState(false);
+  const [error,           setError]           = useState<string | null>(null);
+  const [saved,           setSaved]           = useState(false);
+  const [slugManual,      setSlugManual]      = useState(!!post?.slug);
+
+  // Auto-generate slug from title
+  useEffect(() => {
+    if (!slugManual && title) setSlug(slugify(title));
+  }, [title, slugManual]);
+
+  const CATEGORIES: { value: PostCategory; label: string }[] = [
+    { value: "seo_strategy",      label: "SEO Strategy"     },
+    { value: "geo_optimisation",  label: "GEO Optimisation" },
+    { value: "technical_seo",     label: "Technical SEO"    },
+    { value: "content_marketing", label: "Content Marketing"},
+    { value: "business_insights", label: "Business Insights"},
+    { value: "platform_updates",  label: "Platform Updates" },
+    { value: "case_studies",      label: "Case Studies"     },
+    { value: "industry_news",     label: "Industry News"    },
+  ];
+
+  async function handleSave(publishStatus?: PostStatus) {
+    setSaving(true);
+    setError(null);
+    const targetStatus = publishStatus ?? status;
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const readTime = estimateReadTime(content);
+      const payload = {
+        title:              title.trim(),
+        slug:               slug.trim(),
+        excerpt:            excerpt.trim(),
+        content,
+        category,
+        status:             targetStatus,
+        focus_keyword:      focusKeyword.trim() || null,
+        meta_title:         metaTitle.trim()    || null,
+        meta_description:   metaDescription.trim() || null,
+        featured,
+        read_time_minutes:  readTime,
+        author_name:        "AI Marketing Labs Editorial",
+        published_at:       targetStatus === "published"
+          ? (post?.published_at ?? new Date().toISOString())
+          : post?.published_at ?? null,
+        updated_at:         new Date().toISOString(),
+      };
+
+      if (isNew) {
+        const { error: insertErr } = await supabase
+          .from("blog_posts")
+          .insert({ ...payload, author_id: user.id } as never);
+        if (insertErr) throw insertErr;
+      } else {
+        const { error: updateErr } = await supabase
+          .from("blog_posts")
+          .update(payload as never)
+          .eq("id", post.id);
+        if (updateErr) throw updateErr;
+      }
+
+      setSaved(true);
+      setStatus(targetStatus);
+      setTimeout(() => { setSaved(false); onSaved(); onClose(); }, 1000);
+    } catch (e: any) {
+      setError(e.message ?? "Failed to save post.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    <Section label="AI Strategy Action Centre" action={<div style={{ display: "flex", alignItems: "center", gap: "6px" }}><Cpu size={11} color="var(--text-tertiary)" /><span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.1em" }}>GENERATED {generatedDate}</span></div>}>
-      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-        {STRATEGIES.map((strat, i) => {
-          const isSelected = selected === strat.id;
-          return (
-            <motion.div key={strat.id} variants={pv(0.6 + i * 0.1)} initial="hidden" animate="visible">
-              <div onClick={() => setSelected(isSelected ? null : strat.id)} style={{ background: "var(--surface)", border: `1px solid ${isSelected ? brandColor + "60" : "var(--border)"}`, borderRadius: "12px", padding: "20px 22px", cursor: "pointer", transition: "border-color 0.25s, box-shadow 0.25s", boxShadow: isSelected ? "0 0 24px var(--brand-glow)" : "none", position: "relative", overflow: "hidden" }}
-                onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.borderColor = "var(--muted)"; }}
-                onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; }}
-              >
-                {isSelected && <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "2px", background: `linear-gradient(90deg, transparent, ${brandColor}, transparent)` }} />}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px", gap: "12px" }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                      <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "9px", fontWeight: 500, color: brandColor, background: "rgba(var(--brand-rgb),0.10)", border: "1px solid rgba(var(--brand-rgb),0.20)", padding: "2px 8px", borderRadius: "100px", letterSpacing: "0.1em", textTransform: "uppercase" }}>{strat.category}</span>
-                      <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "9px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>Est. {strat.timeframe}</span>
-                    </div>
-                    <h3 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.01em", lineHeight: 1.3, margin: 0 }}>{strat.title}</h3>
-                  </div>
-                  <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
-                    {[{ label: "IMPACT", value: strat.impact, colorFn: impactColor }, { label: "EFFORT", value: strat.effort, colorFn: effortColor }].map(({ label, value, colorFn }) => (
-                      <div key={label} style={{ textAlign: "center", padding: "7px 12px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "7px", minWidth: "54px" }}>
-                        <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "18px", fontWeight: 500, color: colorFn(value), lineHeight: 1, marginBottom: "2px" }}>{value.toFixed(1)}</div>
-                        <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "8px", color: "var(--text-tertiary)", letterSpacing: "0.12em" }}>{label}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "12px" }}>
-                  <ScoreBar label="Impact" value={strat.impact} color={impactColor(strat.impact)} />
-                  <ScoreBar label="Effort" value={strat.effort} color={effortColor(strat.effort)} />
-                </div>
-                <AnimatePresence>
-                  {isSelected && (
-                    <motion.div key="rationale" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.3, ease: "easeInOut" }} style={{ overflow: "hidden" }}>
-                      <div style={{ borderTop: "1px solid var(--border)", paddingTop: "12px", marginTop: "4px" }}>
-                        <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.75, margin: "0 0 14px" }}>{strat.rationale}</p>
-                        <div style={{ display: "flex", gap: "8px" }}>
-                          <button style={{ display: "flex", alignItems: "center", gap: "5px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 600, color: "#fff", background: `linear-gradient(135deg, ${brandColor}, color-mix(in srgb, ${brandColor} 60%, #000))`, border: "none", borderRadius: "7px", padding: "8px 16px", cursor: "pointer", boxShadow: "0 0 16px var(--brand-glow)" }}><Zap size={13} strokeWidth={2.5} />Activate Strategy</button>
-                          <button style={{ display: "flex", alignItems: "center", gap: "5px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 500, color: "var(--text-secondary)", background: "transparent", border: "1px solid var(--border)", borderRadius: "7px", padding: "8px 14px", cursor: "pointer" }} onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--muted)"; }} onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; }}><ExternalLink size={12} />Full Report</button>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-                {!isSelected && <div style={{ display: "flex", alignItems: "center", gap: "4px" }}><span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>CLICK TO EXPAND RATIONALE</span><ChevronRight size={10} color="var(--text-tertiary)" /></div>}
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)", zIndex: 200, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "24px 16px", overflowY: "auto" }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 20, scale: 0.97 }}
+        transition={SP}
+        style={{ width: "100%", maxWidth: "900px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "14px", overflow: "hidden", marginBottom: "24px" }}
+      >
+        {/* Modal header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 24px", borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
+          <div>
+            <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "16px", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.02em" }}>
+              {isNew ? "New Post" : "Edit Post"}
+            </div>
+            <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.06em", marginTop: "2px" }}>
+              {isNew ? "CREATING NEW DRAFT" : `EDITING · ${post?.slug}`}
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {/* Status badge */}
+            <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: statusConfig(status).color, background: statusConfig(status).bg, border: `1px solid ${statusConfig(status).border}`, padding: "3px 10px", borderRadius: "100px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              {statusConfig(status).label}
+            </span>
+            <button onClick={onClose} style={{ width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "1px solid var(--border)", borderRadius: "7px", cursor: "pointer", color: "var(--text-secondary)" }}>
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", minHeight: "600px" }}>
+          {/* Main content area */}
+          <div style={{ padding: "24px", borderRight: "1px solid var(--border)" }}>
+            {error && (
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 14px", background: "rgba(255,23,68,0.08)", border: "1px solid rgba(255,23,68,0.25)", borderRadius: "8px", marginBottom: "16px" }}>
+                <AlertCircle size={13} color="var(--signal-red)" />
+                <span style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", color: "var(--signal-red)" }}>{error}</span>
               </div>
-            </motion.div>
-          );
-        })}
-      </div>
-    </Section>
+            )}
+
+            <Field label="Post Title">
+              <input
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                placeholder="Enter post title..."
+                style={{ width: "100%", padding: "10px 12px", fontFamily: "var(--font-display)", fontSize: "18px", fontWeight: 700, color: "var(--text-primary)", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "7px", outline: "none", transition: "border-color 0.18s", boxSizing: "border-box" as const, letterSpacing: "-0.03em" }}
+                onFocus={e => e.currentTarget.style.borderColor = "var(--brand)"}
+                onBlur={e =>  e.currentTarget.style.borderColor = "var(--border)"}
+              />
+            </Field>
+
+            <Field label="URL Slug" hint="Auto-generated from title. Edit to customise.">
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>/blog/</span>
+                <input value={slug} onChange={e => { setSlug(e.target.value); setSlugManual(true); }} placeholder="post-slug"
+                  style={{ flex: 1, padding: "8px 10px", fontFamily: "var(--font-dm-mono), monospace", fontSize: "12px", color: "var(--text-primary)", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "7px", outline: "none", transition: "border-color 0.18s" }}
+                  onFocus={e => e.currentTarget.style.borderColor = "var(--brand)"}
+                  onBlur={e =>  e.currentTarget.style.borderColor = "var(--border)"}
+                />
+              </div>
+            </Field>
+
+            <Field label="Excerpt" hint="A short summary shown on the blog index page. 1–2 sentences.">
+              <Textarea value={excerpt} onChange={setExcerpt} placeholder="Brief summary of this post..." rows={2} />
+            </Field>
+
+            <Field label="Content">
+              <RichTextEditor content={content} onChange={setContent} brandColor={brandColor} placeholder="Start writing your post..." />
+            </Field>
+          </div>
+
+          {/* Sidebar */}
+          <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px", overflowY: "auto" }}>
+
+            {/* Publish actions */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <button
+                onClick={() => handleSave("published")}
+                disabled={saving || !title || !slug}
+                style={{ width: "100%", padding: "10px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 700, color: "#fff", background: (saving || !title || !slug) ? "var(--muted)" : `linear-gradient(135deg, var(--signal-green), #00b060)`, border: "none", borderRadius: "8px", cursor: (saving || !title || !slug) ? "not-allowed" : "pointer", transition: "all 0.2s" }}
+              >
+                {saving ? <div style={{ width: "12px", height: "12px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} /> : saved ? <CheckCircle2 size={13} /> : <Globe2 size={13} />}
+                {saved ? "Published!" : "Publish"}
+              </button>
+              <button
+                onClick={() => handleSave("draft")}
+                disabled={saving || !title || !slug}
+                style={{ width: "100%", padding: "9px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 600, color: "var(--text-secondary)", background: "transparent", border: "1px solid var(--border)", borderRadius: "8px", cursor: (saving || !title || !slug) ? "not-allowed" : "pointer", transition: "all 0.18s" }}
+              >
+                <Lock size={12} /> Save Draft
+              </button>
+            </div>
+
+            {/* Category */}
+            <div>
+              <label style={{ display: "block", fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>Category</label>
+              <select value={category} onChange={e => setCategory(e.target.value as PostCategory)}
+                style={{ width: "100%", padding: "9px 12px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-primary)", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "7px", outline: "none", cursor: "pointer" }}
+              >
+                {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </div>
+
+            {/* SEO fields */}
+            <div style={{ padding: "14px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "9px" }}>
+              <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: brandColor, letterSpacing: "0.1em", marginBottom: "12px" }}>SEO SETTINGS</div>
+
+              <Field label="Focus Keyword">
+                <Input value={focusKeyword} onChange={setFocusKeyword} placeholder="primary keyword" />
+              </Field>
+              <Field label="Meta Title" hint={`${metaTitle.length}/60 chars`}>
+                <Input value={metaTitle || title} onChange={setMetaTitle} placeholder="SEO title (defaults to post title)" />
+              </Field>
+              <Field label="Meta Description" hint={`${metaDescription.length}/160 chars`}>
+                <Textarea value={metaDescription} onChange={setMetaDescription} placeholder="SEO description..." rows={3} />
+              </Field>
+            </div>
+
+            {/* Options */}
+            <div style={{ padding: "14px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "9px" }}>
+              <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.1em", marginBottom: "12px" }}>OPTIONS</div>
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                <input type="checkbox" checked={featured} onChange={e => setFeatured(e.target.checked)} style={{ width: "14px", height: "14px", accentColor: brandColor }} />
+                <span style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-secondary)" }}>Featured post</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────────────────────
-export default function DashboardPage() {
+export default function BlogAdminPage() {
   const [brandColor, setBrandColor] = useState("#3b82f6");
-  const [ga4Trend,   setGa4Trend]   = useState<GA4TrendPoint[]>([]);
-  const [ga4Loading, setGa4Loading] = useState(true);
+  const [posts,      setPosts]      = useState<BlogPost[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [editPost,   setEditPost]   = useState<BlogPost | null | "new">(null);
+  const [error,      setError]      = useState<string | null>(null);
 
   useEffect(() => {
-    const stored = window.localStorage.getItem("rvivme-brand");
+    const stored = localStorage.getItem("rvivme-brand");
     if (stored) setBrandColor(stored);
-    const onStorage = (e: StorageEvent) => { if (e.key === "rvivme-brand" && e.newValue) setBrandColor(e.newValue); };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  // Fetch GA4 trend data for the projection chart
-  useEffect(() => {
-    fetch("/api/ga4")
-      .then(r => r.json())
-      .then(data => {
-        if (data.success && data.trend) setGa4Trend(data.trend);
-      })
-      .catch(() => {}) // silently fall back to mock data
-      .finally(() => setGa4Loading(false));
+  const loadPosts = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setError("Sign in to manage posts."); setLoading(false); return; }
+
+      const { data, error: dbErr } = await supabase
+        .from("blog_posts")
+        .select("*")
+        .eq("author_id", user.id)
+        .order("updated_at", { ascending: false });
+
+      if (dbErr) throw dbErr;
+      setPosts((data ?? []) as BlogPost[]);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => { loadPosts(); }, [loadPosts]);
+
+  async function handleDelete(id: string) {
+    const { error: deleteErr } = await supabase.from("blog_posts").delete().eq("id", id);
+    if (!deleteErr) setPosts(prev => prev.filter(p => p.id !== id));
+  }
+
+  async function handleStatusChange(id: string, newStatus: PostStatus) {
+    const { error: updateErr } = await supabase
+      .from("blog_posts")
+      .update({
+        status:       newStatus,
+        published_at: newStatus === "published" ? new Date().toISOString() : undefined,
+      } as never)
+      .eq("id", id);
+    if (!updateErr) setPosts(prev => prev.map(p => p.id === id ? { ...p, status: newStatus } : p));
+  }
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100vh", padding: "32px 24px 80px", maxWidth: "1280px", margin: "0 auto" }}>
-      <ConnectionBanner ga4Connected={true} gscConnected={true} />
-      <DashboardHeader brandColor={brandColor} />
-      <div style={{ display: "flex", flexDirection: "column", gap: "32px" }}>
-        <ProjectionChart brandColor={brandColor} ga4Trend={ga4Trend} ga4Loading={ga4Loading} />
-        <GA4Panel brandColor={brandColor} />
-        <GSCPanel brandColor={brandColor} />
-        <MetricsGrid />
-        <TechnicalHealthBanner />
-        <ActionCenter brandColor={brandColor} />
-      </div>
-      <div style={{ height: "40px" }} />
+
+      {/* Header */}
+      <motion.div variants={pv(0)} initial="hidden" animate="visible" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
+        <div>
+          <h1 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "clamp(1.5rem,3vw,2rem)", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.03em", lineHeight: 1, marginBottom: "6px" }}>Blog Admin</h1>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>
+              {posts.filter(p => p.status === "published").length} PUBLISHED · {posts.filter(p => p.status === "draft").length} DRAFTS
+            </span>
+            <Link href="/blog" target="_blank" style={{ display: "flex", alignItems: "center", gap: "4px", fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: brandColor, textDecoration: "none", letterSpacing: "0.06em" }}>
+              <ExternalLink size={10} /> VIEW PUBLIC BLOG
+            </Link>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <button onClick={loadPosts} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "9px 14px", fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-secondary)", background: "transparent", border: "1px solid var(--border)", borderRadius: "8px", cursor: "pointer", letterSpacing: "0.06em" }}>
+            <RefreshCw size={11} style={{ animation: loading ? "spin 0.7s linear infinite" : "none" }} /> REFRESH
+          </button>
+          <button onClick={() => setEditPost("new")} style={{ display: "flex", alignItems: "center", gap: "7px", padding: "10px 18px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 700, color: "#fff", background: `linear-gradient(135deg, ${brandColor}, color-mix(in srgb, ${brandColor} 60%, #000))`, border: "none", borderRadius: "9px", cursor: "pointer", boxShadow: "0 0 18px var(--brand-glow)", transition: "all 0.2s" }}>
+            <Plus size={14} strokeWidth={2.5} /> New Post
+          </button>
+        </div>
+      </motion.div>
+
+      {error && (
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "12px 16px", background: "rgba(255,171,0,0.08)", border: "1px solid rgba(255,171,0,0.25)", borderRadius: "8px", marginBottom: "20px" }}>
+          <AlertCircle size={14} color="var(--signal-amber)" />
+          <span style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--signal-amber)" }}>{error}</span>
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          {[1,2,3].map(i => <div key={i} style={{ height: "60px", background: "linear-gradient(90deg, var(--card) 25%, var(--muted) 50%, var(--card) 75%)", backgroundSize: "200% 100%", borderRadius: "12px", animation: "shimmer 1.4s ease-in-out infinite" }} />)}
+        </div>
+      ) : (
+        <>
+          <BlogKpis posts={posts} brandColor={brandColor} />
+          <PostsTable posts={posts} brandColor={brandColor} onEdit={p => setEditPost(p)} onDelete={handleDelete} onStatusChange={handleStatusChange} />
+        </>
+      )}
+
+      <AnimatePresence>
+        {editPost !== null && (
+          <PostEditor
+            post={editPost === "new" ? null : editPost as BlogPost}
+            onClose={() => setEditPost(null)}
+            onSaved={loadPosts}
+            brandColor={brandColor}
+          />
+        )}
+      </AnimatePresence>
+
+      <style>{`
+        @keyframes spin    { to { transform: rotate(360deg); } }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+      `}</style>
     </div>
   );
 }
