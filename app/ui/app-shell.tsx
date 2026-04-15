@@ -13,7 +13,6 @@ import {
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LogOut, Settings, User, ChevronDown, Sun, Moon } from "lucide-react";
-const { brandColor, mode, toggleMode } = useTheme();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Theme context
@@ -218,6 +217,7 @@ function ProfileMenu({ brand }: { brand: string }) {
 function Header() {
   const pathname = usePathname();
   const { brandColor, mode, toggleMode } = useTheme();
+  const brand = brandColor;
   const [scrolled, setScrolled] = useState(false);
 
   const isAuth   = pathname.startsWith("/auth");
@@ -259,7 +259,7 @@ function Header() {
           width:          "32px",
           height:         "32px",
           borderRadius:   "8px",
-          background:     brandColor,
+          background:     brand,
           display:        "flex",
           alignItems:     "center",
           justifyContent: "center",
