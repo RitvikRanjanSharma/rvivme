@@ -516,7 +516,7 @@ export default function HomePage() {
 
   // Skip intro if seen this session
   useEffect(() => {
-  if (typeof window !== "undefined" && sessionStorage.getItem("aiml-intro-seen")) {
+    if (typeof window !== "undefined" && sessionStorage.getItem("aiml-intro-seen")) {
       setPhase(3);
       setCounterVisible(false);
       setHeroVisible(true);
@@ -525,8 +525,9 @@ export default function HomePage() {
   }, []);
 
   // Phase 0: count 0→100
-  if (phase !== 0 || !counterVisible) return;
-  if (typeof window !== "undefined" && sessionStorage.getItem("aiml-intro-seen")) return;
+  useEffect(() => {
+    if (phase !== 0 || !counterVisible) return;
+    if (typeof window !== "undefined" && sessionStorage.getItem("aiml-intro-seen")) return;
     const duration = 1800;
     const start    = performance.now();
     let raf: number;
