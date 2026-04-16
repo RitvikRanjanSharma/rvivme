@@ -1,361 +1,331 @@
 "use client";
 
-// app/page.tsx
-// =============================================================================
-// AI Marketing Labs — Homepage
-// 60fps particle system: counter → burst → converge to headline → idle parallax
-// =============================================================================
+// app/page.tsx — AI Marketing Labs
+// GOD MODE particle system
+// Phase 1: counter 000→100 → burst
+// Phase 2: one particle grows → white wipe fills screen
+// Phase 3: white → particles from random positions converge to headline
+// Phase 4: scroll down = particles disperse, scroll up = reconverge
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence, useInView, useScroll, useTransform } from "framer-motion";
+import { motion, AnimatePresence, useInView } from "framer-motion";
 import { ArrowUpRight, ArrowRight } from "lucide-react";
 
 const EASE_EXPO = [0.16, 1, 0.3, 1] as const;
-
 const CAPABILITIES = [
-  "SEO Intelligence","GEO Optimisation","Competitor Analysis",
-  "AI Overview Tracking","Search Console","Traffic Forecasting",
-  "Content Strategy","Keyword Research","Backlink Intelligence",
-  "Rank Monitoring","GA4 Integration","6-Month Forecasting",
+  "SEO Intelligence","GEO Optimisation","Competitor Analysis","AI Overview Tracking",
+  "Search Console","Traffic Forecasting","Content Strategy","Keyword Research",
+  "Backlink Intelligence","Rank Monitoring","GA4 Integration","6-Month Forecasting",
 ];
 const STATS = [
-  { value: "10+",  label: "Data sources"         },
-  { value: "6mo",  label: "Forecast horizon"      },
-  { value: "85%",  label: "Projection confidence" },
-  { value: "Live", label: "GA4 traffic data"      },
+  { value: "10+", label: "Data sources" },
+  { value: "6mo", label: "Forecast horizon" },
+  { value: "85%", label: "Projection confidence" },
+  { value: "Live", label: "GA4 traffic data" },
 ];
 const FEATURES = [
-  { index: "01", title: "Search intelligence that actually moves.", body: "Connect Google Analytics, Search Console, and DataForSEO in one workspace. Stop context-switching between twelve tabs.", href: "/dashboard", cta: "Open dashboard" },
-  { index: "02", title: "AI forecasting built on your real traffic.", body: "Not benchmarks. Not estimates. Your actual GA4 sessions, projected six months forward with confidence intervals that widen honestly.", href: "/dashboard", cta: "See the model" },
+  { index: "01", title: "Search intelligence that actually moves.", body: "Connect Google Analytics, Search Console, and DataForSEO in one workspace. Stop context-switching between twelve tabs. See what matters, when it matters.", href: "/dashboard", cta: "Open dashboard" },
+  { index: "02", title: "AI forecasting built on your real traffic.", body: "Not benchmarks. Not estimates. Your actual GA4 sessions projected six months forward with confidence intervals that widen honestly over time.", href: "/dashboard", cta: "See the model" },
   { index: "03", title: "GEO — the search layer everyone is ignoring.", body: "We track AI Overview citations, structured data gaps, and citation probability before your competitors notice.", href: "/blog", cta: "Read the intelligence" },
 ];
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PARTICLE CANVAS — handles all 4 phases on one canvas
-// Phase 0: counter display (DOM)
-// Phase 1: burst (particles explode from counter)
-// Phase 2: converge (particles fly to headline text positions)
-// Phase 3: idle (particles drift, parallax on scroll)
-// ─────────────────────────────────────────────────────────────────────────────
-type Phase = 0 | 1 | 2 | 3;
+// ─── ease functions ────────────────────────────────────────────────────────
+function easeOutCubic(t: number) { return 1 - Math.pow(1 - t, 3); }
+function easeOutExpo(t: number)  { return t === 1 ? 1 : 1 - Math.pow(2, -10 * t); }
+function easeInExpo(t: number)   { return t === 0 ? 0 : Math.pow(2, 10 * t - 10); }
+function lerp(a: number, b: number, t: number) { return a + (b - a) * t; }
+function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)); }
 
-interface Particle {
-  // Current state
-  x: number; y: number;
-  // Velocity
-  vx: number; vy: number;
-  // Burst target
-  bx: number; by: number;
-  // Converge target (position in headline text)
-  tx: number; ty: number;
-  // Idle drift
-  dx: number; dy: number; // drift velocity
-  dp: number; dps: number; // drift phase + speed
-  // Visual
-  size: number;
-  depth: number;   // 0=far(blue,blurry) 1=near(white,sharp)
-  alpha: number;
-  color: string;
-  // Timing
-  burstDelay: number;   // stagger for burst
-  convergeDelay: number; // stagger for converge
-}
-
-function sampleTextToPositions(
-  text: string[], font: string, canvasW: number, canvasH: number,
-  pixelSize: number, maxParticles: number
+// ─── sample text pixels into positions ────────────────────────────────────
+function sampleText(
+  lines: string[], font: string,
+  W: number, H: number,
+  step: number, maxP: number,
+  align: "center" | "left" = "center",
+  offsetX = 0, offsetY = 0
 ): Array<{ x: number; y: number }> {
   const off   = document.createElement("canvas");
-  off.width   = canvasW;
-  off.height  = canvasH;
-  const octx  = off.getContext("2d")!;
-  octx.fillStyle   = "#ffffff";
-  octx.font        = font;
-  octx.textAlign   = "left";
-  octx.textBaseline = "top";
+  off.width   = W; off.height = H;
+  const ctx   = off.getContext("2d")!;
+  const fsize = parseInt(font);
+  const lh    = fsize * 0.95;
 
-  // Measure and center text block
-  const lineHeight = parseInt(font) * 1.1;
-  const metrics    = text.map(line => octx.measureText(line));
-  const maxW       = Math.max(...metrics.map(m => m.width));
-  const totalH     = text.length * lineHeight;
-  const startX     = (canvasW - maxW) / 2;
-  const startY     = (canvasH - totalH) / 2;
+  ctx.fillStyle     = "#fff";
+  ctx.font          = font;
+  ctx.textBaseline  = "top";
+  ctx.textAlign     = align;
 
-  text.forEach((line, i) => {
-    octx.fillText(line, startX, startY + i * lineHeight);
-  });
-
-  const imageData = octx.getImageData(0, 0, canvasW, canvasH);
-  const data      = imageData.data;
-  const positions: Array<{ x: number; y: number }> = [];
-
-  for (let py = 0; py < canvasH; py += pixelSize) {
-    for (let px = 0; px < canvasW; px += pixelSize) {
-      const idx = (py * canvasW + px) * 4;
-      if (data[idx + 3] > 80) {
-        positions.push({ x: px + pixelSize / 2, y: py + pixelSize / 2 });
-      }
-    }
+  if (align === "center") {
+    const totalH = lines.length * lh;
+    const sy     = (H - totalH) / 2 + offsetY;
+    lines.forEach((l, i) => ctx.fillText(l, W / 2 + offsetX, sy + i * lh));
+  } else {
+    const fsize2 = parseInt(font);
+    const lh2    = fsize2 * 0.92;
+    const totalH = lines.length * lh2;
+    const sy     = H - 64 - 48 - totalH + offsetY; // match hero padding
+    lines.forEach((l, i) => ctx.fillText(l, 32 + offsetX, sy + i * lh2));
   }
 
-  // Randomly downsample if too many
-  if (positions.length > maxParticles) {
-    for (let i = positions.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [positions[i], positions[j]] = [positions[j], positions[i]];
-    }
-    positions.length = maxParticles;
-  }
+  const d   = ctx.getImageData(0, 0, W, H).data;
+  const pts: Array<{ x: number; y: number }> = [];
+  for (let py = 0; py < H; py += step)
+    for (let px = 0; px < W; px += step)
+      if (d[(py * W + px) * 4 + 3] > 80)
+        pts.push({ x: px + step / 2, y: py + step / 2 });
 
-  return positions;
+  // shuffle + cap
+  for (let i = pts.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pts[i], pts[j]] = [pts[j], pts[i]];
+  }
+  if (pts.length > maxP) pts.length = maxP;
+  return pts;
 }
 
-// Ease functions
-function easeOutCubic(t: number): number { return 1 - Math.pow(1 - t, 3); }
-function easeInOutCubic(t: number): number { return t < 0.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2; }
-function easeOutExpo(t: number): number { return t === 1 ? 1 : 1 - Math.pow(2, -10 * t); }
+// ─────────────────────────────────────────────────────────────────────────────
+// MASTER CANVAS — all animation lives here
+// ─────────────────────────────────────────────────────────────────────────────
+type MasterPhase = "counter" | "burst" | "wipe" | "converge" | "idle";
 
-function ParticleCanvas({
-  phase,
-  onPhaseComplete,
-  scrollY,
+interface Particle {
+  // positions
+  x: number; y: number;
+  // burst origin (where particle starts in burst phase)
+  ox: number; oy: number;
+  // burst target
+  bx: number; by: number;
+  // converge target (headline pixel)
+  tx: number; ty: number;
+  // random spawn for converge entry
+  rx: number; ry: number;
+  // idle drift
+  dvx: number; dvy: number;
+  dp: number; dps: number;
+  // visual
+  size: number;
+  depth: number; // 0=far 1=near
+  color: string; // rgb string
+  // stagger
+  burstDelay: number;
+  convergeDelay: number;
+}
+
+function MasterCanvas({
+  phase, onPhaseComplete, scrollFrac,
 }: {
-  phase: Phase;
-  onPhaseComplete: (p: Phase) => void;
-  scrollY: React.MutableRefObject<number>;
+  phase: MasterPhase;
+  onPhaseComplete: (p: MasterPhase) => void;
+  scrollFrac: React.MutableRefObject<number>; // 0 = top, 1 = scrolled down
 }) {
-  const canvasRef   = useRef<HTMLCanvasElement>(null);
-  const phaseRef    = useRef<Phase>(phase);
-  const particles   = useRef<Particle[]>([]);
-  const phaseStart  = useRef<number>(0);
-  const rafRef      = useRef<number>(0);
-
-  // Offscreen canvases for blur bucketing
-  const farCanvas   = useRef<HTMLCanvasElement | null>(null);
-  const midCanvas   = useRef<HTMLCanvasElement | null>(null);
-  const nearCanvas  = useRef<HTMLCanvasElement | null>(null);
+  const canvasRef  = useRef<HTMLCanvasElement>(null);
+  const phaseRef   = useRef<MasterPhase>(phase);
+  const phaseTRef  = useRef<number>(0);
+  const rafRef     = useRef<number>(0);
+  const particles  = useRef<Particle[]>([]);
+  const wipePRef   = useRef({ x: 0, y: 0, r: 0 }); // wipe circle
+  const initDone   = useRef(false);
+  // offscreen layers
+  const farOff     = useRef<HTMLCanvasElement | null>(null);
+  const nearOff    = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d", { alpha: true })!;
-
+    const ctx = canvas.getContext("2d")!;
     let W = 0, H = 0;
+
+    farOff.current  = document.createElement("canvas");
+    nearOff.current = document.createElement("canvas");
 
     function resize() {
       W = canvas!.width  = window.innerWidth;
       H = canvas!.height = window.innerHeight;
-      // Resize offscreen canvases
-      [farCanvas, midCanvas, nearCanvas].forEach(c => {
-        if (c.current) { c.current.width = W; c.current.height = H; }
-      });
+      farOff.current!.width   = W; farOff.current!.height   = H;
+      nearOff.current!.width  = W; nearOff.current!.height  = H;
+      if (!initDone.current) buildParticles();
     }
 
-    // Create offscreen canvases
-    farCanvas.current  = document.createElement("canvas");
-    midCanvas.current  = document.createElement("canvas");
-    nearCanvas.current = document.createElement("canvas");
+    function buildParticles() {
+      initDone.current = true;
 
-    resize();
-    window.addEventListener("resize", resize, { passive: true });
+      // Counter text sample (burst source)
+      const csize = Math.min(W * 0.18, 160);
+      const cPts  = sampleText(
+        ["100", "AI MARKETING LABS"],
+        `400 ${csize}px "DM Mono",monospace`,
+        W, H, 4, 2000, "center"
+      );
 
-    // ── Sample counter text positions (source of burst) ────────────────────
-    const counterFontSize = Math.min(W * 0.18, 160);
-    const counterPositions = sampleTextToPositions(
-      ["100", "AI MARKETING LABS"],
-      `400 ${counterFontSize}px "DM Mono", monospace`,
-      W, H, 4, 2000
-    );
+      // Headline sample (converge target) — left aligned, bottom of hero
+      const hsize = Math.min(W * 0.092, 148);
+      const hPts  = sampleText(
+        ["Search", "intelligence", "for those", "who act."],
+        `400 ${hsize}px Georgia,serif`,
+        W, H, 4, 2000, "left"
+      );
 
-    // ── Sample headline text positions (converge target) ───────────────────
-    // Render at actual hero position (left-aligned, bottom of viewport)
-    const headlineFontSize = Math.min(W * 0.092, 152);
-    const hlOff   = document.createElement("canvas");
-    hlOff.width   = W;
-    hlOff.height  = H;
-    const hlCtx   = hlOff.getContext("2d")!;
-    hlCtx.fillStyle = "#ffffff";
-    hlCtx.font    = `400 ${headlineFontSize}px Georgia, serif`;
-    hlCtx.textAlign = "left";
-    hlCtx.textBaseline = "bottom";
+      const N = Math.min(cPts.length, hPts.length, 1800);
+      particles.current = [];
 
-    const lines     = ["Search", "intelligence", "for those", "who act."];
-    const lineH     = headlineFontSize * 0.92;
-    const totalH    = lines.length * lineH;
-    const startY    = H - 64 - 48; // matches hero padding-bottom
-    const startX    = 32;
+      for (let i = 0; i < N; i++) {
+        const cp    = cPts[i % cPts.length];
+        const hp    = hPts[i % hPts.length];
+        const depth = Math.random();
+        const angle = Math.random() * Math.PI * 2;
+        const dist  = 250 + Math.random() * 500;
+        const up    = -(150 + Math.random() * 300);
 
-    lines.forEach((line, i) => {
-      hlCtx.fillText(line, startX, startY - (lines.length - 1 - i) * lineH);
-    });
-
-    const hlImageData = hlCtx.getImageData(0, 0, W, H);
-    const hlData      = hlImageData.data;
-    const headlinePositions: Array<{ x: number; y: number }> = [];
-
-    for (let py = 0; py < H; py += 4) {
-      for (let px = 0; px < W; px += 4) {
-        const idx = (py * W + px) * 4;
-        if (hlData[idx + 3] > 80) headlinePositions.push({ x: px + 2, y: py + 2 });
+        particles.current.push({
+          x: cp.x, y: cp.y,
+          ox: cp.x, oy: cp.y,
+          bx: cp.x + Math.cos(angle) * dist,
+          by: cp.y + Math.sin(angle) * dist + up,
+          tx: hp.x, ty: hp.y,
+          rx: Math.random() * W,
+          ry: Math.random() * H,
+          dvx: (Math.random() - 0.5) * 0.25,
+          dvy: -(0.1 + Math.random() * 0.2),
+          dp:  Math.random() * Math.PI * 2,
+          dps: 0.006 + Math.random() * 0.01,
+          size: 2.5 + Math.random() * 1.5,
+          depth,
+          color: depth > 0.6 ? "255,255,255" : depth > 0.3 ? "140,170,255" : "37,99,235",
+          burstDelay:    (i / N) * 0.35,
+          convergeDelay: Math.random() * 0.6,
+        });
       }
     }
 
-    // ── Build particles ────────────────────────────────────────────────────
-    // Use headline positions as primary — burst from counter → converge to headline
-    const MAX = Math.min(counterPositions.length, headlinePositions.length, 1800);
+    function composite(elapsed: number) {
+      const far  = farOff.current!;
+      const near = nearOff.current!;
+      const fc   = far.getContext("2d")!;
+      const nc   = near.getContext("2d")!;
+      fc.clearRect(0, 0, W, H);
+      nc.clearRect(0, 0, W, H);
 
-    // Shuffle both arrays
-    const shuffleArr = <T,>(arr: T[]) => {
-      for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [arr[i], arr[j]] = [arr[j], arr[i]];
-      }
-    };
-    shuffleArr(counterPositions);
-    shuffleArr(headlinePositions);
-
-    particles.current = [];
-    for (let i = 0; i < MAX; i++) {
-      const cp    = counterPositions[i] ?? counterPositions[i % counterPositions.length];
-      const hp    = headlinePositions[i] ?? headlinePositions[i % headlinePositions.length];
-      const depth = Math.random();
-
-      // Burst target: explode outward from counter, biased upward
-      const angle  = Math.random() * Math.PI * 2;
-      const dist   = 200 + Math.random() * 400;
-      const upBias = -(Math.random() * 200 + 100);
-
-      particles.current.push({
-        x: cp.x, y: cp.y,
-        vx: 0, vy: 0,
-        bx: cp.x + Math.cos(angle) * dist,
-        by: cp.y + Math.sin(angle) * dist + upBias,
-        tx: hp.x,
-        ty: hp.y,
-        dx: (Math.random() - 0.5) * 0.3,
-        dy: -(Math.random() * 0.2 + 0.05),
-        dp: Math.random() * Math.PI * 2,
-        dps: 0.008 + Math.random() * 0.012,
-        size: 3 + Math.random() * 1,
-        depth,
-        alpha: 0,
-        color: "#ffffff",
-        burstDelay:    i / MAX * 0.3,
-        convergeDelay: i / MAX * 0.5,
-      });
-    }
-
-    // ── Render loop ────────────────────────────────────────────────────────
-    function render(now: number) {
-      const ph      = phaseRef.current;
-      const elapsed = (now - phaseStart.current) / 1000; // seconds
-
-      ctx.clearRect(0, 0, W, H);
-
-      if (ph === 0) {
-        // Phase 0: particles hidden (DOM shows counter)
-        rafRef.current = requestAnimationFrame(render);
-        return;
-      }
-
-      // Clear offscreen canvases
-      const far  = farCanvas.current!;
-      const mid  = midCanvas.current!;
-      const near = nearCanvas.current!;
-      const fctx = far.getContext("2d")!;
-      const mctx = mid.getContext("2d")!;
-      const nctx = near.getContext("2d")!;
-      fctx.clearRect(0, 0, W, H);
-      mctx.clearRect(0, 0, W, H);
-      nctx.clearRect(0, 0, W, H);
-
-      const scroll = scrollY.current;
-
-      let allDone = true;
+      const ph   = phaseRef.current;
+      const sf   = clamp(scrollFrac.current, 0, 1);
 
       for (const p of particles.current) {
-        let px = p.x;
-        let py = p.y;
-        let alpha = p.alpha;
+        let px = p.x, py = p.y, a = 0;
 
-        if (ph === 1) {
-          // BURST: ease from origin to burst target
-          const t = Math.max(0, Math.min((elapsed - p.burstDelay) / 0.9, 1));
+        if (ph === "burst") {
+          const t  = clamp((elapsed - p.burstDelay) / 1.0, 0, 1);
           const et = easeOutCubic(t);
-          px    = p.x + (p.bx - p.x) * et; // will update p.x only at end
-          py    = p.y + (p.by - p.y) * et;
-          alpha = t < 0.1 ? t * 10 : t > 0.85 ? (1 - t) / 0.15 : 1;
-          if (t < 1) allDone = false;
-
-        } else if (ph === 2) {
-          // CONVERGE: ease from burst position to headline position
-          const t  = Math.max(0, Math.min((elapsed - p.convergeDelay) / 1.2, 1));
+          px = lerp(p.ox, p.bx, et);
+          py = lerp(p.oy, p.by, et);
+          a  = t < 0.15 ? t / 0.15 : t > 0.75 ? (1 - t) / 0.25 : 1;
+        } else if (ph === "wipe") {
+          // particles just hold burst positions while wipe circle grows
+          px = p.bx; py = p.by;
+          a  = clamp(1 - elapsed / 0.4, 0, 1);
+        } else if (ph === "converge") {
+          const t  = clamp((elapsed - p.convergeDelay) / 1.4, 0, 1);
           const et = easeOutExpo(t);
-          px    = p.bx + (p.tx - p.bx) * et;
-          py    = p.by + (p.ty - p.by) * et;
-          alpha = t < 0.05 ? t / 0.05 : 1;
-          if (t < 1) allDone = false;
-
-        } else if (ph === 3) {
-          // IDLE: drift gently, parallax on scroll
-          p.dp += p.dps;
-          p.x  += p.dx + Math.sin(p.dp) * 0.1;
-          p.y  += p.dy;
-          // Parallax: far particles move faster with scroll
-          const parallax = (1 - p.depth) * scroll * 0.12 + p.depth * scroll * 0.04;
-          px    = p.x;
-          py    = p.y + parallax;
-          alpha = 0.6 + p.depth * 0.4;
-          allDone = false;
-
-          // Respawn when drifted too far
-          if (p.y < -50) {
-            p.x = p.tx + (Math.random() - 0.5) * 100;
-            p.y = p.ty + 50;
-          }
-          if (p.x < -20) p.x = W + 20;
-          if (p.x > W + 20) p.x = -20;
+          px = lerp(p.rx, p.tx, et);
+          py = lerp(p.ry, p.ty, et);
+          a  = t < 0.08 ? t / 0.08 : 1;
+          p.x = px; p.y = py; // persist for idle
+        } else if (ph === "idle") {
+          // scroll-driven disperse: sf=0 → at target, sf=1 → fully dispersed
+          const disperseT = easeInExpo(sf);
+          const dx = (p.rx - p.tx) * disperseT;
+          const dy = (p.ry - p.ty) * disperseT;
+          // gentle idle drift on top
+          p.dp  += p.dps;
+          const drift = sf < 0.05 ? 1 : clamp(1 - sf * 4, 0, 1);
+          p.x   = p.tx + dx + Math.sin(p.dp) * 0.8 * drift;
+          p.y   = p.ty + dy + p.dvy * 0.3 * drift;
+          px    = p.x; py = p.y;
+          a     = clamp(1 - sf * 0.7, 0.05, 1);
         }
 
-        // Bucket into depth layer
-        const blurDepth = 1 - p.depth; // 0=near(sharp), 1=far(blurry)
-        const size      = p.size * (0.5 + p.depth * 0.5);
-        const color     = p.depth > 0.6 ? "255,255,255" : p.depth > 0.3 ? "100,150,255" : "37,99,235";
+        if (a <= 0.01) continue;
+        const sz = p.size * (0.5 + p.depth * 0.5);
+        const c  = p.color;
 
-        let targetCtx: CanvasRenderingContext2D;
-        if (blurDepth > 0.6)      targetCtx = fctx;  // far: most blur
-        else if (blurDepth > 0.3) targetCtx = mctx;  // mid: some blur
-        else                       targetCtx = nctx;  // near: sharp
-
-        targetCtx.globalAlpha = Math.max(0, Math.min(1, alpha));
-        targetCtx.fillStyle   = `rgb(${color})`;
-        targetCtx.fillRect(Math.round(px - size / 2), Math.round(py - size / 2), Math.ceil(size), Math.ceil(size));
+        // bucket: depth < 0.4 = far (blurred), rest = near (sharp)
+        const tctx = p.depth < 0.4 ? fc : nc;
+        tctx.globalAlpha = Math.max(0, Math.min(1, a));
+        tctx.fillStyle   = `rgb(${c})`;
+        tctx.fillRect(Math.round(px - sz / 2), Math.round(py - sz / 2), Math.ceil(sz), Math.ceil(sz));
       }
 
-      // Composite layers with blur applied once per layer
+      // Composite: far with blur, near sharp
       ctx.save();
-      ctx.filter = "blur(4px)";
+      ctx.filter = "blur(3px)";
       ctx.drawImage(far, 0, 0);
-      ctx.filter = "blur(1.5px)";
-      ctx.drawImage(mid, 0, 0);
       ctx.filter = "none";
       ctx.drawImage(near, 0, 0);
       ctx.restore();
-
-      if (allDone && ph !== 3) {
-        phaseStart.current = now;
-        onPhaseComplete(ph);
-      }
-
-      rafRef.current = requestAnimationFrame(render);
     }
 
-    phaseStart.current = performance.now();
-    rafRef.current     = requestAnimationFrame(render);
+    function frame(now: number) {
+      const ph      = phaseRef.current;
+      const elapsed = (now - phaseTRef.current) / 1000;
+      ctx.clearRect(0, 0, W, H);
+
+      // ── BURST ──────────────────────────────────────────────────────────
+      if (ph === "burst") {
+        composite(elapsed);
+        const maxDelay = 0.35;
+        if (elapsed > maxDelay + 1.1) {
+          phaseTRef.current = now;
+          onPhaseComplete("burst");
+        }
+
+      // ── WIPE ───────────────────────────────────────────────────────────
+      } else if (ph === "wipe") {
+        // Fade out remaining particles fast
+        composite(elapsed);
+        // Draw expanding white circle from center
+        const t  = clamp(elapsed / 0.55, 0, 1);
+        const et = easeInExpo(t);
+        const r  = et * Math.sqrt(W * W + H * H);
+        ctx.save();
+        ctx.globalAlpha = clamp(t * 1.5, 0, 1);
+        ctx.fillStyle   = "#f8f8f5"; // page light bg
+        ctx.beginPath();
+        ctx.arc(W / 2, H / 2, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        if (t >= 1) {
+          phaseTRef.current = now;
+          onPhaseComplete("wipe");
+        }
+
+      // ── CONVERGE ───────────────────────────────────────────────────────
+      } else if (ph === "converge") {
+        // White background fading to dark
+        const bgT = clamp(elapsed / 1.8, 0, 1);
+        const bg  = Math.round(lerp(248, 8, easeOutCubic(bgT)));
+        ctx.fillStyle = `rgb(${bg},${bg},${bg === 248 ? 245 : bg})`;
+        ctx.fillRect(0, 0, W, H);
+        composite(elapsed);
+        const maxD = 0.6 + 1.4; // max convergeDelay + duration
+        if (elapsed > maxD) {
+          phaseTRef.current = now;
+          onPhaseComplete("converge");
+        }
+
+      // ── IDLE ───────────────────────────────────────────────────────────
+      } else if (ph === "idle") {
+        composite(elapsed);
+        // no completion, runs forever
+      }
+
+      rafRef.current = requestAnimationFrame(frame);
+    }
+
+    resize();
+    window.addEventListener("resize", resize, { passive: true });
+    phaseTRef.current = performance.now();
+    rafRef.current    = requestAnimationFrame(frame);
 
     return () => {
       cancelAnimationFrame(rafRef.current);
@@ -366,29 +336,38 @@ function ParticleCanvas({
   return (
     <canvas
       ref={canvasRef}
-      style={{ position: "fixed", inset: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 0 }}
+      style={{
+        position:      "fixed",
+        inset:         0,
+        width:         "100%",
+        height:        "100%",
+        pointerEvents: "none",
+        zIndex:        5,
+      }}
     />
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Counter DOM overlay
+// Counter overlay (DOM — phase "counter" only)
 // ─────────────────────────────────────────────────────────────────────────────
 function CounterOverlay({ count, visible }: { count: number; visible: boolean }) {
   return (
     <AnimatePresence>
       {visible && (
         <motion.div
-          exit={{ opacity: 0, transition: { duration: 0.2 } }}
+          exit={{ opacity: 0, transition: { duration: 0.15 } }}
           style={{
-            position: "fixed", inset: 0, zIndex: 10,
+            position: "fixed", inset: 0, zIndex: 20,
             background: "var(--bg)",
-            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px",
+            display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center", gap: "16px",
             pointerEvents: "none",
           }}
         >
           <div style={{
-            fontFamily: "var(--font-mono)", fontSize: "clamp(4rem,12vw,10rem)",
+            fontFamily: "var(--font-mono)",
+            fontSize: "clamp(4rem,12vw,10rem)",
             letterSpacing: "-0.04em", lineHeight: 1,
             color: "var(--text-primary)", fontWeight: 400,
             fontVariantNumeric: "tabular-nums",
@@ -396,14 +375,12 @@ function CounterOverlay({ count, visible }: { count: number; visible: boolean })
             {String(count).padStart(3, "0")}
           </div>
           <motion.div
-            initial={{ opacity: 0, y: 8 }}
             animate={count > 80 ? { opacity: 1, y: 0 } : { opacity: 0, y: 8 }}
-            transition={{ duration: 0.5, ease: EASE_EXPO }}
+            transition={{ duration: 0.5 }}
             style={{ fontFamily: "var(--font-body)", fontSize: "13px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--text-tertiary)" }}
           >
             AI Marketing Labs
           </motion.div>
-          {/* Progress bar */}
           <div style={{ position: "absolute", bottom: 0, left: 0, height: "2px", width: `${count}%`, background: "var(--brand)", transition: "width 0.06s linear" }} />
         </motion.div>
       )}
@@ -412,10 +389,14 @@ function CounterOverlay({ count, visible }: { count: number; visible: boolean })
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Wipe overlay — white flash that fills screen then hands off
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 function FadeUp({ children, delay = 0, style }: { children: React.ReactNode; delay?: number; style?: React.CSSProperties }) {
-  const ref    = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { once: true, margin: "-80px" });
   return (
     <motion.div ref={ref}
@@ -423,9 +404,7 @@ function FadeUp({ children, delay = 0, style }: { children: React.ReactNode; del
       animate={inView ? { opacity: 1, y: 0 } : {}}
       transition={{ duration: 0.85, ease: EASE_EXPO, delay }}
       style={style}
-    >
-      {children}
-    </motion.div>
+    >{children}</motion.div>
   );
 }
 
@@ -435,9 +414,7 @@ function Marquee() {
     <div style={{ overflow: "hidden", borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)", padding: "14px 0", background: "var(--surface)" }}>
       <div style={{ display: "flex", width: "max-content", animation: "marquee 32s linear infinite" }}>
         {items.map((cap, i) => (
-          <span key={i} style={{ fontFamily: "var(--font-mono)", fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", color: i % 2 === 0 ? "var(--text-primary)" : "var(--text-tertiary)", padding: "0 28px", whiteSpace: "nowrap" }}>
-            {cap}
-          </span>
+          <span key={i} style={{ fontFamily: "var(--font-mono)", fontSize: "11px", letterSpacing: "0.12em", textTransform: "uppercase", color: i % 2 === 0 ? "var(--text-primary)" : "var(--text-tertiary)", padding: "0 28px", whiteSpace: "nowrap" }}>{cap}</span>
         ))}
       </div>
     </div>
@@ -448,7 +425,7 @@ function StatRow() {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", borderTop: "1px solid var(--border)" }}>
       {STATS.map((stat, i) => {
-        const ref    = useRef<HTMLDivElement>(null);
+        const ref = useRef<HTMLDivElement>(null);
         const inView = useInView(ref, { once: true, margin: "-40px" });
         return (
           <motion.div key={stat.label} ref={ref}
@@ -467,9 +444,9 @@ function StatRow() {
 }
 
 function FeatureRow({ feature }: { feature: typeof FEATURES[0] }) {
-  const ref    = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { once: true, margin: "-80px" });
-  const [hov,  setHov] = useState(false);
+  const [hov, setHov] = useState(false);
   return (
     <motion.div ref={ref}
       initial={{ opacity: 0 }} animate={inView ? { opacity: 1 } : {}} transition={{ duration: 0.5 }}
@@ -498,36 +475,47 @@ function FeatureRow({ feature }: { feature: typeof FEATURES[0] }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Page
+// PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 export default function HomePage() {
-  const [count,         setCount]         = useState(0);
-  const [phase,         setPhase]         = useState<Phase>(0);
-  const [counterVisible,setCounterVisible] = useState(true);
-  const [heroVisible,   setHeroVisible]   = useState(false);
-  const [contentVisible,setContentVisible] = useState(false);
-  const scrollYRef  = useRef(0);
-  const { scrollY } = useScroll();
+  const [count,          setCount]          = useState(0);
+  const [counterVisible, setCounterVisible] = useState(true);
+  const [phase,          setPhase]          = useState<MasterPhase>("counter");
+  const [contentVisible, setContentVisible] = useState(false);
+  const [headlineVisible,setHeadlineVisible] = useState(false);
+  const scrollFrac  = useRef(0);
+  const heroRef     = useRef<HTMLDivElement>(null);
 
-  // Track scroll for particle parallax
-  useEffect(() => {
-    return scrollY.on("change", v => { scrollYRef.current = v; });
-  }, [scrollY]);
+  // Skip intro on revisit
+  const [skipIntro] = useState(() =>
+    typeof window !== "undefined" && !!sessionStorage.getItem("aiml-intro-seen")
+  );
 
-  // Skip intro if seen this session
   useEffect(() => {
-    if (typeof window !== "undefined" && sessionStorage.getItem("aiml-intro-seen")) {
-      setPhase(3);
+    if (skipIntro) {
+      setPhase("idle");
       setCounterVisible(false);
-      setHeroVisible(true);
+      setHeadlineVisible(true);
       setContentVisible(true);
     }
+  }, [skipIntro]);
+
+  // Track scroll fraction within hero section
+  useEffect(() => {
+    function onScroll() {
+      const heroEl = heroRef.current;
+      if (!heroEl) return;
+      const heroH  = heroEl.offsetHeight;
+      const scrolled = window.scrollY;
+      scrollFrac.current = clamp(scrolled / (heroH * 0.7), 0, 1);
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Phase 0: count 0→100
+  // Count 000→100
   useEffect(() => {
-    if (phase !== 0 || !counterVisible) return;
-    if (typeof window !== "undefined" && sessionStorage.getItem("aiml-intro-seen")) return;
+    if (skipIntro) return;
     const duration = 1800;
     const start    = performance.now();
     let raf: number;
@@ -538,57 +526,57 @@ export default function HomePage() {
       if (p < 1) {
         raf = requestAnimationFrame(tick);
       } else {
-        // 0.3s pause then start burst
         setTimeout(() => {
           setCounterVisible(false);
-          setPhase(1);
+          setPhase("burst");
         }, 300);
       }
     }
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [phase, counterVisible]);
+  }, [skipIntro]);
 
-  const handlePhaseComplete = useCallback((completedPhase: Phase) => {
-    if (completedPhase === 1) {
-      // Burst done → start converge, show hero text transparent (particles will form it)
-      setPhase(2);
-      setHeroVisible(true);
-    } else if (completedPhase === 2) {
-      // Converge done → idle phase, show all content
-      setPhase(3);
+  const handlePhaseComplete = useCallback((completed: MasterPhase) => {
+    if (completed === "burst") {
+      setPhase("wipe");
+    } else if (completed === "wipe") {
+      setPhase("converge");
+    } else if (completed === "converge") {
+      setPhase("idle");
+      setHeadlineVisible(true);
       setContentVisible(true);
-      sessionStorage.setItem("aiml-intro-seen", "1");
+      if (typeof window !== "undefined") sessionStorage.setItem("aiml-intro-seen", "1");
     }
   }, []);
 
+  const showCanvas = !skipIntro || phase === "idle";
+
   return (
     <>
-      {/* Counter DOM overlay */}
+      {/* Counter DOM */}
       <CounterOverlay count={count} visible={counterVisible} />
 
-      {/* Particle canvas — fixed, always present */}
-      {(typeof window === "undefined" || !sessionStorage.getItem("aiml-intro-seen") || phase === 3) ? (
-        <ParticleCanvas phase={phase} onPhaseComplete={handlePhaseComplete} scrollY={scrollYRef} />
-      ) : null}
+      {/* Master particle canvas */}
+      {showCanvas && (
+        <MasterCanvas
+          phase={phase}
+          onPhaseComplete={handlePhaseComplete}
+          scrollFrac={scrollFrac}
+        />
+      )}
 
-      {/* Page content */}
-      <div style={{ background: "transparent", minHeight: "100vh", position: "relative", zIndex: 1 }}>
+      {/* Page */}
+      <div style={{ background: phase === "converge" ? "transparent" : "var(--bg)", minHeight: "100vh", position: "relative", zIndex: 1 }}>
 
-        {/* ── Hero ──────────────────────────────────────────────────────────── */}
-        <section style={{ minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: "0 32px 64px", position: "relative" }}>
-
-          {/* Ambient gradient above particles */}
+        {/* ── HERO ──────────────────────────────────────────────────────── */}
+        <div ref={heroRef} style={{ minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: "0 32px 64px", position: "relative" }}>
           <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 70% 50% at 50% 0%, rgba(37,99,235,0.05) 0%, transparent 65%)", pointerEvents: "none" }} />
 
-          {/* Top metadata */}
+          {/* Top label */}
           <AnimatePresence>
-            {heroVisible && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 1, delay: 0.5 }}
-                style={{ position: "absolute", top: "80px", left: "32px", right: "32px", display: "flex", justifyContent: "space-between" }}
+            {headlineVisible && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1, delay: 0.4 }}
+                style={{ position: "absolute", top: "80px", left: "32px", right: "32px", display: "flex", justifyContent: "space-between", zIndex: 2 }}
               >
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--text-tertiary)" }}>GEO Intelligence Platform</span>
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.1em", color: "var(--text-tertiary)" }}>Est. 2026 · Welwyn Garden City, UK</span>
@@ -596,20 +584,17 @@ export default function HomePage() {
             )}
           </AnimatePresence>
 
-          {/* Headline — invisible during converge (particles form it), visible after */}
+          {/* Headline — invisible during converge (particles form it), fades in after */}
           <div style={{ position: "relative", zIndex: 2, maxWidth: "1200px" }}>
             <motion.h1
               initial={{ opacity: 0 }}
-              animate={contentVisible ? { opacity: 1 } : { opacity: 0 }}
-              transition={{ duration: 0.6, ease: EASE_EXPO }}
+              animate={headlineVisible ? { opacity: 1 } : { opacity: 0 }}
+              transition={{ duration: 0.5, ease: EASE_EXPO }}
               style={{
-                fontFamily:    "var(--font-display)",
-                fontSize:      "clamp(3.5rem, 10vw, 9.5rem)",
-                letterSpacing: "-0.05em",
-                lineHeight:    0.9,
-                color:         "var(--text-primary)",
-                fontWeight:    400,
-                marginBottom:  "48px",
+                fontFamily: "var(--font-display)",
+                fontSize: "clamp(3.5rem,10vw,9.5rem)",
+                letterSpacing: "-0.05em", lineHeight: 0.9,
+                color: "var(--text-primary)", fontWeight: 400, marginBottom: "48px",
               }}
             >
               Search<br />
@@ -623,7 +608,7 @@ export default function HomePage() {
                 <motion.div
                   initial={{ opacity: 0, y: 24 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.9, ease: EASE_EXPO, delay: 0.2 }}
+                  transition={{ duration: 0.9, ease: EASE_EXPO, delay: 0.3 }}
                   style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: "24px" }}
                 >
                   <p style={{ fontFamily: "var(--font-body)", fontSize: "clamp(14px,1.4vw,17px)", color: "var(--text-secondary)", lineHeight: 1.7, maxWidth: "420px", margin: 0 }}>
@@ -657,19 +642,14 @@ export default function HomePage() {
               </motion.div>
             )}
           </AnimatePresence>
-        </section>
+        </div>
 
-        {/* Rest of page fades in after converge */}
+        {/* ── REST OF CONTENT ────────────────────────────────────────────── */}
         <AnimatePresence>
           {contentVisible && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8, ease: EASE_EXPO }}>
-
               <Marquee />
-
-              <section style={{ maxWidth: "1400px", margin: "0 auto" }}>
-                <StatRow />
-              </section>
-
+              <section style={{ maxWidth: "1400px", margin: "0 auto" }}><StatRow /></section>
               <section style={{ maxWidth: "1400px", margin: "0 auto" }}>
                 <FadeUp style={{ padding: "64px 32px 32px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
@@ -679,7 +659,6 @@ export default function HomePage() {
                 </FadeUp>
                 {FEATURES.map(f => <FeatureRow key={f.index} feature={f} />)}
               </section>
-
               <section style={{ borderTop: "1px solid var(--border)", padding: "120px 32px", textAlign: "center", position: "relative", overflow: "hidden" }}>
                 <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 60% 80% at 50% 100%, rgba(37,99,235,0.07) 0%, transparent 60%)", pointerEvents: "none" }} />
                 <FadeUp>
@@ -697,7 +676,6 @@ export default function HomePage() {
                   >Get started free <ArrowUpRight size={15} /></Link>
                 </FadeUp>
               </section>
-
             </motion.div>
           )}
         </AnimatePresence>
