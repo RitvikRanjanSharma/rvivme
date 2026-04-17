@@ -17,7 +17,10 @@ import { useDomain } from "@/lib/useDomain";
 
 const EASE_EXPO = [0.16, 1, 0.3, 1] as const;
 function pv(delay = 0) {
-  return { hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 260, damping: 30, delay } } };
+  return {
+    hidden:  { opacity: 0, y: 16 },
+    visible: { opacity: 1, y: 0, transition: { type: "spring" as const, stiffness: 260, damping: 30, delay } },
+  };
 }
 
 interface LiveKeyword {
