@@ -10,7 +10,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { ArrowLeft, Clock, Share2, Link2, CheckCircle2, Twitter, Linkedin, Rss } from "lucide-react";
+import { ArrowLeft, Clock, Share2, Link2, CheckCircle2, Rss } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 const EASE_EXPO = [0.16, 1, 0.3, 1] as const;
@@ -203,9 +203,9 @@ export default function BlogPostPage() {
               </div>
               <div style={{ display: "flex", gap: "8px" }}>
                 {[
-                  { icon: Twitter,                         label: "Twitter",  action: () => window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(post.title)}&url=${encodeURIComponent(window.location.href)}`) },
-                  { icon: Linkedin,                        label: "LinkedIn", action: () => window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(window.location.href)}`) },
-                  { icon: copied ? CheckCircle2 : Link2,   label: "Copy",     action: copyLink },
+                  { label: "X",       icon: Share2,                        action: () => window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(post.title)}&url=${encodeURIComponent(window.location.href)}`) },
+                  { label: "LinkedIn",icon: ArrowLeft,                     action: () => window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(window.location.href)}`) },
+                  { label: "Copy",    icon: copied ? CheckCircle2 : Link2, action: copyLink },
                 ].map(({ icon: Icon, label, action }) => (
                   <button key={label} onClick={action} title={label}
                     style={{ width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", cursor: "pointer", color: "var(--text-tertiary)", transition: "all 0.15s" }}
