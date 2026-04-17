@@ -124,7 +124,6 @@ function MasterCanvas({
   const phaseTRef  = useRef<number>(0);
   const rafRef     = useRef<number>(0);
   const particles  = useRef<Particle[]>([]);
-  const wipePRef   = useRef({ x: 0, y: 0, r: 0 }); // wipe circle
   const initDone   = useRef(false);
   // offscreen layers
   const farOff     = useRef<HTMLCanvasElement | null>(null);
@@ -136,16 +135,20 @@ function MasterCanvas({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d")!;
-    let W = 0, H = 0;
+    const M = 200; // margin for offscreen particles
+    let W = 0, H = 0; // viewport dimensions (particle coords are in viewport space)
+    let CW = 0, CH = 0; // canvas dimensions = W+2M, H+2M
 
     farOff.current  = document.createElement("canvas");
     nearOff.current = document.createElement("canvas");
 
     function resize() {
-      W = canvas!.width  = window.innerWidth;
-      H = canvas!.height = window.innerHeight;
-      farOff.current!.width   = W; farOff.current!.height   = H;
-      nearOff.current!.width  = W; nearOff.current!.height  = H;
+      W  = window.innerWidth;
+      H  = window.innerHeight;
+      CW = canvas!.width  = W + 2 * M;
+      CH = canvas!.height = H + 2 * M;
+      farOff.current!.width   = CW; farOff.current!.height   = CH;
+      nearOff.current!.width  = CW; nearOff.current!.height  = CH;
       if (!initDone.current) buildParticles();
     }
 
@@ -160,13 +163,33 @@ function MasterCanvas({
         W, H, 4, 2000, "center"
       );
 
-      // Headline sample (converge target) — left aligned, bottom of hero
-      const hsize = Math.min(W * 0.092, 148);
-      const hPts  = sampleText(
-        ["Search", "intelligence", "for those", "who act."],
-        `400 ${hsize}px Georgia,serif`,
-        W, H, 4, 2000, "left"
-      );
+      // Headline sample — match CSS exactly:
+      // fontSize clamp(3.5rem,10vw,9.5rem) = clamp(56,W*0.10,152)
+      // lineHeight 0.9, hero padding-bottom 64, h1 margin-bottom 48
+      const hsize  = Math.max(56, Math.min(W * 0.10, 152));
+      const hlines = ["Search", "intelligence", "for those", "who act."];
+      const hlh    = hsize * 0.9;
+      const hlOff  = document.createElement("canvas");
+      hlOff.width  = W; hlOff.height = H;
+      const hlCtx  = hlOff.getContext("2d")!;
+      hlCtx.fillStyle    = "#fff";
+      hlCtx.font         = `400 ${hsize}px Georgia,serif`;
+      hlCtx.textBaseline = "top";
+      hlCtx.textAlign    = "left";
+      const hlStartY = H - 64 - 48 - hlines.length * hlh;
+      hlines.forEach((l, i) => hlCtx.fillText(l, 32, hlStartY + i * hlh));
+      const hlImgData = hlOff.getContext("2d")!.getImageData(0, 0, W, H).data;
+      const hPtsRaw: Array<{x:number;y:number}> = [];
+      for (let py2 = 0; py2 < H; py2 += 4)
+        for (let px2 = 0; px2 < W; px2 += 4)
+          if (hlImgData[(py2 * W + px2) * 4 + 3] > 80)
+            hPtsRaw.push({ x: px2 + 2, y: py2 + 2 });
+      for (let i = hPtsRaw.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [hPtsRaw[i], hPtsRaw[j]] = [hPtsRaw[j], hPtsRaw[i]];
+      }
+      if (hPtsRaw.length > 2000) hPtsRaw.length = 2000;
+      const hPts = hPtsRaw;
 
       const N = Math.min(cPts.length, hPts.length, 1800);
       particles.current = [];
@@ -185,8 +208,9 @@ function MasterCanvas({
           bx: cp.x + Math.cos(angle) * dist,
           by: cp.y + Math.sin(angle) * dist + up,
           tx: hp.x, ty: hp.y,
-          rx: Math.random() * W,
-          ry: Math.random() * H,
+          // spawn from entire viewport + margins — particles can come from offscreen
+          rx: -M + Math.random() * (W + 2 * M),
+          ry: -M + Math.random() * (H + 2 * M),
           dvx: (Math.random() - 0.5) * 0.25,
           dvy: -(0.1 + Math.random() * 0.2),
           dp:  Math.random() * Math.PI * 2,
@@ -205,8 +229,8 @@ function MasterCanvas({
       const near = nearOff.current!;
       const fc   = far.getContext("2d")!;
       const nc   = near.getContext("2d")!;
-      fc.clearRect(0, 0, W, H);
-      nc.clearRect(0, 0, W, H);
+      fc.clearRect(0, 0, CW, CH);
+      nc.clearRect(0, 0, CW, CH);
 
       const ph   = phaseRef.current;
       const sf   = clamp(scrollFrac.current, 0, 1);
@@ -233,16 +257,21 @@ function MasterCanvas({
           p.x = px; p.y = py; // persist for idle
         } else if (ph === "idle") {
           // scroll-driven disperse: sf=0 → at target, sf=1 → fully dispersed
+          // NO clamping — particles fly freely past screen edges
           const disperseT = easeInExpo(sf);
-          const dx = (p.rx - p.tx) * disperseT;
-          const dy = (p.ry - p.ty) * disperseT;
-          // gentle idle drift on top
+          // Direction vector from target toward random spawn (outward)
+          const dirX = p.rx - p.tx;
+          const dirY = p.ry - p.ty;
+          const dx   = dirX * disperseT * (1 + sf * 2); // accelerate further offscreen
+          const dy   = dirY * disperseT * (1 + sf * 2);
+          // gentle idle drift only when near home
           p.dp  += p.dps;
-          const drift = sf < 0.05 ? 1 : clamp(1 - sf * 4, 0, 1);
-          p.x   = p.tx + dx + Math.sin(p.dp) * 0.8 * drift;
-          p.y   = p.ty + dy + p.dvy * 0.3 * drift;
+          const drift = clamp(1 - sf * 6, 0, 1);
+          p.x   = p.tx + dx + Math.sin(p.dp) * 1.2 * drift;
+          p.y   = p.ty + dy + Math.cos(p.dp * 0.7) * 0.6 * drift;
           px    = p.x; py = p.y;
-          a     = clamp(1 - sf * 0.7, 0.05, 1);
+          // fade slightly when dispersed but never fully invisible
+          a     = clamp(1 - sf * 0.6, 0.02, 1);
         }
 
         if (a <= 0.01) continue;
@@ -253,7 +282,8 @@ function MasterCanvas({
         const tctx = p.depth < 0.4 ? fc : nc;
         tctx.globalAlpha = Math.max(0, Math.min(1, a));
         tctx.fillStyle   = `rgb(${c})`;
-        tctx.fillRect(Math.round(px - sz / 2), Math.round(py - sz / 2), Math.ceil(sz), Math.ceil(sz));
+        // offset by M — canvas is M pixels larger on each side
+        tctx.fillRect(Math.round(px - sz / 2 + M), Math.round(py - sz / 2 + M), Math.ceil(sz), Math.ceil(sz));
       }
 
       // Composite: far with blur, near sharp
@@ -268,7 +298,7 @@ function MasterCanvas({
     function frame(now: number) {
       const ph      = phaseRef.current;
       const elapsed = (now - phaseTRef.current) / 1000;
-      ctx.clearRect(0, 0, W, H);
+      ctx.clearRect(0, 0, CW, CH);
 
       // ── BURST ──────────────────────────────────────────────────────────
       if (ph === "burst") {
@@ -281,17 +311,15 @@ function MasterCanvas({
 
       // ── WIPE ───────────────────────────────────────────────────────────
       } else if (ph === "wipe") {
-        // Fade out remaining particles fast
         composite(elapsed);
-        // Draw expanding white circle from center
         const t  = clamp(elapsed / 0.55, 0, 1);
         const et = easeInExpo(t);
-        const r  = et * Math.sqrt(W * W + H * H);
+        const r  = et * Math.sqrt(CW * CW + CH * CH);
         ctx.save();
         ctx.globalAlpha = clamp(t * 1.5, 0, 1);
-        ctx.fillStyle   = "#f8f8f5"; // page light bg
+        ctx.fillStyle   = "#f8f8f5";
         ctx.beginPath();
-        ctx.arc(W / 2, H / 2, r, 0, Math.PI * 2);
+        ctx.arc(W / 2 + M, H / 2 + M, r, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
         if (t >= 1) {
@@ -301,11 +329,10 @@ function MasterCanvas({
 
       // ── CONVERGE ───────────────────────────────────────────────────────
       } else if (ph === "converge") {
-        // White background fading to dark
         const bgT = clamp(elapsed / 1.8, 0, 1);
         const bg  = Math.round(lerp(248, 8, easeOutCubic(bgT)));
         ctx.fillStyle = `rgb(${bg},${bg},${bg === 248 ? 245 : bg})`;
-        ctx.fillRect(0, 0, W, H);
+        ctx.fillRect(0, 0, CW, CH);
         composite(elapsed);
         const maxD = 0.6 + 1.4; // max convergeDelay + duration
         if (elapsed > maxD) {
@@ -338,9 +365,10 @@ function MasterCanvas({
       ref={canvasRef}
       style={{
         position:      "fixed",
-        inset:         0,
-        width:         "100%",
-        height:        "100%",
+        top:           "-200px",
+        left:          "-200px",
+        width:         "calc(100% + 400px)",
+        height:        "calc(100% + 400px)",
         pointerEvents: "none",
         zIndex:        5,
       }}
@@ -584,24 +612,14 @@ export default function HomePage() {
             )}
           </AnimatePresence>
 
-          {/* Headline — invisible during converge (particles form it), fades in after */}
+          {/* Headline is pure particles — DOM h1 removed */}
+          {/* Spacer holds the same height so CTA buttons stay positioned correctly */}
           <div style={{ position: "relative", zIndex: 2, maxWidth: "1200px" }}>
-            <motion.h1
-              initial={{ opacity: 0 }}
-              animate={headlineVisible ? { opacity: 1 } : { opacity: 0 }}
-              transition={{ duration: 0.5, ease: EASE_EXPO }}
-              style={{
-                fontFamily: "var(--font-display)",
-                fontSize: "clamp(3.5rem,10vw,9.5rem)",
-                letterSpacing: "-0.05em", lineHeight: 0.9,
-                color: "var(--text-primary)", fontWeight: 400, marginBottom: "48px",
-              }}
-            >
-              Search<br />
-              intelligence<br />
-              <span style={{ color: "var(--text-secondary)" }}>for those</span><br />
-              who act.
-            </motion.h1>
+            <div style={{
+              height: "clamp(calc(3.5rem * 4 * 0.9), calc(10vw * 4 * 0.9), calc(9.5rem * 4 * 0.9))",
+              marginBottom: "48px",
+              pointerEvents: "none",
+            }} />
 
             <AnimatePresence>
               {contentVisible && (
