@@ -176,13 +176,14 @@ function MasterCanvas({
       hlCtx.font         = `400 ${hsize}px Georgia,serif`;
       hlCtx.textBaseline = "top";
       hlCtx.textAlign    = "left";
-      const hlStartY = H - 64 - 48 - hlines.length * hlh;
+      // Match hero padding-top: 18vh (DOM content starts at 60px nav + 18vh padding)
+      const hlStartY = H * 0.18;
       hlines.forEach((l, i) => hlCtx.fillText(l, 32, hlStartY + i * hlh));
       const hlImgData = hlOff.getContext("2d")!.getImageData(0, 0, W, H).data;
       const hPtsRaw: Array<{x:number;y:number}> = [];
       for (let py2 = 0; py2 < H; py2 += 3)
         for (let px2 = 0; px2 < W; px2 += 3)
-          if (hlImgData[(py2 * W + px2) * 4 + 3] > 80)
+          if (hlImgData[(py2 * W + px2) * 4 + 3] > 30)
             hPtsRaw.push({ x: px2 + 1.5, y: py2 + 1.5 });
       for (let i = hPtsRaw.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -535,7 +536,7 @@ export default function HomePage() {
       if (!heroEl) return;
       const heroH  = heroEl.offsetHeight;
       const scrolled = window.scrollY;
-      scrollFrac.current = clamp(scrolled / (heroH * 0.7), 0, 1);
+      scrollFrac.current = clamp(scrolled / (heroH * 1.8), 0, 1);
     }
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
@@ -597,14 +598,14 @@ export default function HomePage() {
       <div style={{ background: phase === "converge" ? "transparent" : "var(--bg)", minHeight: "100vh", position: "relative", zIndex: 1 }}>
 
         {/* ── HERO ──────────────────────────────────────────────────────── */}
-        <div ref={heroRef} style={{ minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: "0 32px 64px", position: "relative" }}>
+        <div ref={heroRef} style={{ minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "flex-start", padding: "18vh 32px 64px", position: "relative" }}>
           <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 70% 50% at 50% 0%, rgba(37,99,235,0.05) 0%, transparent 65%)", pointerEvents: "none" }} />
 
           {/* Top label */}
           <AnimatePresence>
             {headlineVisible && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1, delay: 0.4 }}
-                style={{ position: "absolute", top: "80px", left: "32px", right: "32px", display: "flex", justifyContent: "space-between", zIndex: 2 }}
+                style={{ position: "absolute", top: "72px", left: "32px", right: "32px", display: "flex", justifyContent: "space-between", zIndex: 2 }}
               >
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--text-tertiary)" }}>GEO Intelligence Platform</span>
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.1em", color: "var(--text-tertiary)" }}>Est. 2026 · Welwyn Garden City, UK</span>
@@ -617,7 +618,7 @@ export default function HomePage() {
           <div style={{ position: "relative", zIndex: 2, maxWidth: "1200px" }}>
             <div style={{
               height: "clamp(calc(3.5rem * 4 * 0.9), calc(10vw * 4 * 0.9), calc(9.5rem * 4 * 0.9))",
-              marginBottom: "48px",
+              marginBottom: "52px",
               pointerEvents: "none",
             }} />
 
