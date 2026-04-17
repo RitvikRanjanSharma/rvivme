@@ -112,13 +112,14 @@ export default function BlogPostPage() {
         .single();
 
       if (error || !data) { setNotFound(true); setLoading(false); return; }
-      setPost(data as Post);
-      setLoading(false);
+      const post = data as Post;
+        setPost(post);
+        setLoading(false);
 
-      // Increment view count
-      await supabase.from("blog_posts").update({ view_count: (data.view_count ?? 0) + 1 } as never).eq("id", data.id);
-      // Log view event
-      await supabase.from("post_view_events").insert({ post_id: data.id, referrer: document.referrer || null } as never);
+        // Increment view count
+        await supabase.from("blog_posts").update({ view_count: (post.view_count ?? 0) + 1 } as never).eq("id", post.id);
+        // Log view event
+        await supabase.from("post_view_events").insert({ post_id: post.id, referrer: document.referrer || null } as never);
     }
     load();
   }, [slug]);
