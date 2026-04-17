@@ -108,8 +108,8 @@ function ProfileTab({ brandColor }: { brandColor: string }) {
       if (!user) return;
       setEmail(user.email ?? "");
       const { data } = await supabase.from("users").select("company_name, website_url").eq("id", user.id).single();
-      if (data) { setCompany(data.company_name ?? ""); setWebsite(data.website_url ?? ""); }
-      setLoading(false);
+      const row = data as { company_name: string; website_url: string } | null;
+      if (row) { setCompany(row.company_name ?? ""); setWebsite(row.website_url ?? ""); }
     }
     load();
   }, []);
