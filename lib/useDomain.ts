@@ -32,12 +32,13 @@ export function useDomain() {
         if (!user) { setDomain(FALLBACK); setLoading(false); return; }
 
         const { data, error: dbErr } = await supabase
-          .from("users").select("website_url").eq("id", user.id).single();
+        .from("users").select("website_url").eq("id", user.id).single();
+            const row = data as { website_url: string } | null;
 
-        if (dbErr || !data?.website_url) {
-          setDomain(FALLBACK);
-        } else {
-          const d = clean(data.website_url);
+            if (dbErr || !row?.website_url) {
+              setDomain(FALLBACK);
+            } else {
+              const d = clean(row.website_url);
           setDomain(d);
           if (typeof window !== "undefined") localStorage.setItem("aiml-domain", d);
         }
