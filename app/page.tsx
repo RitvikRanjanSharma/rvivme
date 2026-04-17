@@ -160,7 +160,7 @@ function MasterCanvas({
       const cPts  = sampleText(
         ["100", "AI MARKETING LABS"],
         `400 ${csize}px "DM Mono",monospace`,
-        W, H, 4, 2000, "center"
+        W, H, 3, 5000, "center"
       );
 
       // Headline sample — match CSS exactly:
@@ -180,18 +180,18 @@ function MasterCanvas({
       hlines.forEach((l, i) => hlCtx.fillText(l, 32, hlStartY + i * hlh));
       const hlImgData = hlOff.getContext("2d")!.getImageData(0, 0, W, H).data;
       const hPtsRaw: Array<{x:number;y:number}> = [];
-      for (let py2 = 0; py2 < H; py2 += 4)
-        for (let px2 = 0; px2 < W; px2 += 4)
+      for (let py2 = 0; py2 < H; py2 += 3)
+        for (let px2 = 0; px2 < W; px2 += 3)
           if (hlImgData[(py2 * W + px2) * 4 + 3] > 80)
-            hPtsRaw.push({ x: px2 + 2, y: py2 + 2 });
+            hPtsRaw.push({ x: px2 + 1.5, y: py2 + 1.5 });
       for (let i = hPtsRaw.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [hPtsRaw[i], hPtsRaw[j]] = [hPtsRaw[j], hPtsRaw[i]];
       }
-      if (hPtsRaw.length > 2000) hPtsRaw.length = 2000;
+      if (hPtsRaw.length > 5000) hPtsRaw.length = 5000;
       const hPts = hPtsRaw;
 
-      const N = Math.min(cPts.length, hPts.length, 1800);
+      const N = Math.min(cPts.length, hPts.length, 5000);
       particles.current = [];
 
       for (let i = 0; i < N; i++) {
@@ -215,7 +215,7 @@ function MasterCanvas({
           dvy: -(0.1 + Math.random() * 0.2),
           dp:  Math.random() * Math.PI * 2,
           dps: 0.006 + Math.random() * 0.01,
-          size: 2.5 + Math.random() * 1.5,
+          size: 1.5 + Math.random() * 1.0,
           depth,
           color: depth > 0.6 ? "255,255,255" : depth > 0.3 ? "140,170,255" : "37,99,235",
           burstDelay:    (i / N) * 0.35,
