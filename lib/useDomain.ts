@@ -1,63 +1,54 @@
+"use client";
+
 // lib/useDomain.ts
 // =============================================================================
-// AIMarketingLabs — useDomain hook
-// Reads the authenticated user's website_url from Supabase public.users table.
-// Falls back to aimarketinglab.co.uk during development / before auth is set up.
+// AI Marketing Labs — useDomain hook
+// Reads website_url from Supabase public.users
+// Falls back to aimarketinglab.co.uk
 // =============================================================================
-
-"use client";
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 
-const FALLBACK_DOMAIN = "aimarketinglab.co.uk";
+const FALLBACK = "aimarketinglab.co.uk";
 
-function cleanDomain(url: string): string {
-  return url
-    .replace(/^https?:\/\//, "")
-    .replace(/^www\./, "")
-    .replace(/\/$/, "")
-    .trim();
+function clean(url: string): string {
+  return url.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "").trim();
 }
 
 export function useDomain() {
-  const [domain,  setDomain]  = useState<string>(FALLBACK_DOMAIN);
+  const [domain,  setDomain]  = useState<string>(FALLBACK);
   const [loading, setLoading] = useState<boolean>(true);
   const [error,   setError]   = useState<string | null>(null);
 
   useEffect(() => {
-    async function fetchDomain() {
+    // Check localStorage cache first (set by settings save)
+    const cached = typeof window !== "undefined" && localStorage.getItem("aiml-domain");
+    if (cached) { setDomain(cached); setLoading(false); }
+
+    async function fetch() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
+        if (!user) { setDomain(FALLBACK); setLoading(false); return; }
 
-        if (!user) {
-          setDomain(FALLBACK_DOMAIN);
-          setLoading(false);
-          return;
+        const { data, error: dbErr } = await supabase
+          .from("users").select("website_url").eq("id", user.id).single();
+
+        if (dbErr || !data?.website_url) {
+          setDomain(FALLBACK);
+        } else {
+          const d = clean(data.website_url);
+          setDomain(d);
+          if (typeof window !== "undefined") localStorage.setItem("aiml-domain", d);
         }
-
-        const { data, error: dbError } = await supabase
-        .from("users")
-        .select("website_url")
-        .eq("id", user.id)
-        .single();
-
-      const record = data as { website_url: string } | null;
-
-      if (dbError || !record?.website_url) {
-        setDomain(FALLBACK_DOMAIN);
-      } else {
-        setDomain(cleanDomain(record.website_url));
-      }
-      } catch (error) {
-        setError(error instanceof Error ? error.message : "Unable to resolve domain");
-        setDomain(FALLBACK_DOMAIN);
+      } catch (e: any) {
+        setError(e.message);
+        setDomain(FALLBACK);
       } finally {
         setLoading(false);
       }
     }
-
-    fetchDomain();
+    fetch();
   }, []);
 
   return { domain, loading, error };

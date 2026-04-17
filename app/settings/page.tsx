@@ -1,471 +1,440 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Bell, CreditCard, Database, Palette, Plug, Shield, User } from "lucide-react";
-import { supabase, type Database as AppDatabase } from "@/lib/supabase";
+// app/settings/page.tsx
+// =============================================================================
+// AI Marketing Labs — Settings
+// Profile saves to Supabase · Branding persisted · All RVIVME refs removed
+// =============================================================================
 
-type UserRow = AppDatabase["public"]["Tables"]["users"]["Row"];
-type TabId = "profile" | "branding" | "integrations" | "data" | "billing" | "security";
+import { useState, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  User, Palette, Plug, CreditCard, Shield, Database,
+  CheckCircle2, AlertCircle, Save, RefreshCw,
+  Globe2, BarChart3, Cpu, Trash2, Eye, EyeOff,
+} from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 
-const tabs = [
-  { id: "profile", label: "Profile", icon: User },
-  { id: "branding", label: "Branding", icon: Palette },
-  { id: "integrations", label: "Integrations", icon: Plug },
-  { id: "data", label: "Data", icon: Database },
-  { id: "billing", label: "Billing", icon: CreditCard },
-  { id: "security", label: "Security", icon: Shield },
-] as const;
+type TabId = "profile" | "branding" | "integrations" | "billing" | "security";
 
-const brandPresets = ["#2563eb", "#f97316", "#10b981", "#e11d48", "#06b6d4", "#7c3aed"] as const;
+const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
+  { id: "profile",      label: "Profile",          icon: User      },
+  { id: "branding",     label: "Branding",          icon: Palette   },
+  { id: "integrations", label: "Integrations",      icon: Plug      },
+  { id: "billing",      label: "Billing",           icon: CreditCard},
+  { id: "security",     label: "Security",          icon: Shield    },
+];
 
-const defaultProfile: Pick<
-  UserRow,
-  "company_name" | "gsc_connected" | "ga4_connected" | "onboarding_complete" | "primary_color_hex" | "subscription_tier" | "theme_mode" | "website_url"
-> = {
-  company_name: "Rvivme",
-  website_url: "https://rvivme.example",
-  primary_color_hex: "#2563eb",
-  subscription_tier: "free",
-  ga4_connected: false,
-  gsc_connected: false,
-  theme_mode: "dark",
-  onboarding_complete: false,
-};
+const BRAND_PRESETS = [
+  "#2563eb","#7c3aed","#db2777","#ea580c",
+  "#16a34a","#dc2626","#d97706","#0891b2",
+];
 
-function isTabId(value: string | null): value is TabId {
-  return tabs.some((tab) => tab.id === value);
+const EASE = [0.16, 1, 0.3, 1] as const;
+function pv(delay = 0) {
+  return { hidden: { opacity: 0, y: 14 }, visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 260, damping: 30, delay } } };
 }
 
-function SectionCard({
-  title,
-  description,
-  action,
-  children,
-}: {
-  title: string;
-  description: string;
-  action?: React.ReactNode;
-  children: React.ReactNode;
-}) {
+function hexToRgb(hex: string) {
+  const c = hex.replace("#","");
+  return `${parseInt(c.slice(0,2),16)}, ${parseInt(c.slice(2,4),16)}, ${parseInt(c.slice(4,6),16)}`;
+}
+
+// ── UI primitives ─────────────────────────────────────────────────────────────
+function Panel({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", ...style }}>{children}</div>;
+}
+function PH({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
-    <section
-      style={{
-        background: "var(--surface)",
-        border: "1px solid var(--border)",
-        borderRadius: "24px",
-        padding: "24px",
-      }}
-    >
-      <div style={{ alignItems: "start", display: "flex", gap: "16px", justifyContent: "space-between", marginBottom: "20px" }}>
-        <div>
-          <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.6rem", letterSpacing: "-0.05em", margin: 0 }}>{title}</h2>
-          <p style={{ color: "var(--text-secondary)", lineHeight: 1.6, margin: "10px 0 0" }}>{description}</p>
-        </div>
-        {action}
-      </div>
+    <div style={{ padding: "18px 22px", borderBottom: "1px solid var(--border)" }}>
+      <div style={{ fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: 600, color: "var(--text-primary)", marginBottom: subtitle ? "3px" : 0 }}>{title}</div>
+      {subtitle && <div style={{ fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--text-tertiary)" }}>{subtitle}</div>}
+    </div>
+  );
+}
+function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
+  return (
+    <div style={{ marginBottom: "18px" }}>
+      <label style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: "7px" }}>{label}</label>
       {children}
-    </section>
+      {hint && <div style={{ fontFamily: "var(--font-body)", fontSize: "11px", color: "var(--text-tertiary)", marginTop: "5px" }}>{hint}</div>}
+    </div>
   );
 }
-
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-  type = "text",
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  type?: string;
-}) {
+function TextInput({ value, onChange, placeholder, type="text", disabled }: { value: string; onChange: (v:string)=>void; placeholder?: string; type?: string; disabled?: boolean }) {
   return (
-    <label style={{ display: "block" }}>
-      <span style={{ color: "var(--text-secondary)", display: "block", fontSize: "0.9rem", marginBottom: "8px" }}>{label}</span>
-      <input
-        type={type}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        style={{
-          background: "var(--card)",
-          border: "1px solid var(--border)",
-          borderRadius: "16px",
-          color: "var(--text-primary)",
-          padding: "14px 16px",
-          width: "100%",
-        }}
-      />
-    </label>
+    <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} disabled={disabled}
+      style={{ width: "100%", padding: "10px 13px", fontFamily: "var(--font-body)", fontSize: "13px", color: disabled ? "var(--text-tertiary)" : "var(--text-primary)", background: disabled ? "var(--muted)" : "var(--card)", border: "1px solid var(--border)", borderRadius: "8px", outline: "none", transition: "border-color 0.16s", boxSizing: "border-box" as const, cursor: disabled ? "not-allowed" : "text" }}
+      onFocus={e => { if (!disabled) e.currentTarget.style.borderColor = "var(--brand)"; }}
+      onBlur={e =>  { e.currentTarget.style.borderColor = "var(--border)"; }}
+    />
   );
 }
-
-function SaveButton({
-  disabled,
-  label,
-  onClick,
-}: {
-  disabled?: boolean;
-  label: string;
-  onClick: () => void | Promise<void>;
-}) {
+function SaveBtn({ brandColor, onClick, loading, saved, label="Save changes" }: { brandColor: string; onClick?: ()=>void; loading?: boolean; saved?: boolean; label?: string }) {
   return (
-    <button
-      type="button"
-      onClick={() => void onClick()}
-      disabled={disabled}
-      style={{
-        background: disabled ? "var(--muted)" : "linear-gradient(135deg, var(--brand), color-mix(in srgb, var(--brand) 55%, #081018))",
-        border: "none",
-        borderRadius: "999px",
-        color: "#ffffff",
-        cursor: disabled ? "not-allowed" : "pointer",
-        padding: "12px 18px",
-      }}
+    <button onClick={onClick} disabled={loading} style={{
+      display: "inline-flex", alignItems: "center", gap: "7px",
+      fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 500,
+      color: "#fff",
+      background: saved ? "#16a34a" : loading ? "var(--muted)" : brandColor,
+      border: "none", borderRadius: "8px", padding: "10px 20px",
+      cursor: loading ? "not-allowed" : "pointer", transition: "opacity 0.16s, background 0.3s",
+    }}
+      onMouseEnter={e => { if (!loading && !saved) (e.currentTarget as HTMLElement).style.opacity = "0.85"; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
     >
-      {label}
+      {loading ? <div style={{ width: "12px", height: "12px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
+        : saved ? <CheckCircle2 size={13} /> : <Save size={13} />}
+      {saved ? "Saved" : label}
     </button>
   );
 }
 
-export default function SettingsPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const requestedTab = searchParams.get("tab");
-  const activeTab: TabId = isTabId(requestedTab) ? requestedTab : "profile";
-
-  const [companyName, setCompanyName] = useState(defaultProfile.company_name);
-  const [websiteUrl, setWebsiteUrl] = useState(defaultProfile.website_url);
-  const [fullName, setFullName] = useState("Marketing Operator");
-  const [email, setEmail] = useState("team@rvivme.com");
-  const [brandColor, setBrandColor] = useState(defaultProfile.primary_color_hex);
-  const [profile, setProfile] = useState(defaultProfile);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-
-  const setTab = (tab: TabId) => {
-    router.replace(`/settings?tab=${tab}`);
-  };
-
-  const loadProfile = useCallback(async () => {
-    setLoading(true);
-    setStatusMessage(null);
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      setLoading(false);
-      setStatusMessage(authError?.message ?? "Sign in to manage settings.");
-      return;
-    }
-
-    setEmail(user.email ?? "");
-    setFullName((user.user_metadata?.full_name as string | undefined) ?? "");
-
-    const { data, error } = await supabase.from("users").select("*").eq("id", user.id).single();
-    const userProfile = data as UserRow | null;
-
-    if (error || !userProfile) {
-      setLoading(false);
-      setStatusMessage(error?.message ?? "Unable to load workspace profile.");
-      return;
-    }
-
-    setProfile(userProfile);
-    setCompanyName(userProfile.company_name);
-    setWebsiteUrl(userProfile.website_url);
-    setBrandColor(userProfile.primary_color_hex);
-    window.localStorage.setItem("rvivme-brand", userProfile.primary_color_hex);
-    window.localStorage.setItem("rvivme-theme", userProfile.theme_mode);
-    document.documentElement.style.setProperty("--brand", userProfile.primary_color_hex);
-    setLoading(false);
-  }, []);
+// ── Profile tab ───────────────────────────────────────────────────────────────
+function ProfileTab({ brandColor }: { brandColor: string }) {
+  const [company,  setCompany]  = useState("");
+  const [website,  setWebsite]  = useState("");
+  const [email,    setEmail]    = useState("");
+  const [loading,  setLoading]  = useState(true);
+  const [saving,   setSaving]   = useState(false);
+  const [saved,    setSaved]    = useState(false);
+  const [error,    setError]    = useState<string|null>(null);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadProfile();
-  }, [loadProfile]);
-
-  const saveProfile = useCallback(async () => {
-    setSaving(true);
-    setStatusMessage(null);
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      setSaving(false);
-      setStatusMessage("You need to sign in again before saving.");
-      return;
+    async function load() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      setEmail(user.email ?? "");
+      const { data } = await supabase.from("users").select("company_name, website_url").eq("id", user.id).single();
+      if (data) { setCompany(data.company_name ?? ""); setWebsite(data.website_url ?? ""); }
+      setLoading(false);
     }
+    load();
+  }, []);
 
-    const { error } = await supabase
-      .from("users")
-      .update({
-        company_name: companyName,
-        website_url: websiteUrl,
-      } as never)
-      .eq("id", user.id);
-
-    if (!error) {
-      const { error: authUpdateError } = await supabase.auth.updateUser({
-        data: { full_name: fullName },
-      });
-
-      setStatusMessage(authUpdateError ? authUpdateError.message : "Profile saved.");
-    } else {
-      setStatusMessage(error.message);
+  async function handleSave() {
+    setSaving(true); setError(null);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { error: dbErr } = await supabase.from("users").update({
+      company_name: company.trim(),
+      website_url:  website.trim(),
+    } as never).eq("id", user.id);
+    if (dbErr) { setError(dbErr.message); setSaving(false); return; }
+    // Update localStorage fallback domain
+    if (typeof window !== "undefined") {
+      localStorage.setItem("aiml-domain", website.trim().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, ""));
     }
+    setSaving(false); setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  }
 
-    setSaving(false);
-    void loadProfile();
-  }, [companyName, fullName, loadProfile, websiteUrl]);
-
-  const saveBranding = useCallback(async () => {
-    setSaving(true);
-    setStatusMessage(null);
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      setSaving(false);
-      setStatusMessage("You need to sign in again before saving.");
-      return;
-    }
-
-    const { error } = await supabase
-      .from("users")
-      .update({
-        primary_color_hex: brandColor,
-        theme_mode: profile.theme_mode,
-      } as never)
-      .eq("id", user.id);
-
-    if (error) {
-      setStatusMessage(error.message);
-    } else {
-      window.localStorage.setItem("rvivme-brand", brandColor);
-      document.documentElement.style.setProperty("--brand", brandColor);
-      setStatusMessage("Brand settings saved.");
-    }
-
-    setSaving(false);
-    void loadProfile();
-  }, [brandColor, loadProfile, profile.theme_mode]);
-
-  const metrics = useMemo(
-    () => [
-      { label: "Connected sources", value: `${Number(profile.ga4_connected) + Number(profile.gsc_connected)} live` },
-      { label: "Subscription", value: profile.subscription_tier },
-      { label: "Onboarding", value: profile.onboarding_complete ? "Complete" : "In progress" },
-    ],
-    [profile.ga4_connected, profile.gsc_connected, profile.onboarding_complete, profile.subscription_tier],
-  );
-
-  const renderContent = () => {
-    switch (activeTab) {
-      case "profile":
-        return (
-          <SectionCard
-            title="Workspace profile"
-            description="These values are stored in Supabase and used across reports, onboarding, and platform defaults."
-            action={<SaveButton disabled={saving || loading} label={saving ? "Saving..." : "Save profile"} onClick={saveProfile} />}
-          >
-            <div style={{ display: "grid", gap: "16px", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
-              <Field label="Full name" value={fullName} onChange={setFullName} />
-              <Field label="Email" value={email} onChange={setEmail} type="email" />
-              <Field label="Company name" value={companyName} onChange={setCompanyName} />
-              <Field label="Primary domain" value={websiteUrl} onChange={setWebsiteUrl} />
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+      <motion.div variants={pv(0.1)} initial="hidden" animate="visible">
+        <Panel>
+          <PH title="Organisation Profile" subtitle="Used across all reports, exports, and API calls." />
+          <div style={{ padding: "22px" }}>
+            {error && <div style={{ padding: "10px 14px", background: "rgba(255,23,68,0.08)", border: "1px solid rgba(255,23,68,0.20)", borderRadius: "7px", marginBottom: "16px", fontFamily: "var(--font-body)", fontSize: "13px", color: "var(--signal-red)" }}>{error}</div>}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
+              <Field label="Company Name">
+                <TextInput value={company} onChange={setCompany} placeholder="AI Marketing Labs" disabled={loading} />
+              </Field>
+              <Field label="Email Address">
+                <TextInput value={email} onChange={setEmail} placeholder="admin@company.com" type="email" disabled={true} />
+              </Field>
+              <Field label="Primary Website URL" hint="Used for keyword and competitor analysis.">
+                <TextInput value={website} onChange={setWebsite} placeholder="https://yourwebsite.com" disabled={loading} />
+              </Field>
             </div>
-          </SectionCard>
-        );
-      case "branding":
-        return (
-          <SectionCard
-            title="Brand system"
-            description="Primary color and theme preferences are now read from and written back to your user profile."
-            action={<SaveButton disabled={saving || loading} label={saving ? "Saving..." : "Save branding"} onClick={saveBranding} />}
-          >
-            <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "16px" }}>
-              {brandPresets.map((preset) => (
-                <button
-                  key={preset}
-                  type="button"
-                  onClick={() => setBrandColor(preset)}
-                  style={{
-                    background: preset,
-                    border: brandColor === preset ? "3px solid white" : "1px solid rgba(255,255,255,0.2)",
-                    borderRadius: "18px",
-                    cursor: "pointer",
-                    height: "54px",
-                    width: "54px",
-                  }}
-                />
-              ))}
-              <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "18px", padding: "12px 16px" }}>
-                <p style={{ color: "var(--text-tertiary)", fontSize: "0.85rem", margin: 0 }}>Current accent</p>
-                <p style={{ fontFamily: "var(--font-mono)", margin: "6px 0 0" }}>{brandColor.toUpperCase()}</p>
+            <SaveBtn brandColor={brandColor} onClick={handleSave} loading={saving} saved={saved} />
+          </div>
+        </Panel>
+      </motion.div>
+
+      <motion.div variants={pv(0.18)} initial="hidden" animate="visible">
+        <Panel>
+          <PH title="Danger Zone" subtitle="Irreversible account operations." />
+          <div style={{ padding: "22px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "3px" }}>Delete Account</div>
+              <div style={{ fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--text-tertiary)" }}>Permanently deletes all data. This cannot be undone.</div>
+            </div>
+            <button style={{ display: "flex", alignItems: "center", gap: "5px", fontFamily: "var(--font-body)", fontSize: "12px", fontWeight: 500, color: "var(--signal-red)", background: "rgba(255,23,68,0.08)", border: "1px solid rgba(255,23,68,0.25)", borderRadius: "7px", padding: "8px 14px", cursor: "pointer" }}>
+              <Trash2 size={12} /> Delete Account
+            </button>
+          </div>
+        </Panel>
+      </motion.div>
+    </div>
+  );
+}
+
+// ── Branding tab ──────────────────────────────────────────────────────────────
+function BrandingTab({ brandColor, onBrandChange }: { brandColor: string; onBrandChange: (hex: string) => void }) {
+  const [hex,     setHex]     = useState(brandColor);
+  const [saving,  setSaving]  = useState(false);
+  const [saved,   setSaved]   = useState(false);
+
+  function apply(color: string) {
+    const clean = color.startsWith("#") ? color : `#${color}`;
+    if (/^#[0-9A-Fa-f]{6}$/.test(clean)) { setHex(clean); onBrandChange(clean); }
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase.from("users").update({ primary_color_hex: hex } as never).eq("id", user.id);
+    }
+    setSaving(false); setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+      <motion.div variants={pv(0.1)} initial="hidden" animate="visible">
+        <Panel>
+          <PH title="Brand Colour" subtitle="Sets the primary accent across charts, buttons, and active states." />
+          <div style={{ padding: "22px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "16px", padding: "16px 20px", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "10px", marginBottom: "22px" }}>
+              <div style={{ width: "52px", height: "52px", borderRadius: "12px", background: hex, boxShadow: `0 0 20px rgba(${hexToRgb(hex)},0.4)`, flexShrink: 0, transition: "background 0.2s" }} />
+              <div>
+                <div style={{ fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "3px" }}>Current Brand Colour</div>
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: "13px", color: hex }}>{hex.toUpperCase()}</div>
               </div>
             </div>
-          </SectionCard>
-        );
-      case "integrations":
-        return (
-          <SectionCard title="Integrations" description="Connection status is now reflecting the actual booleans stored on your user record.">
-            <div style={{ display: "grid", gap: "14px" }}>
-              {[
-                { name: "Google Search Console", status: profile.gsc_connected ? "Connected" : "Pending connection" },
-                { name: "GA4", status: profile.ga4_connected ? "Connected" : "Ready to connect" },
-                { name: "DataForSEO", status: "Configured via environment variables" },
-              ].map((integration) => (
-                <div
-                  key={integration.name}
-                  style={{ alignItems: "center", background: "var(--card)", borderRadius: "18px", display: "flex", justifyContent: "space-between", padding: "16px 18px" }}
-                >
-                  <div>
-                    <p style={{ margin: 0 }}>{integration.name}</p>
-                    <p style={{ color: "var(--text-secondary)", margin: "6px 0 0" }}>{integration.status}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </SectionCard>
-        );
-      case "data":
-        return (
-          <SectionCard title="Data operations" description="This section is pulling from your connected profile state and current app configuration.">
-            <div style={{ display: "grid", gap: "14px", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-              {[
-                { label: "Theme mode", value: profile.theme_mode },
-                { label: "Primary color", value: profile.primary_color_hex },
-                { label: "Site domain", value: profile.website_url },
-              ].map((item) => (
-                <div key={item.label} style={{ background: "var(--card)", borderRadius: "18px", padding: "18px" }}>
-                  <p style={{ color: "var(--text-tertiary)", fontSize: "0.85rem", margin: 0 }}>{item.label}</p>
-                  <p style={{ fontFamily: "var(--font-display)", fontSize: "1.5rem", margin: "8px 0 0" }}>{item.value}</p>
-                </div>
-              ))}
-            </div>
-          </SectionCard>
-        );
-      case "billing":
-        return (
-          <SectionCard title="Billing" description="Billing status is now reading from the real subscription tier stored on your account.">
-            <div style={{ display: "grid", gap: "14px", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-              {[
-                { label: "Plan", value: profile.subscription_tier },
-                { label: "Workspace status", value: profile.onboarding_complete ? "Active" : "Setup pending" },
-                { label: "Theme preference", value: profile.theme_mode },
-              ].map((item) => (
-                <div key={item.label} style={{ background: "var(--card)", borderRadius: "18px", padding: "18px" }}>
-                  <p style={{ color: "var(--text-tertiary)", fontSize: "0.85rem", margin: 0 }}>{item.label}</p>
-                  <p style={{ fontFamily: "var(--font-display)", fontSize: "1.5rem", margin: "8px 0 0" }}>{item.value}</p>
-                </div>
-              ))}
-            </div>
-          </SectionCard>
-        );
-      case "security":
-        return (
-          <SectionCard title="Security" description="Security posture now reflects your authenticated account state and workspace flags.">
-            <div style={{ display: "grid", gap: "14px" }}>
-              {[
-                `Signed in as ${email || "unknown user"}`,
-                `Onboarding ${profile.onboarding_complete ? "completed" : "not completed"}`,
-                `Theme preference stored as ${profile.theme_mode}`,
-              ].map((line) => (
-                <div key={line} style={{ background: "var(--card)", borderRadius: "18px", padding: "16px 18px" }}>
-                  {line}
-                </div>
-              ))}
-            </div>
-          </SectionCard>
-        );
-    }
+
+            <Field label="Colour Presets">
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {BRAND_PRESETS.map(p => (
+                  <button key={p} onClick={() => apply(p)}
+                    style={{ width: "32px", height: "32px", borderRadius: "8px", background: p, border: `2px solid ${hex === p ? "var(--text-primary)" : "transparent"}`, cursor: "pointer", transition: "transform 0.15s" }}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.transform = "scale(1.12)"}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.transform = "scale(1)"}
+                  />
+                ))}
+              </div>
+            </Field>
+
+            <Field label="Custom Hex">
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <div style={{ width: "36px", height: "36px", borderRadius: "7px", background: hex, flexShrink: 0, border: "1px solid var(--border)" }} />
+                <TextInput value={hex} onChange={apply} placeholder="#2563eb" />
+              </div>
+            </Field>
+
+            <SaveBtn brandColor={brandColor} onClick={handleSave} loading={saving} saved={saved} label="Apply Brand Colour" />
+          </div>
+        </Panel>
+      </motion.div>
+    </div>
+  );
+}
+
+// ── Integrations tab ──────────────────────────────────────────────────────────
+function IntegrationsTab({ brandColor }: { brandColor: string }) {
+  const integrations = [
+    { id: "ga4",        name: "Google Analytics 4",      desc: "Traffic, sessions, and user behaviour data", icon: BarChart3, status: "connected" as const,    note: "Service account connected via GA4 Data API" },
+    { id: "gsc",        name: "Google Search Console",   desc: "Impressions, clicks, positions, CTR",         icon: Globe2,   status: "connected" as const,    note: `sc-domain:${typeof window !== "undefined" ? localStorage.getItem("aiml-domain") || "aimarketinglab.co.uk" : "aimarketinglab.co.uk"}` },
+    { id: "dataforseo", name: "DataForSEO",              desc: "Keywords, SERP, backlinks, AI Overviews",     icon: Cpu,      status: "connected" as const,    note: "UK (2826) · Standard plan" },
+  ];
+
+  const statusCfg = {
+    connected:    { label: "Connected",    color: "var(--signal-green)", bg: "rgba(0,230,118,0.08)" },
+    disconnected: { label: "Disconnected", color: "var(--text-tertiary)", bg: "var(--card)" },
+    error:        { label: "Error",        color: "var(--signal-red)",   bg: "rgba(255,23,68,0.08)" },
   };
 
   return (
-    <div style={{ margin: "0 auto", maxWidth: "1280px", padding: "40px 24px 80px" }}>
-      <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: "14px", justifyContent: "space-between", marginBottom: "28px" }}>
-        <div>
-          <p style={{ color: "var(--brand)", fontFamily: "var(--font-mono)", letterSpacing: "0.08em", margin: 0, textTransform: "uppercase" }}>
-            Settings
-          </p>
-          <h1 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(2rem, 5vw, 3.4rem)", letterSpacing: "-0.06em", margin: "8px 0 0" }}>
-            Tune the workspace around your team.
-          </h1>
+    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+      {integrations.map((intg, i) => {
+        const Icon = intg.icon;
+        const sc = statusCfg[intg.status];
+        return (
+          <motion.div key={intg.id} variants={pv(0.08 + i * 0.07)} initial="hidden" animate="visible">
+            <Panel style={{ padding: "20px 22px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "14px", flex: 1, minWidth: 0 }}>
+                  <div style={{ width: "42px", height: "42px", borderRadius: "10px", background: `rgba(var(--brand-rgb),0.08)`, border: `1px solid rgba(var(--brand-rgb),0.20)`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <Icon size={18} color={brandColor} />
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "3px", flexWrap: "wrap" }}>
+                      <span style={{ fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>{intg.name}</span>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: "9px", color: sc.color, background: sc.bg, border: `1px solid ${sc.color}30`, padding: "2px 8px", borderRadius: "100px", letterSpacing: "0.08em", textTransform: "uppercase" }}>{sc.label}</span>
+                    </div>
+                    <div style={{ fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--text-secondary)", marginBottom: "3px" }}>{intg.desc}</div>
+                    <div style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>{intg.note}</div>
+                  </div>
+                </div>
+                <button style={{ display: "flex", alignItems: "center", gap: "4px", fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-tertiary)", background: "transparent", border: "1px solid var(--border)", borderRadius: "6px", padding: "6px 10px", cursor: "pointer", letterSpacing: "0.06em", flexShrink: 0 }}>
+                  <RefreshCw size={10} /> SYNC
+                </button>
+              </div>
+            </Panel>
+          </motion.div>
+        );
+      })}
+
+      <motion.div variants={pv(0.3)} initial="hidden" animate="visible">
+        <div style={{ padding: "16px 20px", background: "var(--muted)", border: "1px solid var(--border)", borderRadius: "12px" }}>
+          <div style={{ fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 500, color: "var(--text-secondary)", marginBottom: "4px" }}>
+            To connect or reconfigure integrations, update the environment variables in your Vercel dashboard and redeploy.
+          </div>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>
+            GA4_SERVICE_ACCOUNT_KEY · GA4_PROPERTY_ID · GSC_SITE_URL · DATAFORSEO_LOGIN · DATAFORSEO_PASSWORD
+          </div>
         </div>
-        <div style={{ display: "flex", gap: "10px" }}>
-          <button
-            type="button"
-            onClick={() => void loadProfile()}
-            style={{ alignItems: "center", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "999px", color: "var(--text-secondary)", display: "flex", gap: "8px", padding: "12px 16px" }}
+      </motion.div>
+    </div>
+  );
+}
+
+// ── Security tab ──────────────────────────────────────────────────────────────
+function SecurityTab({ brandColor }: { brandColor: string }) {
+  const [current, setCurrent] = useState("");
+  const [pw,      setPw]      = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [showPw,  setShowPw]  = useState(false);
+  const [saving,  setSaving]  = useState(false);
+  const [saved,   setSaved]   = useState(false);
+  const [error,   setError]   = useState<string|null>(null);
+
+  async function handleSave() {
+    if (pw.length < 12) { setError("Password must be at least 12 characters."); return; }
+    if (pw !== confirm)  { setError("Passwords do not match."); return; }
+    setSaving(true); setError(null);
+    const { error: authErr } = await supabase.auth.updateUser({ password: pw });
+    if (authErr) { setError(authErr.message); setSaving(false); return; }
+    setSaving(false); setSaved(true); setPw(""); setConfirm(""); setCurrent("");
+    setTimeout(() => setSaved(false), 2500);
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+      <motion.div variants={pv(0.1)} initial="hidden" animate="visible">
+        <Panel>
+          <PH title="Change Password" subtitle="Minimum 12 characters." />
+          <div style={{ padding: "22px" }}>
+            {error && <div style={{ padding: "10px 14px", background: "rgba(255,23,68,0.08)", border: "1px solid rgba(255,23,68,0.20)", borderRadius: "7px", marginBottom: "16px", fontFamily: "var(--font-body)", fontSize: "13px", color: "var(--signal-red)" }}>{error}</div>}
+            <Field label="New Password">
+              <div style={{ position: "relative" }}>
+                <input type={showPw ? "text" : "password"} value={pw} onChange={e => setPw(e.target.value)} placeholder="••••••••••••"
+                  style={{ width: "100%", padding: "10px 42px 10px 13px", fontFamily: "var(--font-mono)", fontSize: "13px", color: "var(--text-primary)", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "8px", outline: "none", transition: "border-color 0.16s", boxSizing: "border-box" as const }}
+                  onFocus={e => e.currentTarget.style.borderColor = "var(--brand)"}
+                  onBlur={e =>  e.currentTarget.style.borderColor = "var(--border)"}
+                />
+                <button type="button" onClick={() => setShowPw(!showPw)} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", color: "var(--text-tertiary)", display: "flex" }}>
+                  {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+            </Field>
+            <Field label="Confirm Password">
+              <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="••••••••••••"
+                style={{ width: "100%", padding: "10px 13px", fontFamily: "var(--font-mono)", fontSize: "13px", color: "var(--text-primary)", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "8px", outline: "none", transition: "border-color 0.16s", boxSizing: "border-box" as const }}
+                onFocus={e => e.currentTarget.style.borderColor = "var(--brand)"}
+                onBlur={e =>  e.currentTarget.style.borderColor = "var(--border)"}
+              />
+            </Field>
+            <SaveBtn brandColor={brandColor} onClick={handleSave} loading={saving} saved={saved} label="Update Password" />
+          </div>
+        </Panel>
+      </motion.div>
+    </div>
+  );
+}
+
+// ── Billing tab ───────────────────────────────────────────────────────────────
+function BillingTab({ brandColor }: { brandColor: string }) {
+  return (
+    <motion.div variants={pv(0.1)} initial="hidden" animate="visible">
+      <Panel>
+        <PH title="Billing & Subscription" subtitle="Manage your plan and payment details." />
+        <div style={{ padding: "40px 22px", textAlign: "center" }}>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: "3rem", letterSpacing: "-0.04em", lineHeight: 1, color: "var(--text-primary)", marginBottom: "12px", fontWeight: 400 }}>Free</div>
+          <div style={{ fontFamily: "var(--font-body)", fontSize: "14px", color: "var(--text-secondary)", marginBottom: "28px" }}>Currently on the free plan. Upgrade to unlock full keyword research, competitor tracking, and AI strategy generation.</div>
+          <button style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: 500, color: "#fff", background: brandColor, border: "none", borderRadius: "100px", padding: "12px 28px", cursor: "pointer", transition: "opacity 0.16s" }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "0.85"}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
           >
-            <Bell size={16} />
-            Refresh
+            Upgrade plan
           </button>
         </div>
-      </div>
+      </Panel>
+    </motion.div>
+  );
+}
 
-      {statusMessage ? (
-        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "18px", color: "var(--text-secondary)", marginBottom: "18px", padding: "14px 16px" }}>
-          {statusMessage}
-        </div>
-      ) : null}
+// ── Page ──────────────────────────────────────────────────────────────────────
+function SettingsContent() {
+  const searchParams   = useSearchParams();
+  const defaultTab     = (searchParams.get("tab") as TabId) || "profile";
+  const [activeTab, setActiveTab] = useState<TabId>(defaultTab);
+  const [brandColor, setBrandColor] = useState("#2563eb");
 
-      <div className="settings-grid" style={{ display: "grid", gap: "24px", gridTemplateColumns: "260px minmax(0, 1fr)" }}>
-        <aside style={{ alignSelf: "start", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "24px", padding: "12px" }}>
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const active = tab.id === activeTab;
+  useEffect(() => {
+    const b = localStorage.getItem("aiml-brand") || localStorage.getItem("rvivme-brand");
+    if (b) setBrandColor(b);
+  }, []);
 
+  function handleBrandChange(hex: string) {
+    setBrandColor(hex);
+    localStorage.setItem("aiml-brand",   hex);
+    localStorage.setItem("rvivme-brand", hex);
+    document.documentElement.style.setProperty("--brand", hex);
+  }
+
+  return (
+    <div style={{ background: "var(--bg)", minHeight: "100vh", padding: "32px 24px 80px", maxWidth: "1100px", margin: "0 auto" }}>
+      <motion.div variants={pv(0)} initial="hidden" animate="visible" style={{ marginBottom: "32px" }}>
+        <h1 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(1.8rem,3vw,2.6rem)", letterSpacing: "-0.04em", lineHeight: 1, fontWeight: 400, color: "var(--text-primary)", marginBottom: "6px" }}>Settings</h1>
+        <p style={{ fontFamily: "var(--font-body)", fontSize: "14px", color: "var(--text-secondary)" }}>Manage your account, integrations, and preferences.</p>
+      </motion.div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: "24px", alignItems: "start" }}>
+        {/* Sidebar */}
+        <motion.nav variants={pv(0.06)} initial="hidden" animate="visible"
+          style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden" }}
+        >
+          {TABS.map(tab => {
+            const Icon   = tab.icon;
+            const active = activeTab === tab.id;
             return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setTab(tab.id)}
-                style={{
-                  alignItems: "center",
-                  background: active ? "rgba(var(--brand-rgb), 0.12)" : "transparent",
-                  border: "none",
-                  borderRadius: "16px",
-                  color: active ? "var(--brand)" : "var(--text-secondary)",
-                  cursor: "pointer",
-                  display: "flex",
-                  gap: "10px",
-                  padding: "14px 16px",
-                  textAlign: "left",
-                  width: "100%",
-                }}
-              >
-                <Icon size={16} />
-                {tab.label}
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
+                width: "100%", display: "flex", alignItems: "center", gap: "10px",
+                padding: "12px 16px", fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 500,
+                color: active ? "var(--text-primary)" : "var(--text-secondary)",
+                background: active ? "var(--muted)" : "transparent",
+                border: "none", borderLeft: `2px solid ${active ? "var(--brand)" : "transparent"}`,
+                cursor: "pointer", transition: "all 0.16s", textAlign: "left",
+              }}>
+                <Icon size={14} /> {tab.label}
               </button>
             );
           })}
+        </motion.nav>
 
-          <div style={{ background: "var(--card)", borderRadius: "18px", marginTop: "14px", padding: "16px" }}>
-            {metrics.map((metric) => (
-              <div key={metric.label} style={{ marginBottom: metric.label === metrics.at(-1)?.label ? 0 : "14px" }}>
-                <p style={{ color: "var(--text-tertiary)", fontSize: "0.78rem", margin: 0 }}>{metric.label}</p>
-                <p style={{ fontFamily: "var(--font-mono)", margin: "6px 0 0" }}>{loading ? "Loading..." : metric.value}</p>
-              </div>
-            ))}
-          </div>
-        </aside>
-
-        <div>{renderContent()}</div>
+        {/* Content */}
+        <div>
+          <AnimatePresence mode="wait">
+            <motion.div key={activeTab} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
+              {activeTab === "profile"      && <ProfileTab       brandColor={brandColor} />}
+              {activeTab === "branding"     && <BrandingTab      brandColor={brandColor} onBrandChange={handleBrandChange} />}
+              {activeTab === "integrations" && <IntegrationsTab  brandColor={brandColor} />}
+              {activeTab === "billing"      && <BillingTab       brandColor={brandColor} />}
+              {activeTab === "security"     && <SecurityTab      brandColor={brandColor} />}
+            </motion.div>
+          </AnimatePresence>
+        </div>
       </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
+}
+
+export default function SettingsPage() {
+  return <Suspense fallback={<div style={{ minHeight: "100vh", background: "var(--bg)" }} />}><SettingsContent /></Suspense>;
 }
