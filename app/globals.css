@@ -2,177 +2,96 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─────────────────────────────────────────────────────────────────────────────
+/* =============================================================================
    AI Marketing Labs — Design System
-   Editorial · Intelligence · Dark-first
-───────────────────────────────────────────────────────────────────────────── */
+   All legacy aliases included so dashboard/panels never break
+============================================================================= */
 
-:root {
-  /* Brand */
+:root, .dark {
   --brand:         #2563eb;
   --brand-rgb:     37, 99, 235;
   --brand-glow:    rgba(37, 99, 235, 0.20);
-
-  /* Surfaces */
   --bg:            #080808;
   --surface:       #0e0e0e;
   --surface-2:     #141414;
+  --surface-raised:#141414;
   --card:          #111111;
-  --border:        rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.14);
-  --muted:         rgba(255, 255, 255, 0.05);
-
-  /* Nav */
-  --nav-bg:        rgba(8, 8, 8, 0.88);
-
-  /* Text */
+  --border:        rgba(255,255,255,0.08);
+  --border-strong: rgba(255,255,255,0.14);
+  --border-subtle: rgba(255,255,255,0.04);
+  --muted:         rgba(255,255,255,0.05);
+  --nav-bg:        rgba(8,8,8,0.88);
   --text-primary:   #f8f8f5;
-  --text-secondary: rgba(248, 248, 245, 0.50);
-  --text-tertiary:  rgba(248, 248, 245, 0.28);
-
-  /* Signals */
+  --text-secondary: rgba(248,248,245,0.50);
+  --text-tertiary:  rgba(248,248,245,0.28);
   --signal-green: #00e676;
   --signal-amber: #ffab00;
   --signal-red:   #ff1744;
   --signal-blue:  #2979ff;
-
-  /* Chart */
-  --chart-grid:   rgba(255, 255, 255, 0.04);
-  --chart-axis:   rgba(255, 255, 255, 0.08);
-  --chart-tick:   rgba(255, 255, 255, 0.28);
-
-  /* Font stacks */
+  --chart-grid: rgba(255,255,255,0.04);
+  --chart-axis: rgba(255,255,255,0.08);
+  --chart-tick: rgba(255,255,255,0.28);
   --font-display: "Georgia", "Times New Roman", serif;
-  --font-body:    "Inter", system-ui, -apple-system, sans-serif;
-  --font-mono:    "DM Mono", "Consolas", "SFMono-Regular", monospace;
-
-  /* Timing */
-  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in-out:   cubic-bezier(0.4, 0, 0.2, 1);
+  --font-syne:    var(--font-inter, "Inter", system-ui, sans-serif);
+  --font-inter:   var(--font-inter, "Inter", system-ui, sans-serif);
+  --font-dm-mono: var(--font-dm-mono, "DM Mono", "Consolas", monospace);
+  --font-body:    var(--font-inter, "Inter", system-ui, sans-serif);
+  --font-mono:    var(--font-dm-mono, "DM Mono", "Consolas", monospace);
 }
 
-/* Light mode */
 .light {
   --bg:            #f5f5f0;
   --surface:       #ffffff;
   --surface-2:     #f0f0eb;
+  --surface-raised:#f8f8f5;
   --card:          #f8f8f5;
-  --border:        rgba(0, 0, 0, 0.08);
-  --border-strong: rgba(0, 0, 0, 0.14);
-  --muted:         rgba(0, 0, 0, 0.04);
-
-  --nav-bg:        rgba(245, 245, 240, 0.88);
-
+  --border:        rgba(0,0,0,0.08);
+  --border-strong: rgba(0,0,0,0.14);
+  --border-subtle: rgba(0,0,0,0.04);
+  --muted:         rgba(0,0,0,0.04);
+  --nav-bg:        rgba(245,245,240,0.90);
   --text-primary:   #0a0a08;
-  --text-secondary: rgba(10, 10, 8, 0.50);
-  --text-tertiary:  rgba(10, 10, 8, 0.28);
-
-  --chart-grid:   rgba(0, 0, 0, 0.04);
-  --chart-axis:   rgba(0, 0, 0, 0.08);
-  --chart-tick:   rgba(0, 0, 0, 0.28);
+  --text-secondary: rgba(10,10,8,0.55);
+  --text-tertiary:  rgba(10,10,8,0.30);
+  --chart-grid: rgba(0,0,0,0.04);
+  --chart-axis: rgba(0,0,0,0.08);
+  --chart-tick: rgba(0,0,0,0.28);
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   Reset
-───────────────────────────────────────────────────────────────────────────── */
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin:     0;
-  padding:    0;
-}
-
-html {
-  font-size:       16px;
-  scroll-behavior: smooth;
-}
-
-html[data-scroll-behavior="smooth"] {
-  scroll-behavior: smooth;
-}
-
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; scroll-behavior: smooth; }
 body {
-  background:              var(--bg);
-  color:                   var(--text-primary);
-  font-family:             var(--font-body);
-  -webkit-font-smoothing:  antialiased;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-inter, "Inter", system-ui, sans-serif);
+  -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  overflow-x:              hidden;
-  line-height:             1.6;
+  overflow-x: hidden;
+  line-height: 1.6;
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   Scrollbar
-───────────────────────────────────────────────────────────────────────────── */
-::-webkit-scrollbar       { width: 3px; height: 3px; }
+::-webkit-scrollbar { width: 3px; height: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   Selection
-───────────────────────────────────────────────────────────────────────────── */
-::selection {
-  background: rgba(var(--brand-rgb), 0.18);
-  color:      var(--text-primary);
-}
+::selection { background: rgba(var(--brand-rgb), 0.18); color: var(--text-primary); }
+:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; border-radius: 3px; }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   Focus
-───────────────────────────────────────────────────────────────────────────── */
-:focus-visible {
-  outline:        2px solid var(--brand);
-  outline-offset: 3px;
-  border-radius:  3px;
-}
+@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+@keyframes brand-pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.5; transform:scale(.8); } }
+@keyframes pulse-dot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(.75); } }
+@keyframes fade-up { from { opacity:0; transform:translateY(24px); } to { opacity:1; transform:translateY(0); } }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   Typography utilities
-───────────────────────────────────────────────────────────────────────────── */
-.display {
-  font-family:    var(--font-display);
-  letter-spacing: -0.04em;
-  line-height:    0.92;
-  font-weight:    400;
-}
-
-.mono {
-  font-family:    var(--font-mono);
-  letter-spacing: 0.04em;
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   Animations
-───────────────────────────────────────────────────────────────────────────── */
-@keyframes marquee {
-  from { transform: translateX(0); }
-  to   { transform: translateX(-50%); }
-}
-
-@keyframes fade-up {
-  from { opacity: 0; transform: translateY(24px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-@keyframes shimmer {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%       { opacity: 0.4; transform: scale(0.75); }
-}
-
-/* ─────────────────────────────────────────────────────────────────────────────
-   Responsive grid helpers
-───────────────────────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  .hide-mobile { display: none !important; }
+  .hide-mobile   { display: none !important; }
+  .grid-2-mobile { grid-template-columns: repeat(2, 1fr) !important; }
+  .grid-1-mobile { grid-template-columns: 1fr !important; }
+  .stack-mobile  { flex-direction: column !important; }
 }
-
-@media (min-width: 769px) {
-  .hide-desktop { display: none !important; }
+@media (min-width: 769px) { .hide-desktop { display: none !important; } }
+@media (max-width: 1024px) {
+  .hide-tablet   { display: none !important; }
+  .grid-2-tablet { grid-template-columns: repeat(2, 1fr) !important; }
 }
