@@ -4,7 +4,7 @@
 // Uses ranked_keywords endpoint — returns keywords a domain actually ranks for
 // =============================================================================
 
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 
 const DFS_BASE = "https://api.dataforseo.com/v3";
 
