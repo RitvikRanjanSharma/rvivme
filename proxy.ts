@@ -11,7 +11,7 @@ import { NextResponse, type NextRequest } from "next/server";
 const PROTECTED_PREFIXES = ["/dashboard", "/keywords", "/competitors", "/settings"];
 const AUTH_ROUTES        = ["/auth/login", "/auth/signup"];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
