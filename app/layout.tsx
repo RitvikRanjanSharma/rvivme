@@ -5,9 +5,9 @@
 // Root layout · Theme engine · Navbar · Font loading
 // ============================================================================
 
-import type { Metadata } from "next";
 import { Inter, DM_Mono } from "next/font/google";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState, useEffect, createContext, useContext, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -213,16 +213,14 @@ function ThemeProvider({ children }: { children: React.ReactNode }) {
 function Navbar() {
   const { mode, toggleMode, brandColor } = useTheme();
   const [scrolled, setScrolled] = useState(false);
-  const [path,     setPath]     = useState("");
+  const path = usePathname() ?? "";
+  const isPublic = path === "/" || path.startsWith("/blog") || path.startsWith("/auth");
 
   useEffect(() => {
-    setPath(window.location.pathname);
     const fn = () => setScrolled(window.scrollY > 8);
     window.addEventListener("scroll", fn, { passive:true });
     return () => window.removeEventListener("scroll", fn);
   }, []);
-
-  const isPublic = path === "/" || path.startsWith("/blog");
 
   return (
     <header style={{
