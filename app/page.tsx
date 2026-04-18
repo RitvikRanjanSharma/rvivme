@@ -1,11 +1,11 @@
 "use client";
 
 // app/page.tsx — AI Marketing Labs
-// GOD MODE particle system
+// GOD MODE particle system — light/dark mode aware
 // Phase 1: counter 000→100 → burst
-// Phase 2: one particle grows → white wipe fills screen
-// Phase 3: white → particles from random positions converge to headline
-// Phase 4: scroll down = particles disperse, scroll up = reconverge
+// Phase 2: wipe fills screen
+// Phase 3: converge to headline
+// Phase 4: scroll disperse/reconverge
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
@@ -30,14 +30,12 @@ const FEATURES = [
   { index: "03", title: "GEO — the search layer everyone is ignoring.", body: "We track AI Overview citations, structured data gaps, and citation probability before your competitors notice.", href: "/blog", cta: "Read the intelligence" },
 ];
 
-// ─── ease functions ────────────────────────────────────────────────────────
 function easeOutCubic(t: number) { return 1 - Math.pow(1 - t, 3); }
 function easeOutExpo(t: number)  { return t === 1 ? 1 : 1 - Math.pow(2, -10 * t); }
 function easeInExpo(t: number)   { return t === 0 ? 0 : Math.pow(2, 10 * t - 10); }
 function lerp(a: number, b: number, t: number) { return a + (b - a) * t; }
 function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)); }
 
-// ─── sample text pixels into positions ────────────────────────────────────
 function sampleText(
   lines: string[], font: string,
   W: number, H: number,
@@ -45,37 +43,28 @@ function sampleText(
   align: "center" | "left" = "center",
   offsetX = 0, offsetY = 0
 ): Array<{ x: number; y: number }> {
-  const off   = document.createElement("canvas");
-  off.width   = W; off.height = H;
-  const ctx   = off.getContext("2d")!;
+  const off = document.createElement("canvas");
+  off.width = W; off.height = H;
+  const ctx = off.getContext("2d")!;
   const fsize = parseInt(font);
-  const lh    = fsize * 0.95;
-
-  ctx.fillStyle     = "#fff";
-  ctx.font          = font;
-  ctx.textBaseline  = "top";
-  ctx.textAlign     = align;
-
+  const lh = fsize * 0.95;
+  ctx.fillStyle = "#fff";
+  ctx.font = font;
+  ctx.textBaseline = "top";
+  ctx.textAlign = align;
   if (align === "center") {
     const totalH = lines.length * lh;
-    const sy     = (H - totalH) / 2 + offsetY;
+    const sy = (H - totalH) / 2 + offsetY;
     lines.forEach((l, i) => ctx.fillText(l, W / 2 + offsetX, sy + i * lh));
   } else {
-    const fsize2 = parseInt(font);
-    const lh2    = fsize2 * 0.92;
-    const totalH = lines.length * lh2;
-    const sy     = H - 64 - 48 - totalH + offsetY; // match hero padding
-    lines.forEach((l, i) => ctx.fillText(l, 32 + offsetX, sy + i * lh2));
+    const lh2 = fsize * 0.92;
+    lines.forEach((l, i) => ctx.fillText(l, 32 + offsetX, offsetY + i * lh2));
   }
-
-  const d   = ctx.getImageData(0, 0, W, H).data;
+  const d = ctx.getImageData(0, 0, W, H).data;
   const pts: Array<{ x: number; y: number }> = [];
   for (let py = 0; py < H; py += step)
     for (let px = 0; px < W; px += step)
-      if (d[(py * W + px) * 4 + 3] > 80)
-        pts.push({ x: px + step / 2, y: py + step / 2 });
-
-  // shuffle + cap
+      if (d[(py * W + px) * 4 + 3] > 30) pts.push({ x: px + step / 2, y: py + step / 2 });
   for (let i = pts.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [pts[i], pts[j]] = [pts[j], pts[i]];
@@ -84,88 +73,69 @@ function sampleText(
   return pts;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MASTER CANVAS — all animation lives here
-// ─────────────────────────────────────────────────────────────────────────────
 type MasterPhase = "counter" | "burst" | "wipe" | "converge" | "idle";
 
 interface Particle {
-  // positions
   x: number; y: number;
-  // burst origin (where particle starts in burst phase)
   ox: number; oy: number;
-  // burst target
   bx: number; by: number;
-  // converge target (headline pixel)
   tx: number; ty: number;
-  // random spawn for converge entry
   rx: number; ry: number;
-  // idle drift
   dvx: number; dvy: number;
   dp: number; dps: number;
-  // visual
   size: number;
-  depth: number; // 0=far 1=near
-  color: string; // rgb string
-  // stagger
+  depth: number;
   burstDelay: number;
   convergeDelay: number;
 }
 
 function MasterCanvas({
-  phase, onPhaseComplete, scrollFrac,
+  phase, onPhaseComplete, scrollFrac, isDark,
 }: {
   phase: MasterPhase;
   onPhaseComplete: (p: MasterPhase) => void;
-  scrollFrac: React.MutableRefObject<number>; // 0 = top, 1 = scrolled down
+  scrollFrac: React.MutableRefObject<number>;
+  isDark: boolean;
 }) {
   const canvasRef  = useRef<HTMLCanvasElement>(null);
   const phaseRef   = useRef<MasterPhase>(phase);
   const phaseTRef  = useRef<number>(0);
   const rafRef     = useRef<number>(0);
   const particles  = useRef<Particle[]>([]);
-  const initDone   = useRef(false);
-  // offscreen layers
   const farOff     = useRef<HTMLCanvasElement | null>(null);
   const nearOff    = useRef<HTMLCanvasElement | null>(null);
+  const initDone   = useRef(false);
+  const isDarkRef  = useRef(isDark);
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
+  useEffect(() => { isDarkRef.current = isDark; }, [isDark]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d")!;
-    const M = 200; // margin for offscreen particles
-    let W = 0, H = 0; // viewport dimensions (particle coords are in viewport space)
-    let CW = 0, CH = 0; // canvas dimensions = W+2M, H+2M
-
+    const M = 200;
+    let W = 0, H = 0, CW = 0, CH = 0;
     farOff.current  = document.createElement("canvas");
     nearOff.current = document.createElement("canvas");
 
     function resize() {
-      W  = window.innerWidth;
-      H  = window.innerHeight;
+      W = window.innerWidth; H = window.innerHeight;
       CW = canvas!.width  = W + 2 * M;
       CH = canvas!.height = H + 2 * M;
-      farOff.current!.width   = CW; farOff.current!.height   = CH;
-      nearOff.current!.width  = CW; nearOff.current!.height  = CH;
+      farOff.current!.width  = CW; farOff.current!.height  = CH;
+      nearOff.current!.width = CW; nearOff.current!.height = CH;
       if (!initDone.current) buildParticles();
     }
 
     function buildParticles() {
       initDone.current = true;
-
-      // Counter text sample (burst source)
       const csize = Math.min(W * 0.18, 160);
       const cPts  = sampleText(
         ["100", "AI MARKETING LABS"],
         `400 ${csize}px "DM Mono",monospace`,
         W, H, 3, 5000, "center"
       );
-
-      // Headline sample — match CSS exactly:
-      // fontSize clamp(3.5rem,10vw,9.5rem) = clamp(56,W*0.10,152)
-      // lineHeight 0.9, hero padding-bottom 64, h1 margin-bottom 48
       const hsize  = Math.max(56, Math.min(W * 0.10, 152));
       const hlines = ["Search", "intelligence", "for those", "who act."];
       const hlh    = hsize * 0.9;
@@ -176,7 +146,6 @@ function MasterCanvas({
       hlCtx.font         = `400 ${hsize}px Georgia,serif`;
       hlCtx.textBaseline = "top";
       hlCtx.textAlign    = "left";
-      // Match hero padding-top: 18vh (DOM content starts at 60px nav + 18vh padding)
       const hlStartY = H * 0.18;
       hlines.forEach((l, i) => hlCtx.fillText(l, 32, hlStartY + i * hlh));
       const hlImgData = hlOff.getContext("2d")!.getImageData(0, 0, W, H).data;
@@ -191,25 +160,20 @@ function MasterCanvas({
       }
       if (hPtsRaw.length > 5000) hPtsRaw.length = 5000;
       const hPts = hPtsRaw;
-
       const N = Math.min(cPts.length, hPts.length, 5000);
       particles.current = [];
-
       for (let i = 0; i < N; i++) {
-        const cp    = cPts[i % cPts.length];
-        const hp    = hPts[i % hPts.length];
+        const cp = cPts[i % cPts.length];
+        const hp = hPts[i % hPts.length];
         const depth = Math.random();
         const angle = Math.random() * Math.PI * 2;
         const dist  = 250 + Math.random() * 500;
         const up    = -(150 + Math.random() * 300);
-
         particles.current.push({
-          x: cp.x, y: cp.y,
-          ox: cp.x, oy: cp.y,
+          x: cp.x, y: cp.y, ox: cp.x, oy: cp.y,
           bx: cp.x + Math.cos(angle) * dist,
           by: cp.y + Math.sin(angle) * dist + up,
           tx: hp.x, ty: hp.y,
-          // spawn from entire viewport + margins — particles can come from offscreen
           rx: -M + Math.random() * (W + 2 * M),
           ry: -M + Math.random() * (H + 2 * M),
           dvx: (Math.random() - 0.5) * 0.25,
@@ -218,10 +182,19 @@ function MasterCanvas({
           dps: 0.006 + Math.random() * 0.01,
           size: 1.5 + Math.random() * 1.0,
           depth,
-          color: depth > 0.6 ? "255,255,255" : depth > 0.3 ? "140,170,255" : "37,99,235",
           burstDelay:    (i / N) * 0.35,
           convergeDelay: Math.random() * 0.6,
         });
+      }
+    }
+
+    function getParticleColor(depth: number, dark: boolean): string {
+      if (dark) {
+        // Dark mode: white near, blue far
+        return depth > 0.6 ? "255,255,255" : depth > 0.3 ? "140,170,255" : "37,99,235";
+      } else {
+        // Light mode: dark near, blue far — visible on white background
+        return depth > 0.6 ? "10,10,20" : depth > 0.3 ? "37,99,235" : "100,130,220";
       }
     }
 
@@ -232,9 +205,9 @@ function MasterCanvas({
       const nc   = near.getContext("2d")!;
       fc.clearRect(0, 0, CW, CH);
       nc.clearRect(0, 0, CW, CH);
-
       const ph   = phaseRef.current;
       const sf   = clamp(scrollFrac.current, 0, 1);
+      const dark = isDarkRef.current;
 
       for (const p of particles.current) {
         let px = p.x, py = p.y, a = 0;
@@ -246,7 +219,6 @@ function MasterCanvas({
           py = lerp(p.oy, p.by, et);
           a  = t < 0.15 ? t / 0.15 : t > 0.75 ? (1 - t) / 0.25 : 1;
         } else if (ph === "wipe") {
-          // particles just hold burst positions while wipe circle grows
           px = p.bx; py = p.by;
           a  = clamp(1 - elapsed / 0.4, 0, 1);
         } else if (ph === "converge") {
@@ -255,39 +227,30 @@ function MasterCanvas({
           px = lerp(p.rx, p.tx, et);
           py = lerp(p.ry, p.ty, et);
           a  = t < 0.08 ? t / 0.08 : 1;
-          p.x = px; p.y = py; // persist for idle
+          p.x = px; p.y = py;
         } else if (ph === "idle") {
-          // scroll-driven disperse: sf=0 → at target, sf=1 → fully dispersed
-          // NO clamping — particles fly freely past screen edges
           const disperseT = easeInExpo(sf);
-          // Direction vector from target toward random spawn (outward)
           const dirX = p.rx - p.tx;
           const dirY = p.ry - p.ty;
-          const dx   = dirX * disperseT * (1 + sf * 2); // accelerate further offscreen
+          const dx   = dirX * disperseT * (1 + sf * 2);
           const dy   = dirY * disperseT * (1 + sf * 2);
-          // gentle idle drift only when near home
           p.dp  += p.dps;
           const drift = clamp(1 - sf * 6, 0, 1);
           p.x   = p.tx + dx + Math.sin(p.dp) * 1.2 * drift;
           p.y   = p.ty + dy + Math.cos(p.dp * 0.7) * 0.6 * drift;
           px    = p.x; py = p.y;
-          // fade slightly when dispersed but never fully invisible
           a     = clamp(1 - sf * 0.6, 0.02, 1);
         }
 
         if (a <= 0.01) continue;
-        const sz = p.size * (0.5 + p.depth * 0.5);
-        const c  = p.color;
-
-        // bucket: depth < 0.4 = far (blurred), rest = near (sharp)
+        const sz   = p.size * (0.5 + p.depth * 0.5);
+        const c    = getParticleColor(p.depth, dark);
         const tctx = p.depth < 0.4 ? fc : nc;
         tctx.globalAlpha = Math.max(0, Math.min(1, a));
         tctx.fillStyle   = `rgb(${c})`;
-        // offset by M — canvas is M pixels larger on each side
         tctx.fillRect(Math.round(px - sz / 2 + M), Math.round(py - sz / 2 + M), Math.ceil(sz), Math.ceil(sz));
       }
 
-      // Composite: far with blur, near sharp
       ctx.save();
       ctx.filter = "blur(3px)";
       ctx.drawImage(far, 0, 0);
@@ -299,18 +262,13 @@ function MasterCanvas({
     function frame(now: number) {
       const ph      = phaseRef.current;
       const elapsed = (now - phaseTRef.current) / 1000;
+      const dark    = isDarkRef.current;
       ctx.clearRect(0, 0, CW, CH);
 
-      // ── BURST ──────────────────────────────────────────────────────────
       if (ph === "burst") {
         composite(elapsed);
-        const maxDelay = 0.35;
-        if (elapsed > maxDelay + 1.1) {
-          phaseTRef.current = now;
-          onPhaseComplete("burst");
-        }
+        if (elapsed > 0.35 + 1.1) { phaseTRef.current = now; onPhaseComplete("burst"); }
 
-      // ── WIPE ───────────────────────────────────────────────────────────
       } else if (ph === "wipe") {
         composite(elapsed);
         const t  = clamp(elapsed / 0.55, 0, 1);
@@ -318,33 +276,31 @@ function MasterCanvas({
         const r  = et * Math.sqrt(CW * CW + CH * CH);
         ctx.save();
         ctx.globalAlpha = clamp(t * 1.5, 0, 1);
-        ctx.fillStyle   = "#f8f8f5";
+        // Wipe to correct bg color based on mode
+        ctx.fillStyle = dark ? "#080808" : "#f5f5f0";
         ctx.beginPath();
         ctx.arc(W / 2 + M, H / 2 + M, r, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
-        if (t >= 1) {
-          phaseTRef.current = now;
-          onPhaseComplete("wipe");
-        }
+        if (t >= 1) { phaseTRef.current = now; onPhaseComplete("wipe"); }
 
-      // ── CONVERGE ───────────────────────────────────────────────────────
       } else if (ph === "converge") {
-        const bgT = clamp(elapsed / 1.8, 0, 1);
-        const bg  = Math.round(lerp(248, 8, easeOutCubic(bgT)));
-        ctx.fillStyle = `rgb(${bg},${bg},${bg === 248 ? 245 : bg})`;
+        // Background fades from wipe color to page bg
+        const bgT  = clamp(elapsed / 1.8, 0, 1);
+        if (dark) {
+          const bg = Math.round(lerp(8, 8, bgT)); // stay dark
+          ctx.fillStyle = `rgb(${bg},${bg},${bg})`;
+        } else {
+          // Light: start from near-white, stay light
+          const bg = Math.round(lerp(245, 245, bgT));
+          ctx.fillStyle = `rgb(${bg},${bg},${Math.round(lerp(240, 240, bgT))})`;
+        }
         ctx.fillRect(0, 0, CW, CH);
         composite(elapsed);
-        const maxD = 0.6 + 1.4; // max convergeDelay + duration
-        if (elapsed > maxD) {
-          phaseTRef.current = now;
-          onPhaseComplete("converge");
-        }
+        if (elapsed > 0.6 + 1.4) { phaseTRef.current = now; onPhaseComplete("converge"); }
 
-      // ── IDLE ───────────────────────────────────────────────────────────
       } else if (ph === "idle") {
         composite(elapsed);
-        // no completion, runs forever
       }
 
       rafRef.current = requestAnimationFrame(frame);
@@ -362,45 +318,23 @@ function MasterCanvas({
   }, []); // eslint-disable-line
 
   return (
-    <canvas
-      ref={canvasRef}
-      style={{
-        position:      "fixed",
-        top:           "-200px",
-        left:          "-200px",
-        width:         "calc(100% + 400px)",
-        height:        "calc(100% + 400px)",
-        pointerEvents: "none",
-        zIndex:        5,
-      }}
-    />
+    <canvas ref={canvasRef} style={{
+      position: "fixed", top: "-200px", left: "-200px",
+      width: "calc(100% + 400px)", height: "calc(100% + 400px)",
+      pointerEvents: "none", zIndex: 5,
+    }} />
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Counter overlay (DOM — phase "counter" only)
-// ─────────────────────────────────────────────────────────────────────────────
+// Counter overlay
 function CounterOverlay({ count, visible }: { count: number; visible: boolean }) {
   return (
     <AnimatePresence>
       {visible && (
-        <motion.div
-          exit={{ opacity: 0, transition: { duration: 0.15 } }}
-          style={{
-            position: "fixed", inset: 0, zIndex: 20,
-            background: "var(--bg)",
-            display: "flex", flexDirection: "column",
-            alignItems: "center", justifyContent: "center", gap: "16px",
-            pointerEvents: "none",
-          }}
+        <motion.div exit={{ opacity: 0, transition: { duration: 0.15 } }}
+          style={{ position: "fixed", inset: 0, zIndex: 20, background: "var(--bg)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px", pointerEvents: "none" }}
         >
-          <div style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: "clamp(4rem,12vw,10rem)",
-            letterSpacing: "-0.04em", lineHeight: 1,
-            color: "var(--text-primary)", fontWeight: 400,
-            fontVariantNumeric: "tabular-nums",
-          }}>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: "clamp(4rem,12vw,10rem)", letterSpacing: "-0.04em", lineHeight: 1, color: "var(--text-primary)", fontWeight: 400, fontVariantNumeric: "tabular-nums" }}>
             {String(count).padStart(3, "0")}
           </div>
           <motion.div
@@ -417,23 +351,14 @@ function CounterOverlay({ count, visible }: { count: number; visible: boolean })
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Wipe overlay — white flash that fills screen then hands off
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Helpers
-// ─────────────────────────────────────────────────────────────────────────────
 function FadeUp({ children, delay = 0, style }: { children: React.ReactNode; delay?: number; style?: React.CSSProperties }) {
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { once: true, margin: "-80px" });
   return (
-    <motion.div ref={ref}
-      initial={{ opacity: 0, y: 32 }}
-      animate={inView ? { opacity: 1, y: 0 } : {}}
-      transition={{ duration: 0.85, ease: EASE_EXPO, delay }}
-      style={style}
-    >{children}</motion.div>
+    <motion.div ref={ref} initial={{ opacity: 0, y: 32 }} animate={inView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.85, ease: EASE_EXPO, delay }} style={style}>
+      {children}
+    </motion.div>
   );
 }
 
@@ -457,10 +382,7 @@ function StatRow() {
         const ref = useRef<HTMLDivElement>(null);
         const inView = useInView(ref, { once: true, margin: "-40px" });
         return (
-          <motion.div key={stat.label} ref={ref}
-            initial={{ opacity: 0, y: 24 }}
-            animate={inView ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.8, ease: EASE_EXPO, delay: 0.1 + i * 0.1 }}
+          <motion.div key={stat.label} ref={ref} initial={{ opacity: 0, y: 24 }} animate={inView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.8, ease: EASE_EXPO, delay: 0.1 + i * 0.1 }}
             style={{ padding: "48px 32px", borderRight: i < 3 ? "1px solid var(--border)" : "none" }}
           >
             <div style={{ fontFamily: "var(--font-display)", fontSize: "clamp(2rem,4vw,3.5rem)", letterSpacing: "-0.04em", lineHeight: 1, color: "var(--text-primary)", marginBottom: "10px" }}>{stat.value}</div>
@@ -477,8 +399,7 @@ function FeatureRow({ feature }: { feature: typeof FEATURES[0] }) {
   const inView = useInView(ref, { once: true, margin: "-80px" });
   const [hov, setHov] = useState(false);
   return (
-    <motion.div ref={ref}
-      initial={{ opacity: 0 }} animate={inView ? { opacity: 1 } : {}} transition={{ duration: 0.5 }}
+    <motion.div ref={ref} initial={{ opacity: 0 }} animate={inView ? { opacity: 1 } : {}} transition={{ duration: 0.5 }}
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
       style={{ display: "grid", gridTemplateColumns: "180px 1fr auto", padding: "52px 32px", borderTop: "1px solid var(--border)", alignItems: "start", background: hov ? "var(--muted)" : "transparent", transition: "background 0.3s" }}
     >
@@ -503,77 +424,68 @@ function FeatureRow({ feature }: { feature: typeof FEATURES[0] }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PAGE
-// ─────────────────────────────────────────────────────────────────────────────
+// Page
 export default function HomePage() {
-  const [count,          setCount]          = useState(0);
-  const [counterVisible, setCounterVisible] = useState(true);
-  const [phase,          setPhase]          = useState<MasterPhase>("counter");
-  const [contentVisible, setContentVisible] = useState(false);
-  const [headlineVisible,setHeadlineVisible] = useState(false);
-  const scrollFrac  = useRef(0);
-  const heroRef     = useRef<HTMLDivElement>(null);
+  const [count,           setCount]           = useState(0);
+  const [counterVisible,  setCounterVisible]  = useState(true);
+  const [phase,           setPhase]           = useState<MasterPhase>("counter");
+  const [contentVisible,  setContentVisible]  = useState(false);
+  const [headlineVisible, setHeadlineVisible] = useState(false);
+  const [isDark,          setIsDark]          = useState(true);
+  const scrollFrac = useRef(0);
+  const heroRef    = useRef<HTMLDivElement>(null);
 
-  // Skip intro on revisit
   const [skipIntro] = useState(() =>
     typeof window !== "undefined" && !!sessionStorage.getItem("aiml-intro-seen")
   );
 
+  // Detect dark/light mode
+  useEffect(() => {
+    function detect() {
+      setIsDark(!document.documentElement.classList.contains("light"));
+    }
+    detect();
+    const observer = new MutationObserver(detect);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
+
   useEffect(() => {
     if (skipIntro) {
-      setPhase("idle");
-      setCounterVisible(false);
-      setHeadlineVisible(true);
-      setContentVisible(true);
+      setPhase("idle"); setCounterVisible(false); setHeadlineVisible(true); setContentVisible(true);
     }
   }, [skipIntro]);
 
-  // Track scroll fraction within hero section
   useEffect(() => {
     function onScroll() {
       const heroEl = heroRef.current;
       if (!heroEl) return;
-      const heroH  = heroEl.offsetHeight;
-      const scrolled = window.scrollY;
-      scrollFrac.current = clamp(scrolled / (heroH * 1.8), 0, 1);
+      scrollFrac.current = clamp(window.scrollY / (heroEl.offsetHeight * 1.8), 0, 1);
     }
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Count 000→100
   useEffect(() => {
     if (skipIntro) return;
-    const duration = 1800;
-    const start    = performance.now();
+    const duration = 1800, start = performance.now();
     let raf: number;
     function tick(now: number) {
-      const p     = Math.min((now - start) / duration, 1);
+      const p = Math.min((now - start) / duration, 1);
       const eased = p === 1 ? 1 : 1 - Math.pow(2, -10 * p);
       setCount(Math.round(eased * 100));
-      if (p < 1) {
-        raf = requestAnimationFrame(tick);
-      } else {
-        setTimeout(() => {
-          setCounterVisible(false);
-          setPhase("burst");
-        }, 300);
-      }
+      if (p < 1) { raf = requestAnimationFrame(tick); }
+      else { setTimeout(() => { setCounterVisible(false); setPhase("burst"); }, 300); }
     }
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [skipIntro]);
 
   const handlePhaseComplete = useCallback((completed: MasterPhase) => {
-    if (completed === "burst") {
-      setPhase("wipe");
-    } else if (completed === "wipe") {
-      setPhase("converge");
-    } else if (completed === "converge") {
-      setPhase("idle");
-      setHeadlineVisible(true);
-      setContentVisible(true);
+    if (completed === "burst") { setPhase("wipe"); }
+    else if (completed === "wipe") { setPhase("converge"); }
+    else if (completed === "converge") {
+      setPhase("idle"); setHeadlineVisible(true); setContentVisible(true);
       if (typeof window !== "undefined") sessionStorage.setItem("aiml-intro-seen", "1");
     }
   }, []);
@@ -582,26 +494,18 @@ export default function HomePage() {
 
   return (
     <>
-      {/* Counter DOM */}
       <CounterOverlay count={count} visible={counterVisible} />
 
-      {/* Master particle canvas */}
       {showCanvas && (
-        <MasterCanvas
-          phase={phase}
-          onPhaseComplete={handlePhaseComplete}
-          scrollFrac={scrollFrac}
-        />
+        <MasterCanvas phase={phase} onPhaseComplete={handlePhaseComplete} scrollFrac={scrollFrac} isDark={isDark} />
       )}
 
-      {/* Page */}
       <div style={{ background: phase === "converge" ? "transparent" : "var(--bg)", minHeight: "100vh", position: "relative", zIndex: 1 }}>
 
-        {/* ── HERO ──────────────────────────────────────────────────────── */}
+        {/* Hero */}
         <div ref={heroRef} style={{ minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "flex-start", padding: "18vh 32px 64px", position: "relative" }}>
           <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 70% 50% at 50% 0%, rgba(37,99,235,0.05) 0%, transparent 65%)", pointerEvents: "none" }} />
 
-          {/* Top label */}
           <AnimatePresence>
             {headlineVisible && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1, delay: 0.4 }}
@@ -613,21 +517,16 @@ export default function HomePage() {
             )}
           </AnimatePresence>
 
-          {/* Headline is pure particles — DOM h1 removed */}
-          {/* Spacer holds the same height so CTA buttons stay positioned correctly */}
           <div style={{ position: "relative", zIndex: 2, maxWidth: "1200px" }}>
+            {/* Spacer — particles form the headline text here */}
             <div style={{
               height: "clamp(calc(3.5rem * 4 * 0.9), calc(10vw * 4 * 0.9), calc(9.5rem * 4 * 0.9))",
-              marginBottom: "52px",
-              pointerEvents: "none",
+              marginBottom: "52px", pointerEvents: "none",
             }} />
 
             <AnimatePresence>
               {contentVisible && (
-                <motion.div
-                  initial={{ opacity: 0, y: 24 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.9, ease: EASE_EXPO, delay: 0.3 }}
+                <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9, ease: EASE_EXPO, delay: 0.3 }}
                   style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: "24px" }}
                 >
                   <p style={{ fontFamily: "var(--font-body)", fontSize: "clamp(14px,1.4vw,17px)", color: "var(--text-secondary)", lineHeight: 1.7, maxWidth: "420px", margin: 0 }}>
@@ -648,7 +547,6 @@ export default function HomePage() {
             </AnimatePresence>
           </div>
 
-          {/* Scroll indicator */}
           <AnimatePresence>
             {contentVisible && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1, delay: 0.8 }}
@@ -663,7 +561,6 @@ export default function HomePage() {
           </AnimatePresence>
         </div>
 
-        {/* ── REST OF CONTENT ────────────────────────────────────────────── */}
         <AnimatePresence>
           {contentVisible && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8, ease: EASE_EXPO }}>
@@ -698,7 +595,6 @@ export default function HomePage() {
             </motion.div>
           )}
         </AnimatePresence>
-
       </div>
     </>
   );
