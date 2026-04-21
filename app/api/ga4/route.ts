@@ -47,9 +47,15 @@ export async function GET() {
   try {
     const propertyId = process.env.GA4_PROPERTY_ID;
     if (!propertyId) {
+      // Calm signal — dashboard already has a "Connect GA4" empty state that
+      // fires when the request fails or returns no data.
       return NextResponse.json(
-        { error: "GA4_PROPERTY_ID is not set" },
-        { status: 500 }
+        {
+          success: false,
+          reason:  "not_configured",
+          message: "GA4 is not connected on this workspace yet.",
+        },
+        { status: 200 }
       );
     }
 

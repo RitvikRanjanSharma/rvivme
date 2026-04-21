@@ -51,7 +51,16 @@ async function searchAnalytics(
 export async function GET() {
   try {
     const siteUrl = process.env.GSC_SITE_URL;
-    if (!siteUrl) throw new Error("GSC_SITE_URL is not set");
+    if (!siteUrl) {
+      return NextResponse.json(
+        {
+          success: false,
+          reason:  "not_configured",
+          message: "Search Console is not connected on this workspace yet.",
+        },
+        { status: 200 }
+      );
+    }
 
     const token = await getAccessToken();
 
