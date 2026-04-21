@@ -11,9 +11,14 @@ export async function POST(request: NextRequest) {
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
+      // Structured signal — the UI renders a calm "not configured" state.
       return NextResponse.json(
-        { error: "ANTHROPIC_API_KEY is not configured on the server" },
-        { status: 500 },
+        {
+          success: false,
+          reason:  "not_configured",
+          message: "GEO citation tracking is not set up on this workspace yet.",
+        },
+        { status: 200 },
       );
     }
 

@@ -109,6 +109,10 @@ function AiReasonCard({ kw, domain, brandColor }: { kw: CompKw; domain: string; 
         body:    JSON.stringify({ prompt, max_tokens: 200 }),
       });
       const data = await res.json();
+      if (data?.reason === "not_configured") {
+        setReason("AI analysis isn't configured. Add an ANTHROPIC_API_KEY to enable it.");
+        return;
+      }
       if (!res.ok || data.error) throw new Error(data.error ?? "Analysis failed");
       setReason(data.text || "Analysis unavailable.");
     } catch (e) {

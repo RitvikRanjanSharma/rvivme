@@ -18,9 +18,15 @@ export async function POST(request: NextRequest) {
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
+      // Not a 500 — this is a missing-config signal the UI can render calmly.
+      // Callers should branch on `reason === "not_configured"`.
       return NextResponse.json(
-        { error: "ANTHROPIC_API_KEY is not configured on the server" },
-        { status: 500 },
+        {
+          success: false,
+          reason:  "not_configured",
+          message: "AI features are not set up on this workspace yet.",
+        },
+        { status: 200 },
       );
     }
 

@@ -290,16 +290,27 @@ function ProjectionChart({ brandColor, ga4Trend, ga4Loading }: { brandColor:stri
 
 // ── Backlinks panel ────────────────────────────────────────────────────────────
 function BacklinksPanel({ brandColor, domain }: { brandColor:string; domain:string }) {
-  const [data,    setData]    = useState<any>(null);
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState<string|null>(null);
+  const [data,       setData]       = useState<any>(null);
+  const [loading,    setLoading]    = useState(false);
+  const [error,      setError]      = useState<string|null>(null);
+  const [planLocked, setPlanLocked] = useState(false);
 
   useEffect(() => {
     if (!domain) return;
     setLoading(true);
+    setError(null);
+    setPlanLocked(false);
     fetch(`/api/dataforseo/backlinks?domain=${encodeURIComponent(domain)}`)
       .then(r=>r.json())
-      .then(d => { if (d.success) setData(d); else setError(d.error); })
+      .then(d => {
+        if (d.success) {
+          setData(d);
+        } else if (d.reason === "plan_access") {
+          setPlanLocked(true);
+        } else {
+          setError(d.error ?? d.message ?? "Unable to load backlink data");
+        }
+      })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
   }, [domain]);
@@ -323,6 +334,15 @@ function BacklinksPanel({ brandColor, domain }: { brandColor:string; domain:stri
         <div style={{ display:"flex", justifyContent:"center", padding:"32px" }}>
           <div style={{ width:"20px", height:"20px", border:`2px solid var(--border)`, borderTopColor:brandColor, borderRadius:"50%", animation:"spin 0.7s linear infinite" }}/>
         </div>
+      ) : planLocked ? (
+        <Panel style={{ padding:"24px", border:"1px dashed var(--border)", background:"transparent", textAlign:"center" }}>
+          <div style={{ fontFamily:"var(--font-body)", fontSize:"13px", color:"var(--text-secondary)", marginBottom:"4px" }}>
+            Backlink data is not on your DataForSEO plan.
+          </div>
+          <a href="https://app.dataforseo.com/backlinks-subscription" target="_blank" rel="noreferrer" style={{ fontFamily:"var(--font-mono)", fontSize:"11px", letterSpacing:"0.1em", color:brandColor, textDecoration:"none" }}>
+            ACTIVATE BACKLINKS API ↗
+          </a>
+        </Panel>
       ) : error ? (
         <div style={{ padding:"16px", background:"rgba(255,171,0,0.06)", border:"1px solid rgba(255,171,0,0.20)", borderRadius:"10px", fontFamily:"var(--font-body)", fontSize:"13px", color:"var(--signal-amber)" }}>
           {error} — backlink data unavailable
@@ -347,23 +367,25 @@ function BacklinksPanel({ brandColor, domain }: { brandColor:string; domain:stri
 
 // ── GEO Citation Panel ─────────────────────────────────────────────────────────
 function GeoCitationPanel({ brandColor, domain }: { brandColor:string; domain:string }) {
-  const [results,  setResults]  = useState<GeoResult[]>([]);
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState<string|null>(null);
-  const [citRate,  setCitRate]  = useState<number|null>(null);
-  const [keywords, setKeywords] = useState("");
-  const [ran,      setRan]      = useState(false);
+  const [results,         setResults]         = useState<GeoResult[]>([]);
+  const [loading,         setLoading]         = useState(false);
+  const [error,           setError]           = useState<string|null>(null);
+  const [citRate,         setCitRate]         = useState<number|null>(null);
+  const [keywords,        setKeywords]        = useState("");
+  const [ran,             setRan]             = useState(false);
+  const [aiNotConfigured, setAiNotConfigured] = useState(false);
 
   async function runCheck() {
     const kws = keywords.split(",").map(s=>s.trim()).filter(Boolean);
     if (kws.length === 0) return;
-    setLoading(true); setError(null); setRan(true);
+    setLoading(true); setError(null); setRan(true); setAiNotConfigured(false);
     try {
       const res  = await fetch("/api/geo", {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ domain, keywords: kws }),
       });
       const data = await res.json();
+      if (data?.reason === "not_configured") { setAiNotConfigured(true); return; }
       if (!res.ok || data.error) throw new Error(data.error??"GEO check failed");
       setResults(data.results ?? []);
       setCitRate(data.citationRate ?? 0);
@@ -407,6 +429,17 @@ function GeoCitationPanel({ brandColor, domain }: { brandColor:string; domain:st
 
         {/* Results */}
         {error && <div style={{ padding:"14px 20px", fontFamily:"var(--font-body)", fontSize:"13px", color:"var(--signal-amber)" }}>{error}</div>}
+
+        {aiNotConfigured && (
+          <div style={{ padding:"20px", borderTop:"1px solid var(--border)", borderBottom:"1px solid var(--border)", background:"transparent", textAlign:"center" }}>
+            <div style={{ fontFamily:"var(--font-body)", fontSize:"13px", color:"var(--text-secondary)", marginBottom:"4px" }}>
+              GEO citation tracking is not configured.
+            </div>
+            <div style={{ fontFamily:"var(--font-body)", fontSize:"12px", color:"var(--text-tertiary)" }}>
+              Add an <span style={{ fontFamily:"var(--font-mono)" }}>ANTHROPIC_API_KEY</span> to your server environment to enable it.
+            </div>
+          </div>
+        )}
 
         {citRate !== null && (
           <div style={{ padding:"16px 20px", borderBottom:"1px solid var(--border)", display:"flex", alignItems:"center", gap:"20px", flexWrap:"wrap" }}>
@@ -477,14 +510,15 @@ function GeoCitationPanel({ brandColor, domain }: { brandColor:string; domain:st
 function ActionCenter({ brandColor, domain, gscData, ga4Data }: {
   brandColor:string; domain:string; gscData:any; ga4Data:any;
 }) {
-  const [strategies, setStrategies] = useState<Strategy[]>([]);
-  const [loading,    setLoading]    = useState(false);
-  const [generated,  setGenerated]  = useState(false);
-  const [selected,   setSelected]   = useState<number|null>(null);
-  const [error,      setError]      = useState<string|null>(null);
+  const [strategies,      setStrategies]      = useState<Strategy[]>([]);
+  const [loading,         setLoading]         = useState(false);
+  const [generated,       setGenerated]       = useState(false);
+  const [selected,        setSelected]        = useState<number|null>(null);
+  const [error,           setError]           = useState<string|null>(null);
+  const [aiNotConfigured, setAiNotConfigured] = useState(false);
 
   async function generateStrategies() {
-    setLoading(true); setError(null);
+    setLoading(true); setError(null); setAiNotConfigured(false);
     try {
       const context = {
         domain,
@@ -519,6 +553,10 @@ Each strategy must be specific to this domain's actual data. Impact and effort a
         body:    JSON.stringify({ prompt, max_tokens: 1000 }),
       });
       const data = await res.json();
+      if (data?.reason === "not_configured") {
+        setAiNotConfigured(true);
+        return;
+      }
       if (!res.ok || data.error) throw new Error(data.error ?? "Strategy generation failed");
       const text  = data.text ?? "[]";
       const clean = text.replace(/```json|```/g,"").trim();
@@ -554,6 +592,18 @@ Each strategy must be specific to this domain's actual data. Impact and effort a
       }/>
 
       {error && <div style={{ padding:"12px 16px", background:"rgba(255,171,0,0.06)", border:"1px solid rgba(255,171,0,0.20)", borderRadius:"8px", marginBottom:"14px", fontFamily:"var(--font-body)", fontSize:"13px", color:"var(--signal-amber)" }}>{error}</div>}
+
+      {aiNotConfigured && !loading && (
+        <Panel style={{ padding:"28px", border:"1px dashed var(--border)", background:"transparent", textAlign:"center", marginBottom:"14px" }}>
+          <Brain size={22} color="var(--text-tertiary)" style={{ marginBottom:"10px" }}/>
+          <div style={{ fontFamily:"var(--font-body)", fontSize:"14px", color:"var(--text-secondary)", marginBottom:"4px" }}>
+            AI strategy generation is not configured.
+          </div>
+          <div style={{ fontFamily:"var(--font-body)", fontSize:"13px", color:"var(--text-tertiary)" }}>
+            Add an <span style={{ fontFamily:"var(--font-mono)" }}>ANTHROPIC_API_KEY</span> to your server environment to enable it.
+          </div>
+        </Panel>
+      )}
 
       {loading && (
         <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>

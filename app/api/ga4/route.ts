@@ -6,78 +6,13 @@
 // =============================================================================
 
 import { NextResponse } from "next/server";
+import { getGoogleAccessToken } from "@/lib/google-auth";
 
 const GA4_API_BASE = "https://analyticsdata.googleapis.com/v1beta";
+const GA4_SCOPE    = "https://www.googleapis.com/auth/analytics.readonly";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Google OAuth2 — get access token from service account JSON
-// ─────────────────────────────────────────────────────────────────────────────
 async function getAccessToken(): Promise<string> {
-  const keyRaw = process.env.GA4_SERVICE_ACCOUNT_KEY;
-  if (!keyRaw) throw new Error("GA4_SERVICE_ACCOUNT_KEY is not set");
-
-  let key: any;
-  try {
-    key = JSON.parse(keyRaw);
-  } catch {
-    throw new Error("GA4_SERVICE_ACCOUNT_KEY is not valid JSON");
-  }
-
-  const now     = Math.floor(Date.now() / 1000);
-  const payload = {
-    iss:   key.client_email,
-    scope: "https://www.googleapis.com/auth/analytics.readonly",
-    aud:   "https://oauth2.googleapis.com/token",
-    iat:   now,
-    exp:   now + 3600,
-  };
-
-  // Build JWT manually (no external libraries needed)
-  const header  = { alg: "RS256", typ: "JWT" };
-  const b64     = (obj: object) =>
-    Buffer.from(JSON.stringify(obj)).toString("base64url");
-  const unsigned = `${b64(header)}.${b64(payload)}`;
-
-  // Sign with private key using Web Crypto
-  const pemBody = key.private_key
-    .replace("-----BEGIN PRIVATE KEY-----", "")
-    .replace("-----END PRIVATE KEY-----", "")
-    .replace(/\s/g, "");
-
-  const binaryKey  = Buffer.from(pemBody, "base64");
-  const cryptoKey  = await crypto.subtle.importKey(
-    "pkcs8",
-    binaryKey,
-    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-
-  const signature = await crypto.subtle.sign(
-    "RSASSA-PKCS1-v1_5",
-    cryptoKey,
-    Buffer.from(unsigned)
-  );
-
-  const jwt = `${unsigned}.${Buffer.from(signature).toString("base64url")}`;
-
-  // Exchange JWT for access token
-  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion:  jwt,
-    }),
-  });
-
-  if (!tokenRes.ok) {
-    const err = await tokenRes.text();
-    throw new Error(`Failed to get GA4 access token: ${err}`);
-  }
-
-  const tokenData = await tokenRes.json();
-  return tokenData.access_token;
+  return getGoogleAccessToken(GA4_SCOPE);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
