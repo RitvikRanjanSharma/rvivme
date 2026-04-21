@@ -2,7 +2,7 @@
 
 // app/blog/page.tsx
 // =============================================================================
-// AI Marketing Labs — Public Blog Index
+// AI Marketing Lab — Public Blog Index
 // Reads from Supabase blog_posts table · Category filter · Search · Newsletter
 // =============================================================================
 
@@ -111,7 +111,7 @@ function NewsletterBanner() {
         Weekly SEO & GEO Intelligence.<br /><span style={{ color: brandColor }}>Delivered to your inbox.</span>
       </h3>
       <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "14px", color: "var(--text-secondary)", lineHeight: 1.7, maxWidth: "480px", margin: "0 auto 28px" }}>
-        Join enterprise SEO practitioners receiving the AI Marketing Labs weekly brief — strategy analysis, algorithm updates, and GEO intelligence every Tuesday.
+        Join enterprise SEO practitioners receiving the AI Marketing Lab weekly brief — strategy analysis, algorithm updates, and GEO intelligence every Tuesday.
       </p>
       <AnimatePresence mode="wait">
         {submitted ? (
@@ -255,7 +255,7 @@ export default function BlogIndexPage() {
   const [brandColor,     setBrandColor]     = useState("#3b82f6");
 
   useEffect(() => {
-    const stored = localStorage.getItem("rvivme-brand");
+    const stored = localStorage.getItem("aiml-brand") || localStorage.getItem("rvivme-brand");
     if (stored) {
       setBrandColor(stored);
       document.documentElement.style.setProperty("--brand", stored);
@@ -306,7 +306,7 @@ export default function BlogIndexPage() {
                   SEO & GEO<br /><span style={{ color: brandColor }}>Intelligence.</span>
                 </h1>
                 <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "15px", color: "var(--text-secondary)", maxWidth: "520px", lineHeight: 1.7 }}>
-                  Strategy analysis, technical guides, and growth insights from the AI Marketing Labs team.
+                  Strategy analysis, technical guides, and growth insights from the AI Marketing Lab team.
                 </p>
               </div>
               {/* Search */}

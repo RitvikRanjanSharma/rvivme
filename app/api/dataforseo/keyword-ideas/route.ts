@@ -1,6 +1,6 @@
 // app/api/dataforseo/keyword-ideas/route.ts
 // =============================================================================
-// AI Marketing Labs — Keyword Ideas (Google Ads data via DataForSEO)
+// AI Marketing Lab — Keyword Ideas (Google Ads data via DataForSEO)
 // Equivalent to Google Keyword Planner — same underlying data source
 // Returns: search volume, CPC, competition, trends, related keywords
 // =============================================================================

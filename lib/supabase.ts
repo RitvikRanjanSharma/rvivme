@@ -1,10 +1,25 @@
 // lib/supabase.ts
 // =============================================================================
-// AI Marketing Labs — Supabase Client
+// AI Marketing Lab — Supabase Client
 // Browser-safe singleton. Import this anywhere in the app.
+// Resilient: if env vars are missing the module still loads so UI can render
+// a useful error instead of a white screen.
 // =============================================================================
 
 import { createBrowserClient } from "@supabase/ssr";
+
+const SUPABASE_URL      = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+export const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+
+if (!isSupabaseConfigured && typeof window !== "undefined") {
+  // eslint-disable-next-line no-console
+  console.warn(
+    "[AI Marketing Lab] Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and " +
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local, then restart the dev server."
+  );
+}
 
 export type Database = {
   public: {
@@ -162,8 +177,8 @@ let client: ReturnType<typeof createBrowserClient<Database>> | null = null;
 export function getSupabase() {
   if (!client) {
     client = createBrowserClient<Database>(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      SUPABASE_URL      ?? "http://localhost:54321",
+      SUPABASE_ANON_KEY ?? "public-anon-key-placeholder"
     );
   }
   return client;

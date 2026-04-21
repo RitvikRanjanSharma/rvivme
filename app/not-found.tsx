@@ -2,7 +2,7 @@
 
 // app/not-found.tsx
 // =============================================================================
-// AI Marketing Labs — 404
+// AI Marketing Lab — 404
 // Editorial · Dry · On-brand
 // =============================================================================
 
@@ -143,7 +143,7 @@ export default function NotFound() {
           color:         "var(--text-tertiary)",
           marginTop:     "64px",
         }}>
-          AI Marketing Labs · aimarketinglab.co.uk
+          AI Marketing Lab · aimarketinglab.co.uk
         </p>
       </motion.div>
     </div>

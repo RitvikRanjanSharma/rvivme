@@ -1,6 +1,6 @@
 // app/api/geo/route.ts
 // =============================================================================
-// AI Marketing Labs — GEO Citation Tracker
+// AI Marketing Lab — GEO Citation Tracker
 // Queries Claude to simulate what AI engines return for target keywords
 // Checks if your domain is cited in AI-generated answers
 // =============================================================================
@@ -9,6 +9,14 @@ import { NextResponse, type NextRequest } from "next/server";
 
 export async function POST(request: NextRequest) {
   try {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "ANTHROPIC_API_KEY is not configured on the server" },
+        { status: 500 },
+      );
+    }
+
     const { domain, keywords } = await request.json();
     if (!domain || !keywords?.length) {
       return NextResponse.json({ error: "domain and keywords required" }, { status: 400 });
@@ -20,8 +28,9 @@ export async function POST(request: NextRequest) {
           const res = await fetch("https://api.anthropic.com/v1/messages", {
             method: "POST",
             headers: {
-              "Content-Type": "application/json",
+              "Content-Type":      "application/json",
               "anthropic-version": "2023-06-01",
+              "x-api-key":         apiKey,
             },
             body: JSON.stringify({
               model:      "claude-haiku-4-5-20251001",
@@ -33,6 +42,12 @@ export async function POST(request: NextRequest) {
               }],
             }),
           });
+
+          if (!res.ok) {
+            const text = await res.text().catch(() => "");
+            console.error(`[geo] Anthropic ${res.status}: ${text.slice(0, 200)}`);
+            return { keyword: kw, cited: false, answer: "", mentioned: [] };
+          }
 
           const data    = await res.json();
           const answer  = data.content?.[0]?.text ?? "";

@@ -2,7 +2,7 @@
 
 // app/keywords/page.tsx
 // =============================================================================
-// AI Marketing Labs — Keyword Intelligence
+// AI Marketing Lab — Keyword Intelligence
 // Live rankings · Keyword ideas · Competitor keywords + AI analysis
 // =============================================================================
 
@@ -102,22 +102,17 @@ function AiReasonCard({ kw, domain, brandColor }: { kw: CompKw; domain: string; 
     if (reason || loading) { setOpen(!open); return; }
     setOpen(true); setLoading(true);
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
+      const prompt = `You are an SEO strategist. In 2-3 sentences explain why the keyword "${kw.term}" (volume: ${kw.volume}/mo, difficulty: ${kw.difficulty}/100, intent: ${kw.intent}) is a strategic opportunity for "${domain}". Be direct and specific. No fluff.`;
+      const res  = await fetch("/api/claude", {
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 150,
-          messages: [{
-            role: "user",
-            content: `You are an SEO strategist. In 2-3 sentences explain why the keyword "${kw.term}" (volume: ${kw.volume}/mo, difficulty: ${kw.difficulty}/100, intent: ${kw.intent}) is a strategic opportunity for "${domain}". Be direct and specific. No fluff.`,
-          }],
-        }),
+        body:    JSON.stringify({ prompt, max_tokens: 200 }),
       });
       const data = await res.json();
-      const text = data.content?.[0]?.text ?? "Analysis unavailable.";
-      setReason(text);
-    } catch {
+      if (!res.ok || data.error) throw new Error(data.error ?? "Analysis failed");
+      setReason(data.text || "Analysis unavailable.");
+    } catch (e) {
+      console.error("[AiReasonCard]", e);
       setReason("Unable to generate analysis. Check your connection.");
     } finally {
       setLoading(false);

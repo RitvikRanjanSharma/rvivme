@@ -1,6 +1,6 @@
 // app/api/gsc/route.ts
 // =============================================================================
-// AI Marketing Labs — Google Search Console API Route
+// AI Marketing Lab — Google Search Console API Route
 // Reuses the same service account as GA4 (GA4_SERVICE_ACCOUNT_KEY)
 // Returns: impressions, clicks, CTR, avg position, top queries, top pages
 // =============================================================================

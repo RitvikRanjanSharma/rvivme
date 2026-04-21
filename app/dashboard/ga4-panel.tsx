@@ -2,7 +2,7 @@
 
 // app/dashboard/ga4-panel.tsx
 // =============================================================================
-// AI Marketing Labs — GA4 Live Data Panel
+// AI Marketing Lab — GA4 Live Data Panel
 // Drop this into the dashboard. Fetches from /api/ga4 on mount.
 // Shows: sessions, users, bounce rate, avg session, top pages, sources
 // =============================================================================

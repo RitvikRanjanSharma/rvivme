@@ -1,6 +1,6 @@
 // app/api/dataforseo/competitor-keywords/route.ts
 // =============================================================================
-// AI Marketing Labs — Competitor Keywords API
+// AI Marketing Lab — Competitor Keywords API
 // Returns: all competitor keywords + gap analysis (you don't rank for these)
 //          + opportunities (low difficulty, decent volume)
 // =============================================================================

@@ -1,6 +1,6 @@
 // app/api/ga4/route.ts
 // =============================================================================
-// AI Marketing Labs — GA4 Data API Route
+// AI Marketing Lab — GA4 Data API Route
 // Server-side only — service account credentials never reach the browser
 // Returns sessions, users, pageviews, and 30-day traffic trend
 // =============================================================================

@@ -2,7 +2,7 @@
 
 // lib/useDomain.ts
 // =============================================================================
-// AI Marketing Labs — useDomain hook
+// AI Marketing Lab — useDomain hook
 // Reads website_url from Supabase public.users
 // Falls back to aimarketinglab.co.uk
 // =============================================================================

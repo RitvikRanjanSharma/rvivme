@@ -1,6 +1,6 @@
 "use client";
 
-// app/page.tsx — AI Marketing Labs
+// app/page.tsx — AI Marketing Lab
 // GOD MODE particle system — light/dark mode aware
 // Phase 1: counter 000→100 → burst
 // Phase 2: wipe fills screen
@@ -342,7 +342,7 @@ function CounterOverlay({ count, visible }: { count: number; visible: boolean })
             transition={{ duration: 0.5 }}
             style={{ fontFamily: "var(--font-body)", fontSize: "13px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--text-tertiary)" }}
           >
-            AI Marketing Labs
+            AI Marketing Lab
           </motion.div>
           <div style={{ position: "absolute", bottom: 0, left: 0, height: "2px", width: `${count}%`, background: "var(--brand)", transition: "width 0.06s linear" }} />
         </motion.div>
@@ -375,21 +375,23 @@ function Marquee() {
   );
 }
 
+function StatCell({ stat, i }: { stat: { value: string; label: string }; i: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-40px" });
+  return (
+    <motion.div ref={ref} initial={{ opacity: 0, y: 24 }} animate={inView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.8, ease: EASE_EXPO, delay: 0.1 + i * 0.1 }}
+      style={{ padding: "48px 32px", borderRight: i < 3 ? "1px solid var(--border)" : "none" }}
+    >
+      <div style={{ fontFamily: "var(--font-display)", fontSize: "clamp(2rem,4vw,3.5rem)", letterSpacing: "-0.04em", lineHeight: 1, color: "var(--text-primary)", marginBottom: "10px" }}>{stat.value}</div>
+      <div style={{ fontFamily: "var(--font-body)", fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.5 }}>{stat.label}</div>
+    </motion.div>
+  );
+}
+
 function StatRow() {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", borderTop: "1px solid var(--border)" }}>
-      {STATS.map((stat, i) => {
-        const ref = useRef<HTMLDivElement>(null);
-        const inView = useInView(ref, { once: true, margin: "-40px" });
-        return (
-          <motion.div key={stat.label} ref={ref} initial={{ opacity: 0, y: 24 }} animate={inView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.8, ease: EASE_EXPO, delay: 0.1 + i * 0.1 }}
-            style={{ padding: "48px 32px", borderRight: i < 3 ? "1px solid var(--border)" : "none" }}
-          >
-            <div style={{ fontFamily: "var(--font-display)", fontSize: "clamp(2rem,4vw,3.5rem)", letterSpacing: "-0.04em", lineHeight: 1, color: "var(--text-primary)", marginBottom: "10px" }}>{stat.value}</div>
-            <div style={{ fontFamily: "var(--font-body)", fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.5 }}>{stat.label}</div>
-          </motion.div>
-        );
-      })}
+      {STATS.map((stat, i) => <StatCell key={stat.label} stat={stat} i={i} />)}
     </div>
   );
 }

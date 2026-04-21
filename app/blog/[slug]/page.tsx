@@ -2,7 +2,7 @@
 
 // app/blog/[slug]/page.tsx
 // =============================================================================
-// AI Marketing Labs — Blog Post
+// AI Marketing Lab — Blog Post
 // Reads from Supabase · New design system · View count · Share buttons
 // =============================================================================
 
@@ -113,13 +113,16 @@ export default function BlogPostPage() {
 
       if (error || !data) { setNotFound(true); setLoading(false); return; }
       const post = data as Post;
-        setPost(post);
-        setLoading(false);
+      setPost(post);
+      setLoading(false);
 
-        // Increment view count
-        await supabase.from("blog_posts").update({ view_count: (post.view_count ?? 0) + 1 } as never).eq("id", post.id);
-        // Log view event
-        await supabase.from("post_view_events").insert({ post_id: post.id, referrer: document.referrer || null } as never);
+      // Increment view count. RLS on blog_posts blocks anon/non-author UPDATEs,
+      // so go through the SECURITY DEFINER RPC added in migration 003.
+      // `as never` bypasses the generated RPC type map, which doesn't know about
+      // our custom function yet.
+      await supabase.rpc("increment_post_view" as never, { p_post_id: post.id } as never);
+      // Log the view event (anon has public insert via RLS).
+      await supabase.from("post_view_events").insert({ post_id: post.id, referrer: document.referrer || null } as never);
     }
     load();
   }, [slug]);
@@ -127,7 +130,13 @@ export default function BlogPostPage() {
   async function handleSubscribe(e: React.FormEvent) {
     e.preventDefault();
     if (!email.includes("@")) return;
-    await supabase.from("newsletter_subscribers").insert({ email, source: "post" } as never);
+    // UNIQUE constraint on email means a duplicate subscribe throws 23505.
+    // Treat "already subscribed" as success from the reader's perspective.
+    const { error } = await supabase.from("newsletter_subscribers").insert({ email, source: "post" } as never);
+    if (error && !/duplicate|unique/i.test(error.message)) {
+      console.error("[subscribe]", error.message);
+      return;
+    }
     setSubbed(true);
   }
 

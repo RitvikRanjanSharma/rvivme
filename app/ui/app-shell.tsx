@@ -2,7 +2,7 @@
 
 // app/ui/app-shell.tsx
 // =============================================================================
-// AI Marketing Labs — App Shell v2
+// AI Marketing Lab — App Shell v2
 // Fixed: nav routing, settings link, profile menu on all app routes
 // =============================================================================
 
@@ -14,7 +14,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LogOut, Settings, User, ChevronDown, Sun, Moon,
-  LayoutDashboard, Search, Users, FileText, SlidersHorizontal,
+  Home, LayoutDashboard, Search, Users,
 } from "lucide-react";
 
 // ─── Theme context ────────────────────────────────────────────────────────────
@@ -72,16 +72,15 @@ export function useTheme() {
 
 // ─── Nav definitions ──────────────────────────────────────────────────────────
 const PUBLIC_NAV = [
-  { href: "/",     label: "Home"         },
-  { href: "/blog", label: "Intelligence" },
+  { href: "/",     label: "Home" },
+  { href: "/blog", label: "Blog" },
 ] as const;
 
 const APP_NAV = [
+  { href: "/",            label: "Home",        icon: Home             },
   { href: "/dashboard",   label: "Dashboard",   icon: LayoutDashboard  },
-  { href: "/keywords",    label: "Keywords",    icon: Search            },
-  { href: "/competitors", label: "Competitors", icon: Users             },
-  { href: "/blog",        label: "Blog",        icon: FileText          },
-  { href: "/settings",    label: "Settings",    icon: SlidersHorizontal },
+  { href: "/keywords",    label: "Keywords",    icon: Search           },
+  { href: "/competitors", label: "Competitors", icon: Users            },
 ] as const;
 
 // ─── Profile menu ─────────────────────────────────────────────────────────────
@@ -204,7 +203,7 @@ function Header() {
           </svg>
         </div>
         <span style={{ fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>
-          AI Marketing Labs
+          AI Marketing Lab
         </span>
       </Link>
 
@@ -212,7 +211,9 @@ function Header() {
       <nav style={{ display: "flex", alignItems: "center" }}>
         {isApp
           ? APP_NAV.map(({ href, label, icon: Icon }) => {
-              const active = pathname === href || (href !== "/dashboard" && href !== "/blog" && pathname.startsWith(href));
+              const active = href === "/"
+                ? pathname === "/"
+                : pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
               return (
                 <Link key={href} href={href} style={{
                   display: "flex", alignItems: "center", gap: "6px",
@@ -312,10 +313,10 @@ function Footer() {
       display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "16px",
     }}>
       <span style={{ fontFamily: "var(--font-body)", fontSize: "13px", color: "var(--text-tertiary)" }}>
-        © {new Date().getFullYear()} AI Marketing Labs · Welwyn Garden City, UK
+        © {new Date().getFullYear()} AI Marketing Lab · Welwyn Garden City, UK
       </span>
       <div style={{ display: "flex", gap: "24px" }}>
-        {[{ href: "/blog", label: "Intelligence" }, { href: "/dashboard", label: "Dashboard" }, { href: "/auth/login", label: "Sign in" }].map(({ href, label }) => (
+        {[{ href: "/blog", label: "Blog" }, { href: "/dashboard", label: "Dashboard" }, { href: "/auth/login", label: "Sign in" }].map(({ href, label }) => (
           <Link key={href} href={href} style={{ fontFamily: "var(--font-body)", fontSize: "13px", color: "var(--text-tertiary)", textDecoration: "none", transition: "color 0.16s" }}
             onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"}
             onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text-tertiary)"}

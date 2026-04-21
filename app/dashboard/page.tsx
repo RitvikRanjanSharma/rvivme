@@ -2,7 +2,7 @@
 
 // app/dashboard/page.tsx
 // =============================================================================
-// AI Marketing Labs — Intelligence Dashboard v2
+// AI Marketing Lab — Intelligence Dashboard v2
 // Real GA4 + GSC data · AI-generated strategies · GEO tracking · Backlinks
 // =============================================================================
 
@@ -74,23 +74,16 @@ function AnimatedNumber({ target, decimals=0, delay=0 }: { target:number; decima
 // ── Forecast model ─────────────────────────────────────────────────────────────
 function buildChartData(trend: GA4TrendPoint[]) {
   if (trend.length === 0) {
-    const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    const now = new Date();
-    const mock = Array.from({length:6},(_,i)=>({
-      month: MONTHS[(now.getMonth()-5+i+12)%12],
-      actual: Math.round(800+i*120+Math.random()*200),
-      forecast:null as number|null, lower:null as number|null, upper:null as number|null,
-    }));
-    const last = mock[mock.length-1].actual!;
-    mock[mock.length-1].forecast=last; mock[mock.length-1].lower=Math.round(last*0.92); mock[mock.length-1].upper=Math.round(last*1.08);
-    const fcast = Array.from({length:6},(_,i)=>({
-      month: MONTHS[(now.getMonth()+i+1)%12]+(i===5?"+":" ").trim(),
-      actual:null as number|null,
-      forecast: Math.round(last*Math.pow(1.05,i+1)),
-      lower: Math.round(last*Math.pow(1.05,i+1)*(1-0.06-i*0.04)),
-      upper: Math.round(last*Math.pow(1.05,i+1)*(1+0.06+i*0.04)),
-    }));
-    return { data:[...mock,...fcast], currentMTD:last, forecast6M:fcast[5].forecast??last, growthPct:30, confidence:75, handoffMonth:mock[mock.length-1].month };
+    // No GA4 data connected — return an empty, zeroed structure so the UI
+    // can show a proper empty state. Absolutely no fabricated traffic numbers.
+    return {
+      data:         [] as TrafficDataPoint[],
+      currentMTD:   0,
+      forecast6M:   0,
+      growthPct:    0,
+      confidence:   0,
+      handoffMonth: "",
+    };
   }
 
   const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -193,6 +186,47 @@ function ProjectionChart({ brandColor, ga4Trend, ga4Loading }: { brandColor:stri
   const { data, currentMTD, forecast6M, growthPct, confidence, handoffMonth } = buildChartData(ga4Trend);
   const isReal = ga4Trend.length > 0;
 
+  // Empty-state — GA4 not connected and not currently loading.
+  if (!isReal && !ga4Loading) {
+    return (
+      <motion.div ref={chartRef} variants={pv(0.2)} initial="hidden" animate="visible">
+        <Panel style={{ padding:"32px 24px" }}>
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-start", gap:"4px", marginBottom:"20px" }}>
+            <div style={{ fontFamily:"var(--font-body)", fontSize:"15px", fontWeight:600, color:"var(--text-primary)" }}>
+              Organic Traffic · 6-Month AI Projection
+            </div>
+            <div style={{ fontFamily:"var(--font-mono)", fontSize:"11px", color:"var(--text-tertiary)", letterSpacing:"0.08em" }}>
+              AWAITING GA4 CONNECTION
+            </div>
+          </div>
+
+          <div style={{
+            display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+            padding:"44px 24px", background:"var(--card)", border:"1px dashed var(--border)",
+            borderRadius:"10px", textAlign:"center", gap:"10px",
+          }}>
+            <Activity size={18} color="var(--text-tertiary)" />
+            <div style={{ fontFamily:"var(--font-body)", fontSize:"14px", fontWeight:500, color:"var(--text-primary)" }}>
+              No traffic data yet
+            </div>
+            <div style={{ fontFamily:"var(--font-body)", fontSize:"13px", color:"var(--text-secondary)", lineHeight:1.6, maxWidth:"460px" }}>
+              Connect Google Analytics 4 to see your actual sessions projected six months forward with honest confidence intervals.
+            </div>
+            <a href="/settings?tab=integrations" style={{
+              display:"inline-flex", alignItems:"center", gap:"6px",
+              fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:500,
+              color:"#fff", background:brandColor, textDecoration:"none",
+              padding:"8px 18px", borderRadius:"100px", marginTop:"4px",
+              transition:"opacity 0.16s",
+            }}>
+              Connect GA4 <ArrowRight size={12}/>
+            </a>
+          </div>
+        </Panel>
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div ref={chartRef} variants={pv(0.2)} initial="hidden" animate="visible">
       <Panel style={{ padding:"24px 24px 16px" }}>
@@ -202,7 +236,7 @@ function ProjectionChart({ brandColor, ga4Trend, ga4Loading }: { brandColor:stri
               Organic Traffic · 6-Month AI Projection
             </div>
             <div style={{ fontFamily:"var(--font-mono)", fontSize:"11px", color:isReal?"var(--signal-green)":"var(--text-tertiary)", letterSpacing:"0.08em" }}>
-              {ga4Loading?"LOADING GA4 DATA…":isReal?`LIVE GA4 · AI FORECAST v1.0 · ${confidence}% CONFIDENCE`:"SAMPLE DATA · CONNECT GA4 FOR LIVE CHART"}
+              {ga4Loading?"LOADING GA4 DATA…":`LIVE GA4 · AI FORECAST v1.0 · ${confidence}% CONFIDENCE`}
             </div>
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:"16px" }}>
@@ -463,15 +497,7 @@ function ActionCenter({ brandColor, domain, gscData, ga4Data }: {
         topQueries:  gscData?.topQueries?.slice(0,5).map((q:any)=>q.query).join(", ") ?? "none yet",
       };
 
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          messages:[{
-            role:"user",
-            content: `You are an expert SEO and GEO strategist. Based on this website's real performance data, generate 3 specific, actionable strategies.
+      const prompt = `You are an expert SEO and GEO strategist. Based on this website's real performance data, generate 3 specific, actionable strategies.
 
 Website: ${context.domain}
 Sessions (30d): ${context.sessions}
@@ -485,19 +511,23 @@ Top Queries: ${context.topQueries}
 Return ONLY valid JSON array with exactly 3 objects, no markdown, no explanation:
 [{"title":"...","rationale":"...","impact":8.5,"effort":4.2,"timeframe":"14-30 days","category":"..."}]
 
-Each strategy must be specific to this domain's actual data. Impact and effort are 0-10 scores.`,
-          }],
-        }),
-      });
+Each strategy must be specific to this domain's actual data. Impact and effort are 0-10 scores.`;
 
+      const res = await fetch("/api/claude", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ prompt, max_tokens: 1000 }),
+      });
       const data = await res.json();
-      const text = data.content?.[0]?.text ?? "[]";
+      if (!res.ok || data.error) throw new Error(data.error ?? "Strategy generation failed");
+      const text  = data.text ?? "[]";
       const clean = text.replace(/```json|```/g,"").trim();
       const parsed = JSON.parse(clean);
       setStrategies(parsed);
       setGenerated(true);
     } catch(e:any) {
-      setError("Could not generate strategies. Check your connection.");
+      console.error("[ActionCenter]", e);
+      setError(e?.message ?? "Could not generate strategies. Check your connection.");
     } finally {
       setLoading(false);
     }
@@ -616,6 +646,8 @@ export default function DashboardPage() {
   const [ga4Loading, setGa4Loading] = useState(true);
   const [ga4Data,    setGa4Data]    = useState<any>(null);
   const [gscData,    setGscData]    = useState<any>(null);
+  const [ga4Connected, setGa4Connected] = useState(true);
+  const [gscConnected, setGscConnected] = useState(true);
 
   useEffect(() => {
     const b = localStorage.getItem("aiml-brand") || localStorage.getItem("rvivme-brand");
@@ -630,20 +662,35 @@ export default function DashboardPage() {
   useEffect(() => {
     fetch("/api/ga4")
       .then(r=>r.json())
-      .then(data => { if (data.success) { setGa4Trend(data.trend??[]); setGa4Data(data); } })
-      .catch(()=>{})
+      .then(data => {
+        if (data.success) {
+          setGa4Trend(data.trend ?? []);
+          setGa4Data(data);
+          setGa4Connected(true);
+        } else {
+          setGa4Connected(false);
+        }
+      })
+      .catch(()=> setGa4Connected(false))
       .finally(()=>setGa4Loading(false));
     fetch("/api/gsc")
       .then(r=>r.json())
-      .then(data => { if (data.success) setGscData(data); })
-      .catch(()=>{});
+      .then(data => {
+        if (data.success) {
+          setGscData(data);
+          setGscConnected(true);
+        } else {
+          setGscConnected(false);
+        }
+      })
+      .catch(()=> setGscConnected(false));
   }, []);
 
   const dateStr = new Intl.DateTimeFormat("en-GB",{timeZone:"UTC",weekday:"long",day:"numeric",month:"long",year:"numeric"}).format(new Date());
 
   return (
     <div style={{ background:"var(--bg)", minHeight:"100vh", padding:"32px 24px 80px", maxWidth:"1280px", margin:"0 auto" }}>
-      <ConnectionBanner ga4Connected={true} gscConnected={true}/>
+      <ConnectionBanner ga4Connected={ga4Connected} gscConnected={gscConnected}/>
 
       {/* Header */}
       <motion.div variants={pv(0)} initial="hidden" animate="visible" style={{ display:"flex", alignItems:"flex-end", justifyContent:"space-between", marginBottom:"24px", flexWrap:"wrap", gap:"12px" }}>

@@ -2,7 +2,7 @@
 
 // app/competitors/page.tsx
 // =============================================================================
-// AI Marketing Labs — Competitor Intelligence
+// AI Marketing Lab — Competitor Intelligence
 // Live DataForSEO data · Add manual competitors · Threat analysis
 // =============================================================================
 
@@ -73,35 +73,98 @@ export default function CompetitorsPage() {
     if (!domain || domainLoading) return;
     setLoading(true); setError(null);
     try {
-      // First load any manually saved competitors from Supabase
+      // 1. Manually-saved competitors (Supabase)
       const { data: { user } } = await supabase.auth.getUser();
-      let savedDomains: string[] = [];
+      let savedRows: Array<{ domain: string; competitor_url: string }> = [];
       if (user) {
         const { data: saved } = await supabase
           .from("competitors")
           .select("domain, competitor_url")
           .eq("user_id", user.id)
           .eq("is_active", true);
-        savedDomains = (saved ?? []).map((c: any) => c.domain);
+        savedRows = (saved ?? []) as Array<{ domain: string; competitor_url: string }>;
+      }
+      const savedDomains = savedRows.map(r => r.domain).filter(Boolean);
+
+      // 2. AI-discovered competitors (DataForSEO). Don't throw the whole load
+      //    if this fails — we still want to show saved competitors.
+      let aiList: Competitor[] = [];
+      let aiError: string | null = null;
+      try {
+        const res  = await fetch("/api/dataforseo/competitors", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ domain, limit: 10 }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error ?? "Failed to load competitors");
+        aiList = (data.competitors ?? []) as Competitor[];
+      } catch (e: any) {
+        aiError = e.message;
       }
 
-      // Fetch AI-discovered competitors from DataForSEO
-      const res  = await fetch("/api/dataforseo/competitors", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ domain, limit: 10 }),
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error ?? "Failed to load competitors");
+      const aiDomains = new Set(aiList.map(c => c.domain));
 
-      // Merge: mark saved ones, add any extra saved ones not in AI list
-      const aiList: Competitor[] = data.competitors ?? [];
-      const merged = aiList.map((c: Competitor) => ({
-        ...c,
-        discovered_via_ai: !savedDomains.includes(c.domain),
-      }));
+      // 3. Any saved competitors not already returned by DFS need their own
+      //    metrics — fetch them in a single bulk call.
+      const missing = savedDomains.filter(d => !aiDomains.has(d));
+      const savedOnly: Competitor[] = [];
+      if (missing.length > 0) {
+        try {
+          const res  = await fetch("/api/dataforseo/domain-metrics", {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ domains: missing }),
+          });
+          const data = await res.json();
+          const metricsMap: Record<string, { domain_authority: number; monthly_traffic: number; keywords: number }> =
+            data?.metrics ?? {};
+
+          for (const row of savedRows) {
+            if (aiDomains.has(row.domain)) continue;
+            const m = metricsMap[row.domain] ?? { domain_authority: 0, monthly_traffic: 0, keywords: 0 };
+            savedOnly.push({
+              domain:            row.domain,
+              competitor_url:    row.competitor_url,
+              domain_authority:  m.domain_authority,
+              monthly_traffic:   m.monthly_traffic,
+              keywords:          m.keywords,
+              overlap:           0,
+              content_gap:       0,
+              threat:            "low",
+              trend:             "stable",
+              discovered_via_ai: false,
+            });
+          }
+        } catch {
+          // If metrics lookup fails, still show the saved competitors with zeros
+          for (const row of savedRows) {
+            if (aiDomains.has(row.domain)) continue;
+            savedOnly.push({
+              domain:            row.domain,
+              competitor_url:    row.competitor_url,
+              domain_authority:  0,
+              monthly_traffic:   0,
+              keywords:          0,
+              overlap:           0,
+              content_gap:       0,
+              threat:            "low",
+              trend:             "stable",
+              discovered_via_ai: false,
+            });
+          }
+        }
+      }
+
+      // 4. Merge: saved (manual) first, then AI-discovered. Flag correctly.
+      const savedSet = new Set(savedDomains);
+      const merged: Competitor[] = [
+        ...savedOnly,
+        ...aiList.map(c => ({ ...c, discovered_via_ai: !savedSet.has(c.domain) })),
+      ];
 
       setCompetitors(merged);
+      if (aiError && merged.length === 0) setError(aiError);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -113,36 +176,51 @@ export default function CompetitorsPage() {
 
   async function handleAddCompetitor() {
     if (!addUrl.trim()) return;
-    setAdding(true);
+    setAdding(true); setError(null);
     try {
       const url     = addUrl.trim().startsWith("http") ? addUrl.trim() : `https://${addUrl.trim()}`;
       const domain2 = url.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
 
-      // Save to Supabase
+      // Save to Supabase — onConflict lets a re-added competitor flip back to active
+      // instead of tripping the UNIQUE (user_id, competitor_url) constraint.
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        await supabase.from("competitors").upsert({
-          user_id:        user.id,
-          competitor_url: url,
-          is_active:      true,
-        } as never);
+      if (!user) throw new Error("Not signed in — can't save competitor.");
+
+      const { error: upErr } = await supabase.from("competitors").upsert({
+        user_id:        user.id,
+        competitor_url: url,
+        is_active:      true,
+      } as never, { onConflict: "user_id,competitor_url" });
+      if (upErr) throw new Error(upErr.message);
+
+      // Fetch metrics for THIS specific domain (not competitors of it).
+      let m = { domain_authority: 0, monthly_traffic: 0, keywords: 0 };
+      try {
+        const res  = await fetch("/api/dataforseo/domain-metrics", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ domains: [domain2] }),
+        });
+        const data = await res.json();
+        if (data?.metrics?.[domain2]) m = data.metrics[domain2];
+      } catch {
+        // Metrics lookup is best-effort — still show the saved row.
       }
 
-      // Fetch metrics for this domain
-      const res  = await fetch("/api/dataforseo/competitors", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ domain: domain2, limit: 1 }),
-      });
-      const data = await res.json();
-      const newComp: Competitor = data.competitors?.[0] ?? {
-        domain: domain2, competitor_url: url,
-        domain_authority: 0, monthly_traffic: 0, keywords: 0,
-        overlap: 0, content_gap: 0, threat: "low", trend: "stable",
+      const newComp: Competitor = {
+        domain:            domain2,
+        competitor_url:    url,
+        domain_authority:  m.domain_authority,
+        monthly_traffic:   m.monthly_traffic,
+        keywords:          m.keywords,
+        overlap:           0,
+        content_gap:       0,
+        threat:            "low",
+        trend:             "stable",
         discovered_via_ai: false,
       };
 
-      setCompetitors(prev => [{ ...newComp, discovered_via_ai: false }, ...prev.filter(c => c.domain !== domain2)]);
+      setCompetitors(prev => [newComp, ...prev.filter(c => c.domain !== domain2)]);
       setAddUrl(""); setShowAdd(false);
     } catch (e: any) {
       setError(e.message);
@@ -154,8 +232,10 @@ export default function CompetitorsPage() {
   async function handleRemove(domain2: string) {
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
+      // Match on the GENERATED `domain` column — the original competitor_url could
+      // have been entered as http/https, with or without www, or a trailing slash.
       await supabase.from("competitors").update({ is_active: false } as never)
-        .eq("user_id", user.id).eq("competitor_url", `https://${domain2}`);
+        .eq("user_id", user.id).eq("domain", domain2);
     }
     setCompetitors(prev => prev.filter(c => c.domain !== domain2));
   }

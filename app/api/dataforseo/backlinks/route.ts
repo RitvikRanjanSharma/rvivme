@@ -1,6 +1,6 @@
 // app/api/dataforseo/backlinks/route.ts
 // =============================================================================
-// AI Marketing Labs — Backlinks Overview
+// AI Marketing Lab — Backlinks Overview
 // Uses DataForSEO backlinks summary endpoint
 // =============================================================================
 

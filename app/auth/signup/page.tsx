@@ -2,7 +2,7 @@
 
 // app/auth/signup/page.tsx
 // =============================================================================
-// AI Marketing Labs — Signup
+// AI Marketing Lab — Signup
 // Editorial minimal · Same visual language as login
 // =============================================================================
 
@@ -10,7 +10,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, Eye, EyeOff } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -62,6 +62,14 @@ export default function SignupPage() {
     if (err) { setError(err); return; }
     setLoading(true);
     setError(null);
+    if (!isSupabaseConfigured) {
+      setError(
+        "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and " +
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local, then restart the dev server."
+      );
+      setLoading(false);
+      return;
+    }
     const { error: authErr } = await supabase.auth.signUp({
       email, password,
       options: {
@@ -75,9 +83,19 @@ export default function SignupPage() {
 
   async function handleGoogle() {
     setLoading(true);
+    if (!isSupabaseConfigured) {
+      setError("Supabase is not configured. Fill NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local.");
+      setLoading(false);
+      return;
+    }
     const { error: oauthErr } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        redirectTo:  `${window.location.origin}/auth/callback`,
+        // Force the Google account chooser every time so a previously-signed-in
+        // browser session doesn't silently auto-sign the user in.
+        queryParams: { prompt: "select_account", access_type: "offline" },
+      },
     });
     if (oauthErr) { setError(oauthErr.message); setLoading(false); }
   }
@@ -117,7 +135,7 @@ export default function SignupPage() {
           <div style={{ width: "30px", height: "30px", borderRadius: "8px", background: "var(--brand)", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2L14 12H2L8 2Z" fill="white" fillOpacity="0.9"/></svg>
           </div>
-          <span style={{ fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>AI Marketing Labs</span>
+          <span style={{ fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>AI Marketing Lab</span>
         </Link>
 
         <div style={{ position: "relative", zIndex: 1 }}>

@@ -1,6 +1,6 @@
 // app/robots.ts
 // =============================================================================
-// AI Marketing Labs — robots.txt
+// AI Marketing Lab — robots.txt
 // Allows Google to crawl public pages, blocks dashboard and auth routes
 // =============================================================================
 

@@ -2,8 +2,8 @@
 
 // app/settings/page.tsx
 // =============================================================================
-// AI Marketing Labs — Settings
-// Profile saves to Supabase · Branding persisted · All RVIVME refs removed
+// AI Marketing Lab — Settings
+// Profile saves to Supabase · Branding persisted · AI Marketing Lab brand
 // =============================================================================
 
 import { useState, useEffect, useCallback } from "react";
@@ -143,7 +143,7 @@ function ProfileTab({ brandColor }: { brandColor: string }) {
             {error && <div style={{ padding: "10px 14px", background: "rgba(255,23,68,0.08)", border: "1px solid rgba(255,23,68,0.20)", borderRadius: "7px", marginBottom: "16px", fontFamily: "var(--font-body)", fontSize: "13px", color: "var(--signal-red)" }}>{error}</div>}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
               <Field label="Company Name">
-                <TextInput value={company} onChange={setCompany} placeholder="AI Marketing Labs" disabled={loading} />
+                <TextInput value={company} onChange={setCompany} placeholder="AI Marketing Lab" disabled={loading} />
               </Field>
               <Field label="Email Address">
                 <TextInput value={email} onChange={setEmail} placeholder="admin@company.com" type="email" disabled={true} />
@@ -238,17 +238,58 @@ function BrandingTab({ brandColor, onBrandChange }: { brandColor: string; onBran
 }
 
 // ── Integrations tab ──────────────────────────────────────────────────────────
-function IntegrationsTab({ brandColor }: { brandColor: string }) {
-  const integrations = [
-    { id: "ga4",        name: "Google Analytics 4",      desc: "Traffic, sessions, and user behaviour data", icon: BarChart3, status: "connected" as const,    note: "Service account connected via GA4 Data API" },
-    { id: "gsc",        name: "Google Search Console",   desc: "Impressions, clicks, positions, CTR",         icon: Globe2,   status: "connected" as const,    note: `sc-domain:${typeof window !== "undefined" ? localStorage.getItem("aiml-domain") || "aimarketinglab.co.uk" : "aimarketinglab.co.uk"}` },
-    { id: "dataforseo", name: "DataForSEO",              desc: "Keywords, SERP, backlinks, AI Overviews",     icon: Cpu,      status: "connected" as const,    note: "UK (2826) · Standard plan" },
-  ];
+type IntgStatus = "connected" | "disconnected" | "error" | "checking";
 
-  const statusCfg = {
-    connected:    { label: "Connected",    color: "var(--signal-green)", bg: "rgba(0,230,118,0.08)" },
-    disconnected: { label: "Disconnected", color: "var(--text-tertiary)", bg: "var(--card)" },
+function IntegrationsTab({ brandColor }: { brandColor: string }) {
+  // Keep the note text deterministic on first render — only fill in the domain
+  // after mount. Otherwise the server (no localStorage) and client (has
+  // localStorage) produce different HTML and React throws a hydration error.
+  const [domain,  setDomain]  = useState("aimarketinglab.co.uk");
+  const [ga4St,   setGa4St]   = useState<IntgStatus>("checking");
+  const [gscSt,   setGscSt]   = useState<IntgStatus>("checking");
+  const [dfsSt,   setDfsSt]   = useState<IntgStatus>("checking");
+
+  useEffect(() => {
+    const d = localStorage.getItem("aiml-domain");
+    if (d) setDomain(d);
+  }, []);
+
+  // Real connection state — one lightweight server call that only checks
+  // whether the required credentials are present. Never hits the downstream
+  // APIs, so it's fast and safe to run on every mount.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch("/api/integrations/status");
+        if (!alive) return;
+        if (!r.ok) {
+          setGa4St("error"); setGscSt("error"); setDfsSt("error");
+          return;
+        }
+        const d = await r.json();
+        setGa4St(d.ga4        === "connected" ? "connected" : "disconnected");
+        setGscSt(d.gsc        === "connected" ? "connected" : "disconnected");
+        setDfsSt(d.dataforseo === "connected" ? "connected" : "disconnected");
+      } catch {
+        if (!alive) return;
+        setGa4St("error"); setGscSt("error"); setDfsSt("error");
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const integrations = [
+    { id: "ga4",        name: "Google Analytics 4",      desc: "Traffic, sessions, and user behaviour data", icon: BarChart3, status: ga4St, note: "Service account via GA4 Data API" },
+    { id: "gsc",        name: "Google Search Console",   desc: "Impressions, clicks, positions, CTR",         icon: Globe2,   status: gscSt, note: `sc-domain:${domain}` },
+    { id: "dataforseo", name: "DataForSEO",              desc: "Keywords, SERP, backlinks, AI Overviews",     icon: Cpu,      status: dfsSt, note: "UK (2826) · Standard plan" },
+  ] as const;
+
+  const statusCfg: Record<IntgStatus, { label: string; color: string; bg: string }> = {
+    connected:    { label: "Connected",    color: "var(--signal-green)", bg: "rgba(0,230,118,0.08)"  },
+    disconnected: { label: "Disconnected", color: "var(--text-tertiary)", bg: "var(--card)"          },
     error:        { label: "Error",        color: "var(--signal-red)",   bg: "rgba(255,23,68,0.08)" },
+    checking:     { label: "Checking…",    color: "var(--text-tertiary)", bg: "var(--card)"          },
   };
 
   return (

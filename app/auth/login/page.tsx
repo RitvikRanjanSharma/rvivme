@@ -2,7 +2,7 @@
 
 // app/auth/login/page.tsx
 // =============================================================================
-// AI Marketing Labs — Login
+// AI Marketing Lab — Login
 // Editorial minimal · No decoration · Purposeful
 // =============================================================================
 
@@ -11,7 +11,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { ArrowRight, Eye, EyeOff } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -54,6 +54,14 @@ function LoginForm() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    if (!isSupabaseConfigured) {
+      setError(
+        "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and " +
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local, then restart the dev server."
+      );
+      setLoading(false);
+      return;
+    }
     const { error: authErr } = await supabase.auth.signInWithPassword({ email, password });
     if (authErr) { setError(authErr.message); setLoading(false); return; }
     router.push(redirect);
@@ -62,9 +70,19 @@ function LoginForm() {
   async function handleGoogle() {
     setLoading(true);
     setError(null);
+    if (!isSupabaseConfigured) {
+      setError("Supabase is not configured. Fill NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local.");
+      setLoading(false);
+      return;
+    }
     const { error: oauthErr } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback?redirect=${redirect}` },
+      options: {
+        redirectTo:  `${window.location.origin}/auth/callback?redirect=${redirect}`,
+        // Force the Google account chooser every time so a previously-signed-in
+        // browser session doesn't silently auto-sign the user in.
+        queryParams: { prompt: "select_account", access_type: "offline" },
+      },
     });
     if (oauthErr) { setError(oauthErr.message); setLoading(false); }
   }
@@ -108,7 +126,7 @@ function LoginForm() {
             </svg>
           </div>
           <span style={{ fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>
-            AI Marketing Labs
+            AI Marketing Lab
           </span>
         </Link>
 

@@ -1,6 +1,6 @@
 // app/sitemap.ts
 // =============================================================================
-// AI Marketing Labs — Dynamic XML Sitemap
+// AI Marketing Lab — Dynamic XML Sitemap
 // Static routes + all published blog posts from Supabase
 // Revalidates every 12 hours so new posts appear quickly
 // =============================================================================

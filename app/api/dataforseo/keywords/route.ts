@@ -1,6 +1,6 @@
 // app/api/dataforseo/keywords/route.ts
 // =============================================================================
-// AI Marketing Labs — Keywords API Route
+// AI Marketing Lab — Keywords API Route
 // Uses ranked_keywords endpoint — returns keywords a domain actually ranks for
 // =============================================================================
 

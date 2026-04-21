@@ -2,7 +2,7 @@
 
 // app/dashboard/gsc-panel.tsx
 // =============================================================================
-// AI Marketing Labs — Google Search Console Panel
+// AI Marketing Lab — Google Search Console Panel
 // Shows: impressions, clicks, CTR, avg position, top queries, top pages, trend
 // =============================================================================
 

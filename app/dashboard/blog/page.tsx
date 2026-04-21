@@ -2,7 +2,7 @@
 
 // app/dashboard/blog/page.tsx
 // =============================================================================
-// AI Marketing Labs — Blog Admin
+// AI Marketing Lab — Blog Admin
 // Real Supabase CRUD · TipTap rich text editor · SEO fields · Publish controls
 // =============================================================================
 
@@ -342,7 +342,7 @@ function PostEditor({ post, onClose, onSaved, brandColor }: {
         meta_description:   metaDescription.trim() || null,
         featured,
         read_time_minutes:  readTime,
-        author_name:        "AI Marketing Labs Editorial",
+        author_name:        "AI Marketing Lab Editorial",
         published_at:       targetStatus === "published"
           ? (post?.published_at ?? new Date().toISOString())
           : post?.published_at ?? null,
@@ -522,7 +522,7 @@ export default function BlogAdminPage() {
   const [error,      setError]      = useState<string | null>(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem("rvivme-brand");
+    const stored = localStorage.getItem("aiml-brand") || localStorage.getItem("rvivme-brand");
     if (stored) setBrandColor(stored);
   }, []);
 

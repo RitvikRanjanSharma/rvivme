@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /* =============================================================================
-   AI Marketing Labs — Design System
+   AI Marketing Lab — Design System
    All legacy aliases included so dashboard/panels never break
 ============================================================================= */
 
@@ -37,6 +37,40 @@
   --font-dm-mono: var(--font-dm-mono, "DM Mono", "Consolas", monospace);
   --font-body:    var(--font-inter, "Inter", system-ui, sans-serif);
   --font-mono:    var(--font-dm-mono, "DM Mono", "Consolas", monospace);
+
+  /* Radii — canonical values from the design-system spec */
+  --radius-sm:   6px;
+  --radius-md:   8px;
+  --radius-lg:   10px;
+  --radius-xl:   12px;
+  --radius-2xl:  16px;
+  --radius-pill: 100px;
+
+  /* Shadows */
+  --shadow-card:       0 1px 3px rgba(0,0,0,0.7), 0 4px 12px rgba(0,0,0,0.5);
+  --shadow-card-hover: 0 8px 32px rgba(0,0,0,0.4);
+  --shadow-brand-sm:   0 0 10px var(--brand-glow);
+  --shadow-brand-md:   0 0 22px var(--brand-glow);
+  --shadow-brand-lg:   0 0 40px var(--brand-glow);
+
+  /* Motion — canonical easing + durations */
+  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast:  0.16s;
+  --dur-base:  0.25s;
+  --dur-slow:  0.45s;
+  --dur-hero:  0.85s;
+
+  /* Semantic type presets */
+  --h1-size:      clamp(2rem, 5vw, 3.5rem);
+  --h1-tracking: -0.04em;
+  --h1-line:      0.95;
+  --h2-size:      clamp(1.5rem, 3vw, 2.2rem);
+  --h2-tracking: -0.04em;
+  --h3-size:      1rem;
+  --body-size:    15px;
+  --body-line:    1.7;
+  --mono-label:   10px;
+  --mono-track:   0.12em;
 }
 
 .light {
@@ -56,6 +90,8 @@
   --chart-grid: rgba(0,0,0,0.04);
   --chart-axis: rgba(0,0,0,0.08);
   --chart-tick: rgba(0,0,0,0.28);
+  --shadow-card:       0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04);
+  --shadow-card-hover: 0 8px 32px rgba(0,0,0,0.08);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }

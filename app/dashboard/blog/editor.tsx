@@ -2,7 +2,7 @@
 
 // app/dashboard/blog/editor.tsx
 // =============================================================================
-// AI Marketing Labs — TipTap Rich Text Editor
+// AI Marketing Lab — TipTap Rich Text Editor
 // Full toolbar · Auto-save indicator · Word/char count · SEO-ready HTML output
 // =============================================================================
 

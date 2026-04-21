@@ -1,5 +1,5 @@
 -- =============================================================================
--- AI Marketing Labs — Blog System Schema
+-- AI Marketing Lab — Blog System Schema
 -- Run AFTER the main schema.sql (depends on public.users existing)
 -- =============================================================================
 
@@ -53,7 +53,7 @@ CREATE TABLE public.blog_posts (
   canonical_url       TEXT,
 
   -- Author display fields (denormalised for public rendering without join)
-  author_name         TEXT                   NOT NULL DEFAULT 'AI Marketing Labs Editorial',
+  author_name         TEXT                   NOT NULL DEFAULT 'AI Marketing Lab Editorial',
   author_bio          TEXT,
   author_avatar_url   TEXT,
 
@@ -269,7 +269,7 @@ INSERT INTO public.tags (name, slug) VALUES
   ('Hatfield UK',          'hatfield-uk'),
   ('Business Strategy',    'business-strategy'),
   ('Case Study',           'case-study'),
-  ('RVIVME',               'rvivme'),
+  ('AI Marketing Lab',     'ai-marketing-lab'),
   ('DataForSEO',           'dataforseo'),
   ('Competitor Analysis',  'competitor-analysis')
 ON CONFLICT (slug) DO NOTHING;
