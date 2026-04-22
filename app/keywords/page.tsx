@@ -12,8 +12,10 @@ import {
   Search, TrendingUp, TrendingDown, Minus,
   RefreshCw, AlertTriangle, Lightbulb, Zap,
   ChevronDown, ChevronUp, Globe2, ArrowRight,
+  Save, Download, Check,
 } from "lucide-react";
 import { useDomain } from "@/lib/useDomain";
+import { supabase } from "@/lib/supabase";
 
 const EASE: [number,number,number,number] = [0.16, 1, 0.3, 1];
 
@@ -248,6 +250,8 @@ export default function KeywordsPage() {
   const [compKwLoading, setCompKwLoading] = useState(false);
   const [compKwError,   setCompKwError]   = useState<string|null>(null);
   const [compSection,   setCompSection]   = useState<"gap"|"opp">("gap");
+  const [saveState,     setSaveState]     = useState<"idle"|"saving"|"saved"|"error">("idle");
+  const [saveMessage,   setSaveMessage]   = useState<string|null>(null);
 
   useEffect(() => {
     const b = localStorage.getItem("aiml-brand") || localStorage.getItem("rvivme-brand");
@@ -295,7 +299,7 @@ export default function KeywordsPage() {
   // Load competitor keywords
   async function loadCompetitorKws() {
     if (!compDomain.trim()) return;
-    setCompKwLoading(true); setCompKwError(null);
+    setCompKwLoading(true); setCompKwError(null); setSaveState("idle"); setSaveMessage(null);
     try {
       const cd  = compDomain.trim().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
       const res = await fetch("/api/dataforseo/competitor-keywords", {
@@ -309,6 +313,108 @@ export default function KeywordsPage() {
       setOppKws(data.oppKeywords ?? []);
     } catch (e: any) { setCompKwError(e.message); }
     finally { setCompKwLoading(false); }
+  }
+
+  // Save currently-visible competitor keywords (gap + opportunity) to Supabase
+  // so the user can come back to them later, and so future work (strategies,
+  // content briefs) can reference them.
+  async function saveCompetitorKws() {
+    const cd = compDomain.trim().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
+    if (!cd || (gapKws.length === 0 && oppKws.length === 0)) return;
+
+    setSaveState("saving"); setSaveMessage(null);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not signed in — can't save keywords.");
+
+      const rows = [
+        ...gapKws.map(k => ({
+          user_id:           user.id,
+          keyword:           k.term,
+          source:            "gap"         as const,
+          competitor_domain: cd,
+          volume:            k.volume,
+          difficulty:        k.difficulty,
+          cpc:               k.cpc,
+          intent:            k.intent,
+          competitor_pos:    k.competitorPos,
+        })),
+        ...oppKws.map(k => ({
+          user_id:           user.id,
+          keyword:           k.term,
+          source:            "opportunity" as const,
+          competitor_domain: cd,
+          volume:            k.volume,
+          difficulty:        k.difficulty,
+          cpc:               k.cpc,
+          intent:            k.intent,
+          competitor_pos:    k.competitorPos,
+        })),
+      ];
+
+      // Upsert — if the user re-saves the same keyword+competitor combo, we
+      // update the row instead of failing on the unique constraint.
+      const { error: upErr, count } = await supabase
+        .from("tracked_keywords")
+        .upsert(rows as never, { onConflict: "user_id,keyword,competitor_domain", count: "exact" });
+
+      if (upErr) throw new Error(upErr.message);
+
+      setSaveState("saved");
+      setSaveMessage(`Saved ${count ?? rows.length} keyword${rows.length === 1 ? "" : "s"} to your tracking list.`);
+      // Revert the "Saved" confirmation after a short delay so the button is
+      // reusable if the user wants to re-save.
+      setTimeout(() => setSaveState("idle"), 2500);
+    } catch (e: any) {
+      setSaveState("error");
+      setSaveMessage(e.message ?? "Failed to save keywords.");
+    }
+  }
+
+  // Export the currently-selected section (gap or opportunity) as CSV so the
+  // user can pull it into a spreadsheet, content planner, or brief template.
+  function exportCompetitorKws() {
+    const cd   = compDomain.trim().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
+    const rows = compSection === "gap" ? gapKws : oppKws;
+    if (rows.length === 0) return;
+
+    const esc = (v: unknown) => {
+      const s = String(v ?? "");
+      // RFC 4180 CSV escaping — wrap in quotes and double any embedded quotes.
+      return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+
+    const header = [
+      "Keyword","Section","CompetitorDomain","YourDomain",
+      "Volume","Difficulty","CPC","Intent","CompetitionLevel","CompetitorPosition",
+    ];
+    const lines = [
+      header.join(","),
+      ...rows.map(k => [
+        k.term,
+        compSection === "gap" ? "Gap" : "Opportunity",
+        cd,
+        domain,
+        k.volume,
+        k.difficulty,
+        k.cpc,
+        k.intent,
+        k.competitionLevel,
+        k.competitorPos,
+      ].map(esc).join(",")),
+    ];
+    const csv = lines.join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0, 10);
+    a.href     = url;
+    a.download = `competitor-keywords-${cd}-${compSection}-${stamp}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   const filtered = rankings.filter(k =>
@@ -391,7 +497,11 @@ export default function KeywordsPage() {
                 : <KwTable
                     keywords={filtered}
                     cols={["Keyword","Volume","Position","Difficulty","CPC","Intent"]}
-                    emptyMsg="No keyword data yet. Make sure your website URL is set in Settings."
+                    emptyMsg={
+                      `No ranked keywords found for ${domain} in the UK SERP. ` +
+                      "This usually means the site is too new to have been indexed by Google " +
+                      "or hasn't earned any organic rankings yet. Try the Keyword Ideas tab to plan ahead."
+                    }
                     brandColor={brandColor}
                   />
               }
@@ -503,33 +613,90 @@ export default function KeywordsPage() {
 
             {(gapKws.length > 0 || oppKws.length > 0) && (
               <>
-                {/* Section tabs */}
-                <div style={{ display:"flex", gap:"12px", marginBottom:"16px" }}>
-                  <button onClick={() => setCompSection("gap")} style={{
-                    display:"flex", alignItems:"center", gap:"7px",
-                    fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:500,
-                    color: compSection === "gap" ? "#fff" : "var(--text-secondary)",
-                    background: compSection === "gap" ? brandColor : "transparent",
-                    border:`1px solid ${compSection === "gap" ? brandColor : "var(--border)"}`,
-                    borderRadius:"8px", padding:"9px 18px", cursor:"pointer", transition:"all 0.16s",
-                  }}>
-                    <Globe2 size={13} />
-                    Keyword Gap
-                    <span style={{ fontFamily:"var(--font-mono)", fontSize:"10px", background:"rgba(255,255,255,0.2)", padding:"1px 6px", borderRadius:"100px" }}>{gapKws.length}</span>
-                  </button>
-                  <button onClick={() => setCompSection("opp")} style={{
-                    display:"flex", alignItems:"center", gap:"7px",
-                    fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:500,
-                    color: compSection === "opp" ? "#fff" : "var(--text-secondary)",
-                    background: compSection === "opp" ? "var(--signal-green)" : "transparent",
-                    border:`1px solid ${compSection === "opp" ? "var(--signal-green)" : "var(--border)"}`,
-                    borderRadius:"8px", padding:"9px 18px", cursor:"pointer", transition:"all 0.16s",
-                  }}>
-                    <Zap size={13} />
-                    Quick Wins
-                    <span style={{ fontFamily:"var(--font-mono)", fontSize:"10px", background:"rgba(255,255,255,0.2)", padding:"1px 6px", borderRadius:"100px" }}>{oppKws.length}</span>
-                  </button>
+                {/* Section tabs + Save / Export actions */}
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:"12px", marginBottom:"16px", flexWrap:"wrap" }}>
+                  <div style={{ display:"flex", gap:"12px" }}>
+                    <button onClick={() => setCompSection("gap")} style={{
+                      display:"flex", alignItems:"center", gap:"7px",
+                      fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:500,
+                      color: compSection === "gap" ? "#fff" : "var(--text-secondary)",
+                      background: compSection === "gap" ? brandColor : "transparent",
+                      border:`1px solid ${compSection === "gap" ? brandColor : "var(--border)"}`,
+                      borderRadius:"8px", padding:"9px 18px", cursor:"pointer", transition:"all 0.16s",
+                    }}>
+                      <Globe2 size={13} />
+                      Keyword Gap
+                      <span style={{ fontFamily:"var(--font-mono)", fontSize:"10px", background:"rgba(255,255,255,0.2)", padding:"1px 6px", borderRadius:"100px" }}>{gapKws.length}</span>
+                    </button>
+                    <button onClick={() => setCompSection("opp")} style={{
+                      display:"flex", alignItems:"center", gap:"7px",
+                      fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:500,
+                      color: compSection === "opp" ? "#fff" : "var(--text-secondary)",
+                      background: compSection === "opp" ? "var(--signal-green)" : "transparent",
+                      border:`1px solid ${compSection === "opp" ? "var(--signal-green)" : "var(--border)"}`,
+                      borderRadius:"8px", padding:"9px 18px", cursor:"pointer", transition:"all 0.16s",
+                    }}>
+                      <Zap size={13} />
+                      Quick Wins
+                      <span style={{ fontFamily:"var(--font-mono)", fontSize:"10px", background:"rgba(255,255,255,0.2)", padding:"1px 6px", borderRadius:"100px" }}>{oppKws.length}</span>
+                    </button>
+                  </div>
+
+                  <div style={{ display:"flex", gap:"8px" }}>
+                    <button
+                      onClick={saveCompetitorKws}
+                      disabled={saveState === "saving" || (gapKws.length === 0 && oppKws.length === 0)}
+                      style={{
+                        display:"flex", alignItems:"center", gap:"6px",
+                        fontFamily:"var(--font-mono)", fontSize:"11px", letterSpacing:"0.08em",
+                        color: saveState === "saved" ? "var(--signal-green)" : "var(--text-secondary)",
+                        background:"transparent",
+                        border:`1px solid ${saveState === "saved" ? "var(--signal-green)" : "var(--border)"}`,
+                        borderRadius:"8px", padding:"8px 14px", cursor:"pointer", transition:"all 0.16s",
+                      }}
+                      title="Save all gap + opportunity keywords to your tracked list"
+                    >
+                      {saveState === "saving" ? (
+                        <div style={{ width:"11px", height:"11px", border:"1.5px solid var(--border)", borderTopColor:"var(--text-primary)", borderRadius:"50%", animation:"spin 0.7s linear infinite" }} />
+                      ) : saveState === "saved" ? (
+                        <Check size={11} />
+                      ) : (
+                        <Save size={11} />
+                      )}
+                      {saveState === "saving" ? "SAVING" : saveState === "saved" ? "SAVED" : "SAVE"}
+                    </button>
+                    <button
+                      onClick={exportCompetitorKws}
+                      disabled={(compSection === "gap" ? gapKws : oppKws).length === 0}
+                      style={{
+                        display:"flex", alignItems:"center", gap:"6px",
+                        fontFamily:"var(--font-mono)", fontSize:"11px", letterSpacing:"0.08em",
+                        color:"var(--text-secondary)", background:"transparent",
+                        border:"1px solid var(--border)", borderRadius:"8px",
+                        padding:"8px 14px", cursor:"pointer", transition:"all 0.16s",
+                      }}
+                      title={`Export the ${compSection === "gap" ? "gap" : "quick wins"} table as CSV`}
+                    >
+                      <Download size={11} />
+                      EXPORT CSV
+                    </button>
+                  </div>
                 </div>
+
+                {saveMessage && (
+                  <div style={{
+                    display:"flex", alignItems:"center", gap:"8px",
+                    padding:"10px 14px", marginBottom:"14px",
+                    background: saveState === "error" ? "rgba(255,23,68,0.08)" : "rgba(0,230,118,0.08)",
+                    border: `1px solid ${saveState === "error" ? "rgba(255,23,68,0.25)" : "rgba(0,230,118,0.25)"}`,
+                    borderRadius:"8px",
+                    fontFamily:"var(--font-body)", fontSize:"12px",
+                    color: saveState === "error" ? "var(--signal-red)" : "var(--signal-green)",
+                  }}>
+                    {saveState === "error" ? <AlertTriangle size={12} /> : <Check size={12} />}
+                    {saveMessage}
+                  </div>
+                )}
 
                 {/* Section description */}
                 <div style={{ padding:"12px 16px", background:"var(--muted)", borderRadius:"8px", marginBottom:"16px" }}>

@@ -105,11 +105,27 @@ export default function CompetitorsPage() {
 
       const aiDomains = new Set(aiList.map(c => c.domain));
 
+      // 2a. Baseline for the user's own domain — we need its keyword count to
+      //     compute overlap % for manually-added competitors.
+      let yourKeywords = 0;
+      try {
+        const res  = await fetch("/api/dataforseo/domain-metrics", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ domains: [domain] }),
+        });
+        const data = await res.json();
+        yourKeywords = data?.metrics?.[domain]?.keywords ?? 0;
+      } catch {
+        // Non-fatal — overlap just won't be computable for manual competitors.
+      }
+
       // 3. Any saved competitors not already returned by DFS need their own
       //    metrics — fetch them in a single bulk call.
       const missing = savedDomains.filter(d => !aiDomains.has(d));
       const savedOnly: Competitor[] = [];
       if (missing.length > 0) {
+        let metricsMap: Record<string, { domain_authority: number; monthly_traffic: number; keywords: number }> = {};
         try {
           const res  = await fetch("/api/dataforseo/domain-metrics", {
             method:  "POST",
@@ -117,42 +133,47 @@ export default function CompetitorsPage() {
             body:    JSON.stringify({ domains: missing }),
           });
           const data = await res.json();
-          const metricsMap: Record<string, { domain_authority: number; monthly_traffic: number; keywords: number }> =
-            data?.metrics ?? {};
-
-          for (const row of savedRows) {
-            if (aiDomains.has(row.domain)) continue;
-            const m = metricsMap[row.domain] ?? { domain_authority: 0, monthly_traffic: 0, keywords: 0 };
-            savedOnly.push({
-              domain:            row.domain,
-              competitor_url:    row.competitor_url,
-              domain_authority:  m.domain_authority,
-              monthly_traffic:   m.monthly_traffic,
-              keywords:          m.keywords,
-              overlap:           0,
-              content_gap:       0,
-              threat:            "low",
-              trend:             "stable",
-              discovered_via_ai: false,
-            });
-          }
+          metricsMap = data?.metrics ?? {};
         } catch {
-          // If metrics lookup fails, still show the saved competitors with zeros
-          for (const row of savedRows) {
-            if (aiDomains.has(row.domain)) continue;
-            savedOnly.push({
-              domain:            row.domain,
-              competitor_url:    row.competitor_url,
-              domain_authority:  0,
-              monthly_traffic:   0,
-              keywords:          0,
-              overlap:           0,
-              content_gap:       0,
-              threat:            "low",
-              trend:             "stable",
-              discovered_via_ai: false,
-            });
-          }
+          // Keep metricsMap empty; each row will render with zeros.
+        }
+
+        for (const row of savedRows) {
+          if (aiDomains.has(row.domain)) continue;
+          const m = metricsMap[row.domain] ?? { domain_authority: 0, monthly_traffic: 0, keywords: 0 };
+
+          // Overlap = proportion of competitor's keyword footprint that *could*
+          // intersect with ours. Scaled so you don't get 99% for a giant site
+          // just because they dwarf you — capped at 100.
+          const overlap = yourKeywords > 0 && m.keywords > 0
+            ? Math.min(100, Math.round((Math.min(m.keywords, yourKeywords * 5) / Math.max(yourKeywords, 1)) * 20))
+            : 0;
+
+          // Threat based on overlap AND raw scale — a much bigger site is a
+          // threat even if our overlap calc is conservative.
+          const sizeFactor = m.domain_authority;
+          let threat: Competitor["threat"] = "low";
+          if      (overlap > 60 || sizeFactor > 80) threat = "critical";
+          else if (overlap > 40 || sizeFactor > 65) threat = "high";
+          else if (overlap > 20 || sizeFactor > 45) threat = "medium";
+
+          // Trend: without time-series data we default to "up" for large sites
+          // (they're pulling away), "down" for tiny ones, else stable.
+          const trend: Competitor["trend"] =
+            sizeFactor > 60 ? "up" : sizeFactor < 20 ? "down" : "stable";
+
+          savedOnly.push({
+            domain:            row.domain,
+            competitor_url:    row.competitor_url,
+            domain_authority:  m.domain_authority,
+            monthly_traffic:   m.monthly_traffic,
+            keywords:          m.keywords,
+            overlap,
+            content_gap:       Math.max(0, m.keywords - yourKeywords),
+            threat,
+            trend,
+            discovered_via_ai: false,
+          });
         }
       }
 
@@ -193,19 +214,35 @@ export default function CompetitorsPage() {
       } as never, { onConflict: "user_id,competitor_url" });
       if (upErr) throw new Error(upErr.message);
 
-      // Fetch metrics for THIS specific domain (not competitors of it).
+      // Fetch metrics for THIS specific domain AND the user's own domain in a
+      // single bulk call so we can compute overlap without a second round-trip.
       let m = { domain_authority: 0, monthly_traffic: 0, keywords: 0 };
+      let yourKw = 0;
       try {
         const res  = await fetch("/api/dataforseo/domain-metrics", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ domains: [domain2] }),
+          body:    JSON.stringify({ domains: [domain2, domain] }),
         });
         const data = await res.json();
         if (data?.metrics?.[domain2]) m = data.metrics[domain2];
+        yourKw = data?.metrics?.[domain]?.keywords ?? 0;
       } catch {
         // Metrics lookup is best-effort — still show the saved row.
       }
+
+      const overlap = yourKw > 0 && m.keywords > 0
+        ? Math.min(100, Math.round((Math.min(m.keywords, yourKw * 5) / Math.max(yourKw, 1)) * 20))
+        : 0;
+
+      const sizeFactor = m.domain_authority;
+      let threat: Competitor["threat"] = "low";
+      if      (overlap > 60 || sizeFactor > 80) threat = "critical";
+      else if (overlap > 40 || sizeFactor > 65) threat = "high";
+      else if (overlap > 20 || sizeFactor > 45) threat = "medium";
+
+      const trend: Competitor["trend"] =
+        sizeFactor > 60 ? "up" : sizeFactor < 20 ? "down" : "stable";
 
       const newComp: Competitor = {
         domain:            domain2,
@@ -213,10 +250,10 @@ export default function CompetitorsPage() {
         domain_authority:  m.domain_authority,
         monthly_traffic:   m.monthly_traffic,
         keywords:          m.keywords,
-        overlap:           0,
-        content_gap:       0,
-        threat:            "low",
-        trend:             "stable",
+        overlap,
+        content_gap:       Math.max(0, m.keywords - yourKw),
+        threat,
+        trend,
         discovered_via_ai: false,
       };
 

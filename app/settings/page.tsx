@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   User, Palette, Plug, CreditCard, Shield, Database,
   CheckCircle2, AlertCircle, Save, RefreshCw,
-  Globe2, BarChart3, Cpu, Trash2, Eye, EyeOff,
+  Globe2, BarChart3, Cpu, Trash2, Eye, EyeOff, Brain,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useSearchParams } from "next/navigation";
@@ -248,6 +248,7 @@ function IntegrationsTab({ brandColor }: { brandColor: string }) {
   const [ga4St,   setGa4St]   = useState<IntgStatus>("checking");
   const [gscSt,   setGscSt]   = useState<IntgStatus>("checking");
   const [dfsSt,   setDfsSt]   = useState<IntgStatus>("checking");
+  const [antSt,   setAntSt]   = useState<IntgStatus>("checking");
 
   useEffect(() => {
     const d = localStorage.getItem("aiml-domain");
@@ -264,23 +265,25 @@ function IntegrationsTab({ brandColor }: { brandColor: string }) {
         const r = await fetch("/api/integrations/status");
         if (!alive) return;
         if (!r.ok) {
-          setGa4St("error"); setGscSt("error"); setDfsSt("error");
+          setGa4St("error"); setGscSt("error"); setDfsSt("error"); setAntSt("error");
           return;
         }
         const d = await r.json();
         setGa4St(d.ga4        === "connected" ? "connected" : "disconnected");
         setGscSt(d.gsc        === "connected" ? "connected" : "disconnected");
         setDfsSt(d.dataforseo === "connected" ? "connected" : "disconnected");
+        setAntSt(d.anthropic  === "connected" ? "connected" : "disconnected");
       } catch {
         if (!alive) return;
-        setGa4St("error"); setGscSt("error"); setDfsSt("error");
+        setGa4St("error"); setGscSt("error"); setDfsSt("error"); setAntSt("error");
       }
     })();
     return () => { alive = false; };
   }, []);
 
   const integrations = [
-    { id: "ga4",        name: "Google Analytics 4",      desc: "Traffic, sessions, and user behaviour data", icon: BarChart3, status: ga4St, note: "Service account via GA4 Data API" },
+    { id: "anthropic",  name: "Anthropic (Claude)",      desc: "AI strategy generation, citation tracking",   icon: Brain,    status: antSt, note: "ANTHROPIC_API_KEY in server env" },
+    { id: "ga4",        name: "Google Analytics 4",      desc: "Traffic, sessions, and user behaviour data",  icon: BarChart3, status: ga4St, note: "Service account via GA4 Data API" },
     { id: "gsc",        name: "Google Search Console",   desc: "Impressions, clicks, positions, CTR",         icon: Globe2,   status: gscSt, note: `sc-domain:${domain}` },
     { id: "dataforseo", name: "DataForSEO",              desc: "Keywords, SERP, backlinks, AI Overviews",     icon: Cpu,      status: dfsSt, note: "UK (2826) · Standard plan" },
   ] as const;
