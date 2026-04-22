@@ -30,6 +30,80 @@ const FEATURES = [
   { index: "03", title: "GEO — the search layer everyone is ignoring.", body: "We track AI Overview citations, structured data gaps, and citation probability before your competitors notice.", href: "/blog", cta: "Read the intelligence" },
 ];
 
+// Long-form marketing surface — lives below the platform feature rows.
+// These are the product narrative, testimonials, capability grid, and FAQ.
+const COMMAND_CENTRE_FEATURES = [
+  {
+    index: "04",
+    title: "Intelligent content creation that converts.",
+    body: "Our advanced AI text generators don't just create content — they craft marketing messages that resonate with your audience and drive action. From product descriptions for affiliate marketing campaigns to compelling ad copy for Google Ads, our AI rewriter understands context, tone, and conversion psychology.",
+    body2: "Stop spending hours wrestling with writer's block. Our AI text generators analyse millions of high-performing marketing campaigns to suggest copy that actually converts — whether you're promoting Amazon affiliate products or launching your next big campaign.",
+  },
+  {
+    index: "05",
+    title: "Data-driven marketing intelligence.",
+    body: "Knowledge is power in digital marketing, and our AI marketing lab puts professional-grade analytics at your fingertips. Connect seamlessly with Google Search Console to uncover hidden opportunities in your organic traffic, or leverage our Google Trend analysis tools to spot emerging market opportunities before your competitors do.",
+    body2: "Our intelligent dashboard transforms complex data from Google searches and user behaviour into actionable insights you can implement immediately. No more guessing — make decisions backed by real market intelligence.",
+  },
+  {
+    index: "06",
+    title: "Campaign optimisation that actually works.",
+    body: "Running ads with Google becomes infinitely more effective when you have AI working alongside your strategy. Our platform helps you identify winning keywords, optimise bid strategies, and create variations of your best-performing content automatically.",
+    body2: "For affiliate marketers, especially those focused on affiliate marketing of Amazon products, our tools analyse product trends, seasonal patterns, and consumer sentiment to help you choose winners and avoid duds.",
+  },
+];
+
+const TESTIMONIALS = [
+  {
+    quote: "The AI rewriter alone has saved our team 15+ hours per week whilst improving our conversion rates.",
+    source: "Marketing Director, UK SaaS",
+  },
+  {
+    quote: "Finally, an AI marketing lab that actually understands British markets and consumer behaviour.",
+    source: "Head of Growth, London",
+  },
+];
+
+const CAPABILITY_GRID = [
+  { title: "Professional AI Text Generator", body: "Create compelling marketing copy in seconds." },
+  { title: "Advanced AI Rewriter",           body: "Transform existing content into fresh, optimised variations." },
+  { title: "AI Detector & Checker Tools",    body: "Ensure your content maintains authenticity and quality." },
+  { title: "Google Ads Integration",         body: "Streamline your PPC campaigns with intelligent automation." },
+  { title: "Affiliate Marketing Toolkit",    body: "Specialised tools for Amazon and other affiliate programmes." },
+  { title: "Google Search Console Analytics", body: "Deep insights into your organic performance." },
+  { title: "Trend Analysis Dashboard",       body: "Spot opportunities using Google Trend data." },
+  { title: "Conversion Tracking",            body: "Monitor what's working and scale your successes." },
+  { title: "Content Calendar Planning",      body: "Strategic content scheduling based on search patterns." },
+  { title: "Competitor Intelligence",        body: "See what's driving your competitors' success." },
+];
+
+const FAQ_ITEMS = [
+  {
+    q: "How accurate is your AI text generator compared to human writers?",
+    a: "Our AI text generators are trained on millions of high-converting marketing campaigns. Whilst they excel at creating initial drafts and variations, we recommend human oversight for final approval. Many users find our AI produces better first drafts than they could create manually.",
+  },
+  {
+    q: "Can I use this for affiliate marketing campaigns?",
+    a: "Absolutely. Our tools are particularly effective for affiliate marketing, including Amazon affiliate programmes. We provide product research, trend analysis, and content creation specifically designed for affiliate marketers.",
+  },
+  {
+    q: "Does the AI checker detect AI-generated content?",
+    a: "Yes, our AI detector helps you understand when content appears AI-generated, allowing you to refine it for a more natural feel. This ensures your marketing materials maintain authenticity.",
+  },
+  {
+    q: "How does the Google Ads integration work?",
+    a: "Our platform connects with your Google Ads account to analyse performance data, suggest optimisations, and help create ad variations. You maintain full control whilst benefiting from AI-powered insights.",
+  },
+  {
+    q: "Is there a free trial available?",
+    a: "We offer a comprehensive 14-day trial so you can experience the full power of our AI marketing lab before committing. No credit card required to start.",
+  },
+  {
+    q: "Can I cancel anytime?",
+    a: "Yes, you can cancel your subscription at any time. We believe in earning your business through results, not binding contracts.",
+  },
+];
+
 function easeOutCubic(t: number) { return 1 - Math.pow(1 - t, 3); }
 function easeOutExpo(t: number)  { return t === 1 ? 1 : 1 - Math.pow(2, -10 * t); }
 function easeInExpo(t: number)   { return t === 0 ? 0 : Math.pow(2, 10 * t - 10); }
@@ -426,6 +500,126 @@ function FeatureRow({ feature }: { feature: typeof FEATURES[0] }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Long-form narrative row — mirrors FeatureRow's 180px gutter + serif headline
+// look, but drops the CTA column and carries two paragraphs of body.
+// ─────────────────────────────────────────────────────────────────────────────
+function NarrativeRow({ feature }: { feature: typeof COMMAND_CENTRE_FEATURES[0] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-80px" });
+  return (
+    <motion.div ref={ref} initial={{ opacity: 0 }} animate={inView ? { opacity: 1 } : {}} transition={{ duration: 0.5 }}
+      style={{ display: "grid", gridTemplateColumns: "180px 1fr", padding: "56px 32px", borderTop: "1px solid var(--border)", alignItems: "start" }}
+    >
+      <motion.div initial={{ opacity: 0, x: -16 }} animate={inView ? { opacity: 1, x: 0 } : {}} transition={{ duration: 0.7, ease: EASE_EXPO, delay: 0.05 }}
+        style={{ fontFamily: "var(--font-mono)", fontSize: "11px", letterSpacing: "0.12em", color: "var(--text-tertiary)", paddingTop: "6px" }}
+      >{feature.index} —</motion.div>
+      <div style={{ maxWidth: "760px" }}>
+        <motion.h3 initial={{ opacity: 0, y: 20 }} animate={inView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.75, ease: EASE_EXPO, delay: 0.1 }}
+          style={{ fontFamily: "var(--font-display)", fontSize: "clamp(1.5rem,2.8vw,2.2rem)", letterSpacing: "-0.04em", lineHeight: 1.05, color: "var(--text-primary)", fontWeight: 400, marginBottom: "22px" }}
+        >{feature.title}</motion.h3>
+        <motion.p initial={{ opacity: 0, y: 16 }} animate={inView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.75, ease: EASE_EXPO, delay: 0.18 }}
+          style={{ fontFamily: "var(--font-body)", fontSize: "15px", color: "var(--text-secondary)", lineHeight: 1.8, marginBottom: "18px" }}
+        >{feature.body}</motion.p>
+        <motion.p initial={{ opacity: 0, y: 16 }} animate={inView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.75, ease: EASE_EXPO, delay: 0.24 }}
+          style={{ fontFamily: "var(--font-body)", fontSize: "15px", color: "var(--text-secondary)", lineHeight: 1.8 }}
+        >{feature.body2}</motion.p>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Testimonial card — pair rendered inside a 2-col grid with vertical rule.
+// ─────────────────────────────────────────────────────────────────────────────
+function TestimonialCard({ t, i }: { t: typeof TESTIMONIALS[0]; i: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-40px" });
+  return (
+    <motion.div ref={ref} initial={{ opacity: 0, y: 24 }} animate={inView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.8, ease: EASE_EXPO, delay: 0.1 + i * 0.1 }}
+      style={{ padding: "56px 32px", borderRight: i === 0 ? "1px solid var(--border)" : "none" }}
+    >
+      <div style={{ fontFamily: "var(--font-mono)", fontSize: "28px", letterSpacing: "-0.02em", color: "var(--brand)", lineHeight: 1, marginBottom: "24px" }}>&ldquo;</div>
+      <p style={{ fontFamily: "var(--font-display)", fontSize: "clamp(1.15rem,1.8vw,1.45rem)", letterSpacing: "-0.02em", color: "var(--text-primary)", lineHeight: 1.4, fontWeight: 400, marginBottom: "28px" }}>
+        {t.quote}
+      </p>
+      <div style={{ fontFamily: "var(--font-mono)", fontSize: "11px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--text-tertiary)" }}>
+        {t.source}
+      </div>
+    </motion.div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Capability grid cell — 2-column grid on desktop, single on narrow screens.
+// ─────────────────────────────────────────────────────────────────────────────
+function CapabilityCell({ item, i }: { item: typeof CAPABILITY_GRID[0]; i: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-40px" });
+  return (
+    <motion.div ref={ref} initial={{ opacity: 0, y: 16 }} animate={inView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.7, ease: EASE_EXPO, delay: (i % 4) * 0.06 }}
+      style={{
+        padding: "32px 28px",
+        borderTop: "1px solid var(--border)",
+        borderLeft: i % 2 === 1 ? "1px solid var(--border)" : "none",
+      }}
+    >
+      <div style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.14em", color: "var(--text-tertiary)", marginBottom: "14px" }}>
+        {String(i + 1).padStart(2, "0")}
+      </div>
+      <div style={{ fontFamily: "var(--font-display)", fontSize: "19px", color: "var(--text-primary)", fontWeight: 400, lineHeight: 1.25, marginBottom: "10px", letterSpacing: "-0.02em" }}>
+        {item.title}
+      </div>
+      <div style={{ fontFamily: "var(--font-body)", fontSize: "14px", color: "var(--text-secondary)", lineHeight: 1.6 }}>
+        {item.body}
+      </div>
+    </motion.div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FAQ accordion row — collapses with a height animation; plus rotates to ×.
+// ─────────────────────────────────────────────────────────────────────────────
+function FAQRow({ item }: { item: typeof FAQ_ITEMS[0] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ borderTop: "1px solid var(--border)" }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          all: "unset", cursor: "pointer", width: "100%", boxSizing: "border-box",
+          display: "grid", gridTemplateColumns: "1fr auto", gap: "24px",
+          padding: "28px 32px", alignItems: "center",
+        }}
+      >
+        <span style={{ fontFamily: "var(--font-display)", fontSize: "clamp(1.05rem,1.6vw,1.3rem)", color: "var(--text-primary)", fontWeight: 400, lineHeight: 1.35, letterSpacing: "-0.015em" }}>
+          {item.q}
+        </span>
+        <motion.span
+          animate={{ rotate: open ? 45 : 0 }}
+          transition={{ duration: 0.25, ease: EASE_EXPO }}
+          style={{ fontFamily: "var(--font-mono)", fontSize: "20px", color: "var(--text-tertiary)", lineHeight: 1, display: "inline-block" }}
+        >+</motion.span>
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.35, ease: EASE_EXPO }}
+            style={{ overflow: "hidden" }}
+          >
+            <p style={{ fontFamily: "var(--font-body)", fontSize: "15px", color: "var(--text-secondary)", lineHeight: 1.8, padding: "0 32px 28px", maxWidth: "780px" }}>
+              {item.a}
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // Page
 export default function HomePage() {
   const [count,           setCount]           = useState(0);
@@ -577,21 +771,107 @@ export default function HomePage() {
                 </FadeUp>
                 {FEATURES.map(f => <FeatureRow key={f.index} feature={f} />)}
               </section>
+
+              {/* ── Command Centre intro ─────────────────────────────────── */}
+              <section style={{ borderTop: "1px solid var(--border)", maxWidth: "1400px", margin: "0 auto", padding: "120px 32px 64px" }}>
+                <FadeUp>
+                  <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "40px" }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--text-tertiary)" }}>Command Centre</span>
+                    <div style={{ flex: 1, height: "1px", background: "var(--border)" }} />
+                  </div>
+                </FadeUp>
+                <FadeUp delay={0.08}>
+                  <h2 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(2.25rem,5.2vw,4.75rem)", letterSpacing: "-0.045em", lineHeight: 1, color: "var(--text-primary)", fontWeight: 400, marginBottom: "32px", maxWidth: "1100px" }}>
+                    Your complete digital marketing <span style={{ color: "var(--text-secondary)" }}>command centre.</span>
+                  </h2>
+                </FadeUp>
+                <FadeUp delay={0.16}>
+                  <p style={{ fontFamily: "var(--font-body)", fontSize: "clamp(16px,1.4vw,19px)", color: "var(--text-secondary)", lineHeight: 1.65, maxWidth: "760px", marginBottom: "24px" }}>
+                    Harness the power of advanced AI text generators and marketing intelligence tools to transform your campaigns and boost conversions.
+                  </p>
+                </FadeUp>
+                <FadeUp delay={0.22}>
+                  <p style={{ fontFamily: "var(--font-body)", fontSize: "15px", color: "var(--text-secondary)", lineHeight: 1.8, maxWidth: "760px" }}>
+                    Welcome to Britain&rsquo;s most comprehensive AI marketing lab, where cutting-edge artificial intelligence meets strategic digital marketing. Whether you&rsquo;re running Google Ads, diving into affiliate marketing, or crafting compelling content, our suite of AI-powered tools gives you the competitive edge you&rsquo;ve been searching for.
+                  </p>
+                </FadeUp>
+              </section>
+
+              {/* ── Three long-form feature narratives ───────────────────── */}
+              <section style={{ maxWidth: "1400px", margin: "0 auto" }}>
+                {COMMAND_CENTRE_FEATURES.map(f => <NarrativeRow key={f.index} feature={f} />)}
+              </section>
+
+              {/* ── Testimonials ─────────────────────────────────────────── */}
+              <section style={{ borderTop: "1px solid var(--border)", maxWidth: "1400px", margin: "0 auto" }}>
+                <FadeUp style={{ padding: "64px 32px 0" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--text-tertiary)" }}>Trusted by marketing professionals across the UK</span>
+                    <div style={{ flex: 1, height: "1px", background: "var(--border)" }} />
+                  </div>
+                </FadeUp>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderTop: "1px solid var(--border)", marginTop: "52px" }}>
+                  {TESTIMONIALS.map((t, i) => <TestimonialCard key={i} t={t} i={i} />)}
+                </div>
+              </section>
+
+              {/* ── Capability grid — "Everything You Need" ──────────────── */}
+              <section style={{ borderTop: "1px solid var(--border)", maxWidth: "1400px", margin: "0 auto", padding: "96px 32px 0" }}>
+                <FadeUp>
+                  <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "32px" }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--text-tertiary)" }}>Capabilities</span>
+                    <div style={{ flex: 1, height: "1px", background: "var(--border)" }} />
+                  </div>
+                </FadeUp>
+                <FadeUp delay={0.08}>
+                  <h2 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(2rem,4.2vw,3.75rem)", letterSpacing: "-0.04em", lineHeight: 1.02, color: "var(--text-primary)", fontWeight: 400, marginBottom: "56px", maxWidth: "900px" }}>
+                    Everything you need to dominate your market.
+                  </h2>
+                </FadeUp>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderBottom: "1px solid var(--border)" }}>
+                  {CAPABILITY_GRID.map((item, i) => <CapabilityCell key={i} item={item} i={i} />)}
+                </div>
+              </section>
+
+              {/* ── FAQ ──────────────────────────────────────────────────── */}
+              <section style={{ borderTop: "1px solid var(--border)", maxWidth: "1400px", margin: "0 auto", padding: "96px 0 0" }}>
+                <FadeUp style={{ padding: "0 32px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "32px" }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--text-tertiary)" }}>FAQ</span>
+                    <div style={{ flex: 1, height: "1px", background: "var(--border)" }} />
+                  </div>
+                </FadeUp>
+                <FadeUp delay={0.08} style={{ padding: "0 32px" }}>
+                  <h2 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(2rem,4.2vw,3.75rem)", letterSpacing: "-0.04em", lineHeight: 1.02, color: "var(--text-primary)", fontWeight: 400, marginBottom: "56px", maxWidth: "900px" }}>
+                    Frequently asked questions.
+                  </h2>
+                </FadeUp>
+                <div>
+                  {FAQ_ITEMS.map((item, i) => <FAQRow key={i} item={item} />)}
+                  <div style={{ borderTop: "1px solid var(--border)", height: "0" }} />
+                </div>
+              </section>
+
               <section style={{ borderTop: "1px solid var(--border)", padding: "120px 32px", textAlign: "center", position: "relative", overflow: "hidden" }}>
                 <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 60% 80% at 50% 100%, rgba(37,99,235,0.07) 0%, transparent 60%)", pointerEvents: "none" }} />
                 <FadeUp>
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--text-tertiary)", display: "block", marginBottom: "32px" }}>Ready when you are</span>
                 </FadeUp>
                 <FadeUp delay={0.1}>
-                  <h2 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(2.5rem,7vw,6.5rem)", letterSpacing: "-0.05em", lineHeight: 0.92, color: "var(--text-primary)", fontWeight: 400, marginBottom: "52px", position: "relative", zIndex: 1 }}>
+                  <h2 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(2.5rem,7vw,6.5rem)", letterSpacing: "-0.05em", lineHeight: 0.92, color: "var(--text-primary)", fontWeight: 400, marginBottom: "40px", position: "relative", zIndex: 1 }}>
                     Stop guessing.<br /><span style={{ color: "var(--text-secondary)" }}>Start knowing.</span>
                   </h2>
                 </FadeUp>
-                <FadeUp delay={0.2}>
+                <FadeUp delay={0.16}>
+                  <p style={{ fontFamily: "var(--font-body)", fontSize: "clamp(15px,1.3vw,17px)", color: "var(--text-secondary)", lineHeight: 1.7, maxWidth: "640px", margin: "0 auto 44px", position: "relative", zIndex: 1 }}>
+                    Ready to revolutionise your marketing strategy? Join hundreds of successful marketers who&rsquo;ve already discovered the power of our AI marketing lab. Start your free trial today and see the difference intelligent automation can make to your campaigns.
+                  </p>
+                </FadeUp>
+                <FadeUp delay={0.22}>
                   <Link href="/auth/signup" style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontFamily: "var(--font-body)", fontSize: "15px", fontWeight: 500, color: "#fff", background: "var(--brand)", textDecoration: "none", padding: "15px 36px", borderRadius: "100px", transition: "opacity 0.16s", position: "relative", zIndex: 1 }}
                     onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "0.85"}
                     onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
-                  >Get started free <ArrowUpRight size={15} /></Link>
+                  >Start your free trial <ArrowUpRight size={15} /></Link>
                 </FadeUp>
               </section>
             </motion.div>
