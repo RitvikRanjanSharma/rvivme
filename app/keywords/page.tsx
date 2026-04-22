@@ -25,16 +25,44 @@ import {
 const EASE: [number,number,number,number] = [0.16, 1, 0.3, 1];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+// Rankings now come from Google Search Console (see /api/keywords/ranked).
+// GSC gives us clicks / impressions / CTR / position / landing URL directly.
+// It doesn't give us volume / CPC / keyword difficulty / intent — those are
+// DataForSEO-only signals, kept as optional `null` fields so the UI can fall
+// back to an em-dash where we used to show a number.
 interface LiveKw {
-  term: string; position: number; volume: number;
-  cpc: number; difficulty: number; intent: string;
-  url: string; featured: boolean; aiOverview: boolean;
+  term:        string;
+  position:    number;
+  clicks:      number;
+  impressions: number;
+  ctr:         number;       // percentage (0-100)
+  url:         string;
+  volume:      number | null;
+  cpc:         number | null;
+  difficulty:  number | null;
+  intent:      string | null;
+  featured:    boolean;
+  aiOverview:  boolean;
 }
+// Ideas come from Google Trends related queries (see /api/keywords/ideas).
+// We lose absolute volume / CPC / competition / difficulty; we gain Trends'
+// own relative score and a "rising vs top" source flag.
 interface IdeaKw {
-  term: string; volume: number; cpc: number;
-  competitionLevel: string; difficulty: number;
-  intent: string; trending: string;
+  term:             string;
+  trending:         "up" | "stable" | "down";
+  trendScore:       number;                            // 0-100 for top, %-growth for rising
+  source?:          "trends-top" | "trends-rising";
+  // Legacy fields — present for shape compatibility with existing callers, but
+  // always null when the source is Trends.
+  volume:           number | null;
+  cpc:              number | null;
+  competitionLevel: string;
+  difficulty:       number | null;
+  intent:           string | null;
 }
+// Competitor keywords are disabled (no free equivalent of DataForSEO Labs
+// competitor ranked_keywords exists). Interface retained so the type checker
+// is happy and future re-enablement doesn't need a rewrite.
 interface CompKw {
   term: string; volume: number; difficulty: number;
   cpc: number; competitionLevel: string; intent: string;
@@ -166,12 +194,28 @@ function AiReasonCard({ kw, domain, brandColor }: { kw: CompKw; domain: string; 
   );
 }
 
-// ─── Keyword table (reusable) ─────────────────────────────────────────────────
-function KwTable({
-  keywords, cols, emptyMsg, brandColor, compDomain, yourDomain, showAi = false,
+// ─── Keyword table (reusable, column-driven) ─────────────────────────────────
+// Each tab now passes its own list of columns so we can render different fields
+// (GSC clicks/impressions vs Trends rising-score) without the table silently
+// mismatching its `<th>`s and `<td>`s.
+type KwColumn<T> = {
+  header:    string;
+  render:    (kw: T) => React.ReactNode;
+  minWidth?: number;
+};
+
+// Little formatter so nulls render as an em-dash instead of the misleading 0
+// we used to show when GSC-source rows lacked volume/CPC/difficulty.
+function numOrDash(v: number | null | undefined, fmt?: (n: number) => string): React.ReactNode {
+  if (v == null) return <span style={{ color:"var(--text-tertiary)" }}>—</span>;
+  return fmt ? fmt(v) : v.toLocaleString();
+}
+
+function KwTable<T extends { term: string }>({
+  keywords, columns, emptyMsg, brandColor, compDomain, yourDomain, showAi = false,
   selectable = false, selected, onToggleSelect, onToggleAll, badges,
 }: {
-  keywords: any[]; cols: string[]; emptyMsg: string; brandColor: string;
+  keywords: T[]; columns: KwColumn<T>[]; emptyMsg: string; brandColor: string;
   compDomain?: string; yourDomain?: string; showAi?: boolean;
   selectable?: boolean;
   selected?: Set<string>;
@@ -180,8 +224,8 @@ function KwTable({
   badges?: Record<string, RecommendedKeyword["matches"]>;
 }) {
   if (keywords.length === 0) return <EmptyState msg={emptyMsg} brandColor={brandColor} />;
-  const allTerms   = keywords.map(k => k.term);
-  const allChecked = selectable && selected && allTerms.every(t => selected.has(t));
+  const allTerms    = keywords.map(k => k.term);
+  const allChecked  = selectable && selected && allTerms.every(t => selected.has(t));
   const someChecked = selectable && selected && allTerms.some(t => selected.has(t));
 
   return (
@@ -201,8 +245,12 @@ function KwTable({
                 />
               </th>
             )}
-            {cols.map(h => (
-              <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontFamily:"var(--font-mono)", fontSize:"9px", color:"var(--text-tertiary)", letterSpacing:"0.1em", textTransform:"uppercase", borderBottom:"1px solid var(--border)", whiteSpace:"nowrap" }}>{h}</th>
+            <th style={{ padding:"10px 14px", textAlign:"left", fontFamily:"var(--font-mono)", fontSize:"9px", color:"var(--text-tertiary)", letterSpacing:"0.1em", textTransform:"uppercase", borderBottom:"1px solid var(--border)", whiteSpace:"nowrap" }}>Keyword</th>
+            {columns.map(c => (
+              <th key={c.header}
+                  style={{ padding:"10px 14px", textAlign:"left", fontFamily:"var(--font-mono)", fontSize:"9px", color:"var(--text-tertiary)", letterSpacing:"0.1em", textTransform:"uppercase", borderBottom:"1px solid var(--border)", whiteSpace:"nowrap", minWidth: c.minWidth }}>
+                {c.header}
+              </th>
             ))}
           </tr>
         </thead>
@@ -210,72 +258,51 @@ function KwTable({
           {keywords.map((kw, i) => {
             const isSelected = selectable && selected?.has(kw.term);
             const rowBadges  = badges?.[kw.term.toLowerCase()] ?? [];
+            const borderBottom = i < keywords.length - 1 ? "1px solid var(--border)" : "none";
             return (
-            <tr key={kw.term + i}
-              style={{ background: isSelected ? "rgba(var(--brand-rgb),0.06)" : "transparent", transition: "background 0.12s" }}
-              onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = "var(--muted)"; }}
-              onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-            >
-              {selectable && (
-                <td style={{ padding:"13px 10px 13px 14px", borderBottom: i < keywords.length-1 ? "1px solid var(--border)" : "none", verticalAlign:"top" }}>
-                  <input
-                    type="checkbox"
-                    aria-label={`Select ${kw.term}`}
-                    checked={!!isSelected}
-                    onChange={() => onToggleSelect?.(kw.term)}
-                    style={{ accentColor: brandColor, cursor: "pointer", marginTop: 2 }}
-                  />
-                </td>
-              )}
-              <td style={{ padding:"13px 14px", borderBottom: i < keywords.length-1 ? "1px solid var(--border)" : "none", maxWidth:"320px" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom: showAi ? "8px" : (rowBadges.length ? 6 : 0) }}>
-                  <span style={{ fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:500, color:"var(--text-primary)" }}>{kw.term}</span>
-                  {rowBadges.map((b, j) => (
-                    <span key={`${b.strategyId}-${j}`}
-                      title={`Matches strategy ${b.acronym} (fit: ${Math.round(b.score * 100)}%)`}
-                      style={{
-                        display:"inline-flex", alignItems:"center",
-                        fontFamily:"var(--font-mono)", fontSize:9, fontWeight:600, letterSpacing:"0.08em",
-                        color: "var(--brand)",
-                        background: `rgba(var(--brand-rgb), ${0.08 + b.score * 0.12})`,
-                        border:"1px solid rgba(var(--brand-rgb), 0.30)",
-                        padding:"2px 6px", borderRadius:5,
-                      }}>{b.acronym}</span>
-                  ))}
-                </div>
-                {showAi && compDomain && yourDomain && (
-                  <AiReasonCard kw={kw} domain={yourDomain} brandColor={brandColor} />
+              <tr key={kw.term + i}
+                style={{ background: isSelected ? "rgba(var(--brand-rgb),0.06)" : "transparent", transition: "background 0.12s" }}
+                onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = "var(--muted)"; }}
+                onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+              >
+                {selectable && (
+                  <td style={{ padding:"13px 10px 13px 14px", borderBottom, verticalAlign:"top" }}>
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${kw.term}`}
+                      checked={!!isSelected}
+                      onChange={() => onToggleSelect?.(kw.term)}
+                      style={{ accentColor: brandColor, cursor: "pointer", marginTop: 2 }}
+                    />
+                  </td>
                 )}
-              </td>
-              <td style={{ padding:"13px 14px", borderBottom: i < keywords.length-1 ? "1px solid var(--border)" : "none" }}>
-                <span style={{ fontFamily:"var(--font-mono)", fontSize:"12px", color:"var(--text-secondary)" }}>{(kw.volume||0).toLocaleString()}</span>
-              </td>
-              {kw.position !== undefined && (
-                <td style={{ padding:"13px 14px", borderBottom: i < keywords.length-1 ? "1px solid var(--border)" : "none" }}>
-                  <span style={{ fontFamily:"var(--font-mono)", fontSize:"13px", fontWeight:500, color: kw.position <= 3 ? "var(--signal-green)" : kw.position <= 10 ? brandColor : "var(--text-secondary)" }}>#{kw.position}</span>
+                <td style={{ padding:"13px 14px", borderBottom, maxWidth:"320px" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom: showAi ? "8px" : (rowBadges.length ? 6 : 0) }}>
+                    <span style={{ fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:500, color:"var(--text-primary)" }}>{kw.term}</span>
+                    {rowBadges.map((b, j) => (
+                      <span key={`${b.strategyId}-${j}`}
+                        title={`Matches strategy ${b.acronym} (fit: ${Math.round(b.score * 100)}%)`}
+                        style={{
+                          display:"inline-flex", alignItems:"center",
+                          fontFamily:"var(--font-mono)", fontSize:9, fontWeight:600, letterSpacing:"0.08em",
+                          color: "var(--brand)",
+                          background: `rgba(var(--brand-rgb), ${0.08 + b.score * 0.12})`,
+                          border:"1px solid rgba(var(--brand-rgb), 0.30)",
+                          padding:"2px 6px", borderRadius:5,
+                        }}>{b.acronym}</span>
+                    ))}
+                  </div>
+                  {showAi && compDomain && yourDomain && (
+                    <AiReasonCard kw={kw as unknown as CompKw} domain={yourDomain} brandColor={brandColor} />
+                  )}
                 </td>
-              )}
-              {kw.competitorPos !== undefined && (
-                <td style={{ padding:"13px 14px", borderBottom: i < keywords.length-1 ? "1px solid var(--border)" : "none" }}>
-                  <span style={{ fontFamily:"var(--font-mono)", fontSize:"12px", color:"var(--signal-amber)" }}>#{kw.competitorPos}</span>
-                </td>
-              )}
-              <td style={{ padding:"13px 14px", borderBottom: i < keywords.length-1 ? "1px solid var(--border)" : "none" }}>
-                <DiffBar d={kw.difficulty} />
-              </td>
-              <td style={{ padding:"13px 14px", borderBottom: i < keywords.length-1 ? "1px solid var(--border)" : "none" }}>
-                <span style={{ fontFamily:"var(--font-mono)", fontSize:"11px", color:"var(--text-secondary)" }}>£{(kw.cpc||0).toFixed(2)}</span>
-              </td>
-              <td style={{ padding:"13px 14px", borderBottom: i < keywords.length-1 ? "1px solid var(--border)" : "none" }}>
-                <IntentBadge i={kw.intent} />
-              </td>
-              {kw.trending !== undefined && (
-                <td style={{ padding:"13px 14px", borderBottom: i < keywords.length-1 ? "1px solid var(--border)" : "none" }}>
-                  <TrendIcon d={kw.trending} />
-                </td>
-              )}
-            </tr>
-          );
+                {columns.map(c => (
+                  <td key={c.header} style={{ padding:"13px 14px", borderBottom }}>
+                    {c.render(kw)}
+                  </td>
+                ))}
+              </tr>
+            );
           })}
         </tbody>
       </table>
