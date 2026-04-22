@@ -132,7 +132,7 @@ function MasterCanvas({
       initDone.current = true;
       const csize = Math.min(W * 0.18, 160);
       const cPts  = sampleText(
-        ["100", "AI MARKETING LABS"],
+        ["100", "AI MARKETING LAB"],
         `400 ${csize}px "DM Mono",monospace`,
         W, H, 3, 5000, "center"
       );

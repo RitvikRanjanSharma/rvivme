@@ -250,41 +250,97 @@ function IntegrationsTab({ brandColor }: { brandColor: string }) {
   const [dfsSt,   setDfsSt]   = useState<IntgStatus>("checking");
   const [antSt,   setAntSt]   = useState<IntgStatus>("checking");
 
+  // Per-user analytics config (stored on public.users). Empty string while we
+  // load — TextInput treats that as an editable blank field.
+  const [gscSiteUrl,    setGscSiteUrl]    = useState<string>("");
+  const [ga4PropertyId, setGa4PropertyId] = useState<string>("");
+  const [analyticsLoading, setAnalyticsLoading] = useState<boolean>(true);
+  const [analyticsSaving,  setAnalyticsSaving]  = useState<boolean>(false);
+  const [analyticsSaved,   setAnalyticsSaved]   = useState<boolean>(false);
+  const [analyticsError,   setAnalyticsError]   = useState<string | null>(null);
+
   useEffect(() => {
     const d = localStorage.getItem("aiml-domain");
     if (d) setDomain(d);
   }, []);
 
-  // Real connection state — one lightweight server call that only checks
-  // whether the required credentials are present. Never hits the downstream
-  // APIs, so it's fast and safe to run on every mount.
+  // Load the caller's current GSC / GA4 pointers from Supabase. Every user
+  // has their own row, so this is exactly their own config — no cross-user
+  // leakage.
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const r = await fetch("/api/integrations/status");
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) { if (alive) setAnalyticsLoading(false); return; }
+        const { data } = await supabase
+          .from("users")
+          .select("gsc_site_url, ga4_property_id")
+          .eq("id", user.id)
+          .single();
         if (!alive) return;
-        if (!r.ok) {
-          setGa4St("error"); setGscSt("error"); setDfsSt("error"); setAntSt("error");
-          return;
+        const row = data as { gsc_site_url: string | null; ga4_property_id: string | null } | null;
+        if (row) {
+          setGscSiteUrl(row.gsc_site_url ?? "");
+          setGa4PropertyId(row.ga4_property_id ?? "");
         }
-        const d = await r.json();
-        setGa4St(d.ga4        === "connected" ? "connected" : "disconnected");
-        setGscSt(d.gsc        === "connected" ? "connected" : "disconnected");
-        setDfsSt(d.dataforseo === "connected" ? "connected" : "disconnected");
-        setAntSt(d.anthropic  === "connected" ? "connected" : "disconnected");
-      } catch {
-        if (!alive) return;
-        setGa4St("error"); setGscSt("error"); setDfsSt("error"); setAntSt("error");
+      } finally {
+        if (alive) setAnalyticsLoading(false);
       }
     })();
     return () => { alive = false; };
   }, []);
 
+  // Real connection state — one lightweight server call that only checks
+  // whether the required credentials are present. Never hits the downstream
+  // APIs, so it's fast and safe to run on every mount.
+  const refreshStatus = useCallback(async () => {
+    try {
+      const r = await fetch("/api/integrations/status");
+      if (!r.ok) {
+        setGa4St("error"); setGscSt("error"); setDfsSt("error"); setAntSt("error");
+        return;
+      }
+      const d = await r.json();
+      setGa4St(d.ga4        === "connected" ? "connected" : "disconnected");
+      setGscSt(d.gsc        === "connected" ? "connected" : "disconnected");
+      setDfsSt(d.dataforseo === "connected" ? "connected" : "disconnected");
+      setAntSt(d.anthropic  === "connected" ? "connected" : "disconnected");
+    } catch {
+      setGa4St("error"); setGscSt("error"); setDfsSt("error"); setAntSt("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => { if (alive) await refreshStatus(); })();
+    return () => { alive = false; };
+  }, [refreshStatus]);
+
+  async function handleSaveAnalytics() {
+    setAnalyticsSaving(true); setAnalyticsError(null);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setAnalyticsSaving(false);
+      setAnalyticsError("Your session has expired — please sign in again.");
+      return;
+    }
+    const { error: dbErr } = await supabase.from("users").update({
+      gsc_site_url:    gscSiteUrl.trim()    || null,
+      ga4_property_id: ga4PropertyId.trim() || null,
+    } as never).eq("id", user.id);
+    setAnalyticsSaving(false);
+    if (dbErr) { setAnalyticsError(dbErr.message); return; }
+    setAnalyticsSaved(true);
+    setTimeout(() => setAnalyticsSaved(false), 2500);
+    // Pick up the new pill colours right away
+    await refreshStatus();
+  }
+
   const integrations = [
     { id: "anthropic",  name: "Anthropic (Claude)",      desc: "AI strategy generation, citation tracking",   icon: Brain,    status: antSt, note: "ANTHROPIC_API_KEY in server env" },
-    { id: "ga4",        name: "Google Analytics 4",      desc: "Traffic, sessions, and user behaviour data",  icon: BarChart3, status: ga4St, note: "Service account via GA4 Data API" },
-    { id: "gsc",        name: "Google Search Console",   desc: "Impressions, clicks, positions, CTR",         icon: Globe2,   status: gscSt, note: `sc-domain:${domain}` },
+    { id: "ga4",        name: "Google Analytics 4",      desc: "Traffic, sessions, and user behaviour data",  icon: BarChart3, status: ga4St, note: ga4PropertyId.trim() ? `property ${ga4PropertyId.trim()}` : "Not configured — add your property ID below" },
+    { id: "gsc",        name: "Google Search Console",   desc: "Impressions, clicks, positions, CTR",         icon: Globe2,   status: gscSt, note: gscSiteUrl.trim() || `Not configured — add your site URL below` },
     { id: "dataforseo", name: "DataForSEO",              desc: "Keywords, SERP, backlinks, AI Overviews",     icon: Cpu,      status: dfsSt, note: "UK (2826) · Standard plan" },
   ] as const;
 
@@ -326,13 +382,70 @@ function IntegrationsTab({ brandColor }: { brandColor: string }) {
         );
       })}
 
-      <motion.div variants={pv(0.3)} initial="hidden" animate="visible">
+      {/* Per-user analytics configuration — this is what makes GA4/GSC
+          show *your* data instead of whichever workspace the shared env
+          vars happen to point at. */}
+      <motion.div variants={pv(0.28)} initial="hidden" animate="visible">
+        <Panel>
+          <PH title="Your Analytics Properties" subtitle="Saved to your account. Only you can see or query this data." />
+          <div style={{ padding: "22px" }}>
+            {analyticsError && (
+              <div style={{ padding: "10px 14px", background: "rgba(255,23,68,0.08)", border: "1px solid rgba(255,23,68,0.20)", borderRadius: "7px", marginBottom: "16px", fontFamily: "var(--font-body)", fontSize: "13px", color: "var(--signal-red)" }}>
+                {analyticsError}
+              </div>
+            )}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
+              <Field
+                label="Google Search Console site"
+                hint='e.g. "sc-domain:yourdomain.com" for a domain property, or "https://yourdomain.com/" for a URL-prefix property.'
+              >
+                <TextInput
+                  value={gscSiteUrl}
+                  onChange={setGscSiteUrl}
+                  placeholder="sc-domain:yourdomain.com"
+                  disabled={analyticsLoading}
+                />
+              </Field>
+              <Field
+                label="GA4 property ID"
+                hint='The numeric ID of your GA4 property (Admin → Property settings). Looks like "123456789".'
+              >
+                <TextInput
+                  value={ga4PropertyId}
+                  onChange={setGa4PropertyId}
+                  placeholder="123456789"
+                  disabled={analyticsLoading}
+                />
+              </Field>
+            </div>
+            <SaveBtn
+              brandColor={brandColor}
+              onClick={handleSaveAnalytics}
+              loading={analyticsSaving}
+              saved={analyticsSaved}
+              label="Save analytics properties"
+            />
+            <div style={{ fontFamily: "var(--font-body)", fontSize: "11px", color: "var(--text-tertiary)", marginTop: "14px" }}>
+              Make sure the Google service account has Viewer access to both
+              properties — otherwise the dashboard will show a connection
+              error when it tries to fetch data.
+              {domain && domain !== "aimarketinglab.co.uk" && (
+                <> Your current workspace domain is <strong>{domain}</strong>.</>
+              )}
+            </div>
+          </div>
+        </Panel>
+      </motion.div>
+
+      <motion.div variants={pv(0.34)} initial="hidden" animate="visible">
         <div style={{ padding: "16px 20px", background: "var(--muted)", border: "1px solid var(--border)", borderRadius: "12px" }}>
           <div style={{ fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 500, color: "var(--text-secondary)", marginBottom: "4px" }}>
-            To connect or reconfigure integrations, update the environment variables in your Vercel dashboard and redeploy.
+            GA4 and Search Console use a shared service account managed by
+            your admin. DataForSEO and Anthropic keys are global — update
+            them in your deployment environment.
           </div>
           <div style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>
-            GA4_SERVICE_ACCOUNT_KEY · GA4_PROPERTY_ID · GSC_SITE_URL · DATAFORSEO_LOGIN · DATAFORSEO_PASSWORD
+            GA4_SERVICE_ACCOUNT_KEY · DATAFORSEO_LOGIN · DATAFORSEO_PASSWORD · ANTHROPIC_API_KEY
           </div>
         </div>
       </motion.div>

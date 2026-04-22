@@ -12,10 +12,15 @@ import {
   Search, TrendingUp, TrendingDown, Minus,
   RefreshCw, AlertTriangle, Lightbulb, Zap,
   ChevronDown, ChevronUp, Globe2, ArrowRight,
-  Save, Download, Check,
+  Save, Download, Check, Target, X,
 } from "lucide-react";
 import { useDomain } from "@/lib/useDomain";
 import { supabase } from "@/lib/supabase";
+import {
+  listStrategies, attachKeywordsToStrategy,
+  recommendKeywordsForStrategies,
+  type Strategy, type KeywordAttach, type RecommendedKeyword,
+} from "@/lib/strategies";
 
 const EASE: [number,number,number,number] = [0.16, 1, 0.3, 1];
 
@@ -162,29 +167,82 @@ function AiReasonCard({ kw, domain, brandColor }: { kw: CompKw; domain: string; 
 }
 
 // ─── Keyword table (reusable) ─────────────────────────────────────────────────
-function KwTable({ keywords, cols, emptyMsg, brandColor, compDomain, yourDomain, showAi = false }: {
+function KwTable({
+  keywords, cols, emptyMsg, brandColor, compDomain, yourDomain, showAi = false,
+  selectable = false, selected, onToggleSelect, onToggleAll, badges,
+}: {
   keywords: any[]; cols: string[]; emptyMsg: string; brandColor: string;
   compDomain?: string; yourDomain?: string; showAi?: boolean;
+  selectable?: boolean;
+  selected?: Set<string>;
+  onToggleSelect?: (term: string) => void;
+  onToggleAll?: (terms: string[], select: boolean) => void;
+  badges?: Record<string, RecommendedKeyword["matches"]>;
 }) {
   if (keywords.length === 0) return <EmptyState msg={emptyMsg} brandColor={brandColor} />;
+  const allTerms   = keywords.map(k => k.term);
+  const allChecked = selectable && selected && allTerms.every(t => selected.has(t));
+  const someChecked = selectable && selected && allTerms.some(t => selected.has(t));
+
   return (
     <div style={{ overflowX:"auto" }}>
       <table style={{ borderCollapse:"collapse", width:"100%" }}>
         <thead>
           <tr>
+            {selectable && (
+              <th style={{ padding:"10px 10px 10px 14px", width:24, borderBottom:"1px solid var(--border)" }}>
+                <input
+                  type="checkbox"
+                  aria-label="Select all visible keywords"
+                  checked={!!allChecked}
+                  ref={(el) => { if (el) el.indeterminate = !!someChecked && !allChecked; }}
+                  onChange={(e) => onToggleAll?.(allTerms, e.target.checked)}
+                  style={{ accentColor: brandColor, cursor: "pointer" }}
+                />
+              </th>
+            )}
             {cols.map(h => (
               <th key={h} style={{ padding:"10px 14px", textAlign:"left", fontFamily:"var(--font-mono)", fontSize:"9px", color:"var(--text-tertiary)", letterSpacing:"0.1em", textTransform:"uppercase", borderBottom:"1px solid var(--border)", whiteSpace:"nowrap" }}>{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {keywords.map((kw, i) => (
+          {keywords.map((kw, i) => {
+            const isSelected = selectable && selected?.has(kw.term);
+            const rowBadges  = badges?.[kw.term.toLowerCase()] ?? [];
+            return (
             <tr key={kw.term + i}
-              onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--muted)"}
-              onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
+              style={{ background: isSelected ? "rgba(var(--brand-rgb),0.06)" : "transparent", transition: "background 0.12s" }}
+              onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = "var(--muted)"; }}
+              onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
             >
-              <td style={{ padding:"13px 14px", borderBottom: i < keywords.length-1 ? "1px solid var(--border)" : "none", maxWidth:"260px" }}>
-                <div style={{ fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:500, color:"var(--text-primary)", marginBottom: showAi ? "8px" : 0 }}>{kw.term}</div>
+              {selectable && (
+                <td style={{ padding:"13px 10px 13px 14px", borderBottom: i < keywords.length-1 ? "1px solid var(--border)" : "none", verticalAlign:"top" }}>
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${kw.term}`}
+                    checked={!!isSelected}
+                    onChange={() => onToggleSelect?.(kw.term)}
+                    style={{ accentColor: brandColor, cursor: "pointer", marginTop: 2 }}
+                  />
+                </td>
+              )}
+              <td style={{ padding:"13px 14px", borderBottom: i < keywords.length-1 ? "1px solid var(--border)" : "none", maxWidth:"320px" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom: showAi ? "8px" : (rowBadges.length ? 6 : 0) }}>
+                  <span style={{ fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:500, color:"var(--text-primary)" }}>{kw.term}</span>
+                  {rowBadges.map((b, j) => (
+                    <span key={`${b.strategyId}-${j}`}
+                      title={`Matches strategy ${b.acronym} (fit: ${Math.round(b.score * 100)}%)`}
+                      style={{
+                        display:"inline-flex", alignItems:"center",
+                        fontFamily:"var(--font-mono)", fontSize:9, fontWeight:600, letterSpacing:"0.08em",
+                        color: "var(--brand)",
+                        background: `rgba(var(--brand-rgb), ${0.08 + b.score * 0.12})`,
+                        border:"1px solid rgba(var(--brand-rgb), 0.30)",
+                        padding:"2px 6px", borderRadius:5,
+                      }}>{b.acronym}</span>
+                  ))}
+                </div>
                 {showAi && compDomain && yourDomain && (
                   <AiReasonCard kw={kw} domain={yourDomain} brandColor={brandColor} />
                 )}
@@ -217,7 +275,8 @@ function KwTable({ keywords, cols, emptyMsg, brandColor, compDomain, yourDomain,
                 </td>
               )}
             </tr>
-          ))}
+          );
+          })}
         </tbody>
       </table>
     </div>
@@ -253,10 +312,128 @@ export default function KeywordsPage() {
   const [saveState,     setSaveState]     = useState<"idle"|"saving"|"saved"|"error">("idle");
   const [saveMessage,   setSaveMessage]   = useState<string|null>(null);
 
+  // ── Strategy linkage (shared across tabs) ───────────────────────────────
+  const [strategies,   setStrategies]   = useState<Strategy[]>([]);
+  const [selectedKws,  setSelectedKws]  = useState<Set<string>>(new Set());
+  const [kwBadges,     setKwBadges]     = useState<Record<string, RecommendedKeyword["matches"]>>({});
+  const [attachBusy,   setAttachBusy]   = useState(false);
+  const [attachTarget, setAttachTarget] = useState<string>("");   // strategy id the user picks in the bar
+  const [attachMsg,    setAttachMsg]    = useState<string|null>(null);
+
   useEffect(() => {
     const b = localStorage.getItem("aiml-brand") || localStorage.getItem("rvivme-brand");
     if (b) setBrandColor(b);
+    (async () => {
+      try {
+        const list = await listStrategies();
+        // Only show active-status rows in the picker; user can archive stale ones.
+        const pickable = list.filter(s => s.status === "active");
+        setStrategies(pickable);
+        // Default the picker to the active strategy, falling back to the first.
+        const def = pickable.find(s => s.is_active) ?? pickable[0];
+        if (def) setAttachTarget(def.id);
+      } catch (e) {
+        console.warn("[keywords] listStrategies failed", e);
+      }
+    })();
   }, []);
+
+  // Compute acronym badges whenever the visible keyword pool changes.
+  // We combine terms from all three tabs — some users switch between them,
+  // and keeping a single badge map keeps the experience coherent.
+  useEffect(() => {
+    const pool: string[] = Array.from(new Set([
+      ...rankings.map(k => k.term),
+      ...ideas.map(k => k.term),
+      ...gapKws.map(k => k.term),
+      ...oppKws.map(k => k.term),
+    ]));
+    if (!pool.length || !strategies.length) return;
+
+    // Skip terms we already have badges for (AI calls cost tokens).
+    const toFetch = pool.filter(t => !(t.toLowerCase() in kwBadges));
+    if (!toFetch.length) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const recs = await recommendKeywordsForStrategies({
+          keywords:   toFetch,
+          strategies,
+        });
+        if (cancelled) return;
+        setKwBadges(prev => {
+          const next = { ...prev };
+          recs.forEach(r => { next[r.keyword.toLowerCase()] = r.matches; });
+          return next;
+        });
+      } catch (e) {
+        console.warn("[keywords] recommend failed", e);
+      }
+    })();
+    return () => { cancelled = true; };
+  /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [rankings, ideas, gapKws, oppKws, strategies]);
+
+  // Selection helpers.
+  function toggleKw(term: string) {
+    setSelectedKws(prev => {
+      const next = new Set(prev);
+      if (next.has(term)) next.delete(term); else next.add(term);
+      return next;
+    });
+  }
+  function toggleAllKw(terms: string[], select: boolean) {
+    setSelectedKws(prev => {
+      const next = new Set(prev);
+      if (select) terms.forEach(t => next.add(t));
+      else        terms.forEach(t => next.delete(t));
+      return next;
+    });
+  }
+  function clearSelection() { setSelectedKws(new Set()); setAttachMsg(null); }
+
+  // Resolve a term back to its richest data row across all three pools so the
+  // strategy link row carries volume/difficulty/intent/baseline_pos.
+  function enrichTerm(term: string): KeywordAttach {
+    const fromRank = rankings.find(k => k.term === term);
+    if (fromRank) return {
+      keyword: term, volume: fromRank.volume, difficulty: fromRank.difficulty,
+      intent: fromRank.intent, source: "ranking", baseline_pos: fromRank.position,
+    };
+    const fromIdea = ideas.find(k => k.term === term);
+    if (fromIdea) return {
+      keyword: term, volume: fromIdea.volume, difficulty: fromIdea.difficulty,
+      intent: fromIdea.intent, source: "ai",
+    };
+    const fromGap = gapKws.find(k => k.term === term);
+    if (fromGap) return {
+      keyword: term, volume: fromGap.volume, difficulty: fromGap.difficulty,
+      intent: fromGap.intent, source: "gap",
+    };
+    const fromOpp = oppKws.find(k => k.term === term);
+    if (fromOpp) return {
+      keyword: term, volume: fromOpp.volume, difficulty: fromOpp.difficulty,
+      intent: fromOpp.intent, source: "opportunity",
+    };
+    return { keyword: term, source: "manual" };
+  }
+
+  async function attachSelection() {
+    if (!attachTarget || selectedKws.size === 0) return;
+    setAttachBusy(true); setAttachMsg(null);
+    try {
+      const rows = Array.from(selectedKws).map(enrichTerm);
+      const n = await attachKeywordsToStrategy(attachTarget, rows);
+      const strat = strategies.find(s => s.id === attachTarget);
+      setAttachMsg(`Saved ${n} keyword${n === 1 ? "" : "s"} to ${strat?.acronym ?? "STR"} · ${strat?.title ?? "strategy"}.`);
+      clearSelection();
+    } catch (e: any) {
+      setAttachMsg(e?.message ?? "Could not save to strategy.");
+    } finally {
+      setAttachBusy(false);
+    }
+  }
 
   // Load rankings
   const loadRankings = useCallback(async () => {
@@ -503,6 +680,11 @@ export default function KeywordsPage() {
                       "or hasn't earned any organic rankings yet. Try the Keyword Ideas tab to plan ahead."
                     }
                     brandColor={brandColor}
+                    selectable={strategies.length > 0}
+                    selected={selectedKws}
+                    onToggleSelect={toggleKw}
+                    onToggleAll={toggleAllKw}
+                    badges={kwBadges}
                   />
               }
             </div>
@@ -567,6 +749,11 @@ export default function KeywordsPage() {
                     cols={["Keyword","Volume","Difficulty","CPC","Competition","Intent","Trend"]}
                     emptyMsg='Click "Get keyword ideas" to discover opportunities.'
                     brandColor={brandColor}
+                    selectable={strategies.length > 0}
+                    selected={selectedKws}
+                    onToggleSelect={toggleKw}
+                    onToggleAll={toggleAllKw}
+                    badges={kwBadges}
                   />
               }
             </div>
@@ -720,6 +907,11 @@ export default function KeywordsPage() {
                     compDomain={compDomain}
                     yourDomain={domain}
                     showAi={true}
+                    selectable={strategies.length > 0}
+                    selected={selectedKws}
+                    onToggleSelect={toggleKw}
+                    onToggleAll={toggleAllKw}
+                    badges={kwBadges}
                   />
                 </div>
               </>
@@ -733,6 +925,81 @@ export default function KeywordsPage() {
           </motion.div>
         )}
 
+      </AnimatePresence>
+
+      {/* Sticky "Save N to strategy" bar — appears when keywords are selected */}
+      <AnimatePresence>
+        {selectedKws.size > 0 && strategies.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 24 }}
+            transition={{ duration: 0.25, ease: EASE }}
+            style={{
+              position: "sticky", bottom: 20, zIndex: 20,
+              margin: "24px auto 0", maxWidth: 920,
+              display: "flex", alignItems: "center", gap: 12,
+              padding: "12px 16px",
+              background: "var(--surface)",
+              border: `1px solid rgba(var(--brand-rgb), 0.45)`,
+              boxShadow: "0 10px 40px rgba(0,0,0,0.35), 0 0 28px var(--brand-glow)",
+              borderRadius: 14, flexWrap: "wrap",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "1 1 auto", minWidth: 220 }}>
+              <Target size={14} color={brandColor}/>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-primary)", letterSpacing: "0.06em" }}>
+                {selectedKws.size} selected
+              </span>
+              {attachMsg && (
+                <span style={{ fontFamily: "var(--font-body)", fontSize: 12, color: attachMsg.startsWith("Saved") ? "var(--signal-green)" : "var(--signal-red)" }}>
+                  · {attachMsg}
+                </span>
+              )}
+            </div>
+            <select
+              value={attachTarget}
+              onChange={(e) => setAttachTarget(e.target.value)}
+              style={{
+                padding: "8px 10px",
+                fontFamily: "var(--font-body)", fontSize: 12, color: "var(--text-primary)",
+                background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8,
+                appearance: "none", minWidth: 200,
+              }}
+            >
+              {strategies.map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.is_active ? "★ " : ""}[{s.acronym ?? "STR"}] {s.title}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={attachSelection}
+              disabled={attachBusy || !attachTarget}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 7,
+                fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 500,
+                color: "#fff", background: brandColor, border: "none",
+                borderRadius: 8, padding: "8px 14px", cursor: attachBusy ? "default" : "pointer",
+                opacity: attachBusy ? 0.7 : 1,
+              }}
+            >
+              {attachBusy
+                ? <div style={{ width: 11, height: 11, border: "1.5px solid rgba(255,255,255,0.35)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.7s linear infinite" }}/>
+                : <Save size={12}/>}
+              {attachBusy ? "Saving…" : `Save ${selectedKws.size} to strategy`}
+            </button>
+            <button
+              onClick={clearSelection}
+              aria-label="Clear selection"
+              style={{
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                background: "transparent", border: "1px solid var(--border)",
+                borderRadius: 8, padding: 7, cursor: "pointer", color: "var(--text-tertiary)",
+              }}
+            >
+              <X size={12}/>
+            </button>
+          </motion.div>
+        )}
       </AnimatePresence>
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>

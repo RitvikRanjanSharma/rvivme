@@ -7,6 +7,8 @@
 // =============================================================================
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine,
@@ -16,11 +18,15 @@ import {
   AlertTriangle, CheckCircle2, TrendingUp, TrendingDown,
   Activity, Globe2, ShieldCheck, Cpu, Zap,
   ArrowRight, RefreshCw, AlertCircle, XCircle,
-  Link2, Brain, Eye, Search,
+  Link2, Brain, Eye, Search, ArrowUpRight,
 } from "lucide-react";
 import { GA4Panel }  from "./ga4-panel";
 import { GSCPanel }  from "./gsc-panel";
 import { useDomain } from "@/lib/useDomain";
+import {
+  saveAndActivateStrategy, getActiveStrategy,
+  type Strategy as SavedStrategy, type BaselineMetrics,
+} from "@/lib/strategies";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface TrafficDataPoint {
@@ -48,6 +54,75 @@ function effortColor(s: number)  { return s>=7.5?"var(--signal-red)":s>=5.0?"var
 
 function Panel({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:"12px", ...style }}>{children}</div>;
+}
+
+// ── Active strategy banner ────────────────────────────────────────────────────
+// Sits above the data panels. Surfaces the currently active strategy and links
+// straight into its plan view. If nothing is active, renders nothing.
+function ActiveStrategyBanner({ brandColor }: { brandColor: string }) {
+  const [active,  setActive]  = useState<SavedStrategy | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const s = await getActiveStrategy();
+        if (alive) setActive(s);
+      } catch { /* probably no auth yet; hide silently */ }
+      finally { if (alive) setLoading(false); }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  if (loading || !active) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+      style={{
+        display:"flex", alignItems:"center", justifyContent:"space-between",
+        gap:"12px", flexWrap:"wrap",
+        background: "var(--surface)",
+        border: `1px solid rgba(var(--brand-rgb), 0.40)`,
+        borderRadius: "14px",
+        padding: "16px 20px", marginBottom: "20px",
+        position:"relative", overflow:"hidden",
+        boxShadow: "0 0 22px var(--brand-glow)",
+      }}
+    >
+      <div style={{ position:"absolute", top:0, left:0, right:0, height:2,
+        background: `linear-gradient(90deg, transparent, ${brandColor}, transparent)` }}/>
+      <div style={{ display:"flex", alignItems:"center", gap:"12px", minWidth:0, flex:1 }}>
+        <span style={{
+          display:"inline-flex", alignItems:"center", justifyContent:"center",
+          fontFamily:"var(--font-mono)", fontSize:"11px", fontWeight:600, letterSpacing:"0.08em",
+          color:brandColor, background:"rgba(var(--brand-rgb), 0.12)",
+          border:"1px solid rgba(var(--brand-rgb), 0.35)",
+          padding:"4px 10px", borderRadius:7, minWidth:38, textAlign:"center",
+        }}>{active.acronym ?? "STR"}</span>
+        <div style={{ minWidth:0 }}>
+          <div style={{ fontFamily:"var(--font-mono)", fontSize:10, letterSpacing:"0.12em",
+            color:brandColor, textTransform:"uppercase", marginBottom:3 }}>
+            Active strategy
+          </div>
+          <div style={{
+            fontFamily:"var(--font-body)", fontSize:14, fontWeight:600, color:"var(--text-primary)",
+            lineHeight:1.3, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+          }}>{active.title}</div>
+        </div>
+      </div>
+      <Link href={`/strategies/${active.id}`} style={{
+        display:"inline-flex", alignItems:"center", gap:6,
+        fontFamily:"var(--font-body)", fontSize:12, fontWeight:500,
+        color:"#fff", background:brandColor, textDecoration:"none",
+        borderRadius:7, padding:"7px 14px", flexShrink:0,
+      }}>
+        Open plan <ArrowUpRight size={12}/>
+      </Link>
+    </motion.div>
+  );
 }
 function SectionLabel({ label, action }: { label: string; action?: React.ReactNode }) {
   return (
@@ -161,16 +236,57 @@ function ScoreBar({ value, max=10, color, label }: { value:number; max?:number; 
 }
 
 // ── Connection banner ──────────────────────────────────────────────────────────
-function ConnectionBanner({ ga4Connected, gscConnected }: { ga4Connected:boolean; gscConnected:boolean }) {
+// `reason` is forwarded from /api/ga4 and /api/gsc and distinguishes the two
+// failure modes:
+//   "not_configured" → the user hasn't stored a property ID yet.
+//   "api_error"      → they stored one but Google rejected the call (usually
+//                      because the shared service account doesn't have Viewer
+//                      access on that property, or the URL is mis-formatted).
+type ConnReason = null | "not_configured" | "api_error";
+function ConnectionBanner({
+  ga4Connected, gscConnected,
+  ga4Reason,    gscReason,
+  ga4Message,   gscMessage,
+}: {
+  ga4Connected: boolean; gscConnected: boolean;
+  ga4Reason:    ConnReason; gscReason:  ConnReason;
+  ga4Message:   string | null; gscMessage: string | null;
+}) {
   if (ga4Connected && gscConnected) return null;
-  const missing = [!ga4Connected&&"Google Analytics 4", !gscConnected&&"Google Search Console"].filter(Boolean).join(" and ");
+
+  // Build a single line that speaks to what is actually wrong.
+  const lines: string[] = [];
+  if (!ga4Connected) {
+    if (ga4Reason === "api_error") {
+      lines.push(`GA4 connection error — ${ga4Message ?? "check service account access."}`);
+    } else {
+      lines.push("Google Analytics 4 not configured.");
+    }
+  }
+  if (!gscConnected) {
+    if (gscReason === "api_error") {
+      lines.push(`Search Console connection error — ${gscMessage ?? "check service account access."}`);
+    } else {
+      lines.push("Google Search Console not configured.");
+    }
+  }
+
   return (
     <motion.div initial={{ opacity:0,y:-10 }} animate={{ opacity:1,y:0 }}
-      style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 16px", background:"rgba(255,171,0,0.06)", border:"1px solid rgba(255,171,0,0.20)", borderRadius:"10px", marginBottom:"20px", gap:"12px", flexWrap:"wrap" }}
+      style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", padding:"10px 16px", background:"rgba(255,171,0,0.06)", border:"1px solid rgba(255,171,0,0.20)", borderRadius:"10px", marginBottom:"20px", gap:"12px", flexWrap:"wrap" }}
     >
-      <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
-        <AlertTriangle size={14} color="var(--signal-amber)" />
-        <span style={{ fontFamily:"var(--font-body)", fontSize:"13px", color:"var(--signal-amber)", fontWeight:500 }}>Data limited — {missing} not connected.</span>
+      <div style={{ display:"flex", alignItems:"flex-start", gap:"8px", minWidth: 0 }}>
+        <AlertTriangle size={14} color="var(--signal-amber)" style={{ marginTop: "2px", flexShrink: 0 }} />
+        <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: 0 }}>
+          <span style={{ fontFamily:"var(--font-body)", fontSize:"13px", color:"var(--signal-amber)", fontWeight:500 }}>
+            Data limited
+          </span>
+          {lines.map((l, i) => (
+            <span key={i} style={{ fontFamily:"var(--font-body)", fontSize:"12px", color:"var(--signal-amber)", opacity: 0.9 }}>
+              {l}
+            </span>
+          ))}
+        </div>
       </div>
       <a href="/settings?tab=integrations" style={{ display:"flex", alignItems:"center", gap:"5px", fontFamily:"var(--font-body)", fontSize:"12px", fontWeight:600, color:"var(--signal-amber)", background:"rgba(255,171,0,0.10)", border:"1px solid rgba(255,171,0,0.25)", borderRadius:"6px", padding:"5px 12px", cursor:"pointer", textDecoration:"none", whiteSpace:"nowrap" }}>
         Configure <ArrowRight size={11} />
@@ -510,12 +626,69 @@ function GeoCitationPanel({ brandColor, domain }: { brandColor:string; domain:st
 function ActionCenter({ brandColor, domain, gscData, ga4Data }: {
   brandColor:string; domain:string; gscData:any; ga4Data:any;
 }) {
+  const router = useRouter();
   const [strategies,      setStrategies]      = useState<Strategy[]>([]);
   const [loading,         setLoading]         = useState(false);
   const [generated,       setGenerated]       = useState(false);
   const [selected,        setSelected]        = useState<number|null>(null);
   const [error,           setError]           = useState<string|null>(null);
   const [aiNotConfigured, setAiNotConfigured] = useState(false);
+  const [activatingIndex, setActivatingIndex] = useState<number|null>(null);
+
+  async function activateStrategy(strat: Strategy, idx: number) {
+    setActivatingIndex(idx); setError(null);
+    try {
+      // Snapshot current live metrics as the baseline — used later for delta.
+      const baseline: BaselineMetrics = {
+        capturedAt: new Date().toISOString(),
+        domain,
+        ga4: ga4Data?.summary ? {
+          sessions: ga4Data.summary.sessions ?? 0,
+          users:    ga4Data.summary.users    ?? 0,
+        } : undefined,
+        gsc: gscData?.summary ? {
+          clicks:       gscData.summary.clicks       ?? 0,
+          impressions:  gscData.summary.impressions  ?? 0,
+          avgPosition:  gscData.summary.position     ?? 0,
+          ctr:          gscData.summary.ctr          ?? 0,
+        } : undefined,
+        keywordPos: (() => {
+          const out: Record<string, number> = {};
+          (gscData?.topQueries ?? []).forEach((q: any) => {
+            if (q?.query) out[q.query.toLowerCase()] = q.position;
+          });
+          return out;
+        })(),
+      };
+
+      const saved = await saveAndActivateStrategy({
+        title:     strat.title,
+        rationale: strat.rationale,
+        impact:    strat.impact,
+        effort:    strat.effort,
+        timeframe: strat.timeframe,
+        category:  strat.category,
+        domain,
+        baseline,
+      });
+      // Route to the detail page so the user immediately sees progress + plan.
+      router.push(`/strategies/${saved.id}`);
+    } catch (e: any) {
+      // PostgrestError objects have non-enumerable fields — serialize explicitly
+      // so the browser console shows the real message/code/hint instead of "{}".
+      const info = {
+        message: e?.message,
+        code:    e?.code    ?? e?.pgCode,
+        details: e?.details ?? e?.pgDetail,
+        hint:    e?.hint    ?? e?.pgHint,
+        name:    e?.name,
+      };
+      console.error("[activateStrategy]", info, e);
+      setError(e?.message ?? "Could not save strategy.");
+    } finally {
+      setActivatingIndex(null);
+    }
+  }
 
   async function generateStrategies() {
     setLoading(true); setError(null); setAiNotConfigured(false);
@@ -670,10 +843,31 @@ Each strategy must be specific to this domain's actual data. Impact and effort a
                     <motion.div initial={{ opacity:0, height:0 }} animate={{ opacity:1, height:"auto" }} exit={{ opacity:0, height:0 }} transition={{ duration:0.3 }} style={{ overflow:"hidden" }}>
                       <div style={{ borderTop:"1px solid var(--border)", paddingTop:"12px", marginTop:"4px" }}>
                         <p style={{ fontFamily:"var(--font-body)", fontSize:"13px", color:"var(--text-secondary)", lineHeight:1.75, margin:"0 0 14px" }}>{strat.rationale}</p>
-                        <button style={{ display:"flex", alignItems:"center", gap:"5px", fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:600, color:"#fff", background:brandColor, border:"none", borderRadius:"7px", padding:"8px 16px", cursor:"pointer", transition:"opacity 0.16s" }}
-                          onMouseEnter={e=>(e.currentTarget as HTMLElement).style.opacity="0.85"}
-                          onMouseLeave={e=>(e.currentTarget as HTMLElement).style.opacity="1"}
-                        ><Zap size={13} strokeWidth={2.5}/>Activate Strategy</button>
+                        <div style={{ display:"flex", alignItems:"center", gap:"8px", flexWrap:"wrap" }}>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); activateStrategy(strat, i); }}
+                            disabled={activatingIndex !== null}
+                            style={{
+                              display:"flex", alignItems:"center", gap:"5px",
+                              fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:600,
+                              color:"#fff", background:brandColor, border:"none",
+                              borderRadius:"7px", padding:"8px 16px",
+                              cursor: activatingIndex !== null ? "default" : "pointer",
+                              opacity: activatingIndex !== null && activatingIndex !== i ? 0.5 : 1,
+                              transition:"opacity 0.16s",
+                            }}
+                            onMouseEnter={e=>{ if(activatingIndex===null) (e.currentTarget as HTMLElement).style.opacity="0.85"; }}
+                            onMouseLeave={e=>{ if(activatingIndex===null) (e.currentTarget as HTMLElement).style.opacity="1"; }}
+                          >
+                            {activatingIndex === i
+                              ? <div style={{ width:"11px",height:"11px",border:"1.5px solid rgba(255,255,255,0.35)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.7s linear infinite" }}/>
+                              : <Zap size={13} strokeWidth={2.5}/>}
+                            {activatingIndex === i ? "Activating…" : "Activate Strategy"}
+                          </button>
+                          <span style={{ fontFamily:"var(--font-mono)", fontSize:"10px", color:"var(--text-tertiary)", letterSpacing:"0.08em" }}>
+                            SAVES + OPENS PLAN · AI TRACKS PROGRESS
+                          </span>
+                        </div>
                       </div>
                     </motion.div>
                   )}
@@ -698,6 +892,13 @@ export default function DashboardPage() {
   const [gscData,    setGscData]    = useState<any>(null);
   const [ga4Connected, setGa4Connected] = useState(true);
   const [gscConnected, setGscConnected] = useState(true);
+  // Capture *why* a connection is reported as not working so the banner
+  // can distinguish "not configured" from "configured but Google rejected
+  // the call" (e.g. missing Viewer access on the service account).
+  const [ga4Reason,  setGa4Reason]   = useState<ConnReason>(null);
+  const [gscReason,  setGscReason]   = useState<ConnReason>(null);
+  const [ga4Message, setGa4Message]  = useState<string | null>(null);
+  const [gscMessage, setGscMessage]  = useState<string | null>(null);
 
   useEffect(() => {
     const b = localStorage.getItem("aiml-brand") || localStorage.getItem("rvivme-brand");
@@ -717,11 +918,15 @@ export default function DashboardPage() {
           setGa4Trend(data.trend ?? []);
           setGa4Data(data);
           setGa4Connected(true);
+          setGa4Reason(null);
+          setGa4Message(null);
         } else {
           setGa4Connected(false);
+          setGa4Reason((data?.reason as ConnReason) ?? "not_configured");
+          setGa4Message(data?.message ?? null);
         }
       })
-      .catch(()=> setGa4Connected(false))
+      .catch(()=> { setGa4Connected(false); setGa4Reason("api_error"); setGa4Message("Network error reaching /api/ga4."); })
       .finally(()=>setGa4Loading(false));
     fetch("/api/gsc")
       .then(r=>r.json())
@@ -729,18 +934,26 @@ export default function DashboardPage() {
         if (data.success) {
           setGscData(data);
           setGscConnected(true);
+          setGscReason(null);
+          setGscMessage(null);
         } else {
           setGscConnected(false);
+          setGscReason((data?.reason as ConnReason) ?? "not_configured");
+          setGscMessage(data?.message ?? null);
         }
       })
-      .catch(()=> setGscConnected(false));
+      .catch(()=> { setGscConnected(false); setGscReason("api_error"); setGscMessage("Network error reaching /api/gsc."); });
   }, []);
 
   const dateStr = new Intl.DateTimeFormat("en-GB",{timeZone:"UTC",weekday:"long",day:"numeric",month:"long",year:"numeric"}).format(new Date());
 
   return (
     <div style={{ background:"var(--bg)", minHeight:"100vh", padding:"32px 24px 80px", maxWidth:"1280px", margin:"0 auto" }}>
-      <ConnectionBanner ga4Connected={ga4Connected} gscConnected={gscConnected}/>
+      <ConnectionBanner
+        ga4Connected={ga4Connected} gscConnected={gscConnected}
+        ga4Reason={ga4Reason}       gscReason={gscReason}
+        ga4Message={ga4Message}     gscMessage={gscMessage}
+      />
 
       {/* Header */}
       <motion.div variants={pv(0)} initial="hidden" animate="visible" style={{ display:"flex", alignItems:"flex-end", justifyContent:"space-between", marginBottom:"24px", flexWrap:"wrap", gap:"12px" }}>
@@ -763,6 +976,8 @@ export default function DashboardPage() {
           </div>
         )}
       </motion.div>
+
+      <ActiveStrategyBanner brandColor={brandColor}/>
 
       <div style={{ display:"flex", flexDirection:"column", gap:"32px" }}>
         <ProjectionChart brandColor={brandColor} ga4Trend={ga4Trend} ga4Loading={ga4Loading}/>

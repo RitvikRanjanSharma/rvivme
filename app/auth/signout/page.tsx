@@ -1,15 +1,61 @@
 "use client";
 
 // app/auth/signout/page.tsx
+// =============================================================================
+// Sign out flow.
+// =============================================================================
+// Crucial: localStorage is scoped to the *browser origin*, not to the user.
+// If we don't scrub it here, the next user to log in on this browser sees the
+// previous user's cached domain, brand colour, content drafts, etc.
+// =============================================================================
+
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+
+// All localStorage keys the app writes. If you add a new one, add it here.
+const USER_SCOPED_KEYS = [
+  "aiml-domain",
+  "aiml-brand",
+  "rvivme-brand",
+  // Content editor drafts that persist between reloads
+  "aiml-content-draft",
+  // Anything future we prefix with these — wildcard handling below.
+];
+
+function clearUserScopedStorage() {
+  if (typeof window === "undefined") return;
+  try {
+    // Pass 1 — exact keys we know about.
+    for (const k of USER_SCOPED_KEYS) localStorage.removeItem(k);
+
+    // Pass 2 — any aiml-* or rvivme-* prefixed keys we added since (e.g. per-
+    // strategy drafts). Belt and braces: we'd rather wipe a bit extra than
+    // leak one user's data into another session.
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k.startsWith("aiml-") || k.startsWith("rvivme-"))) keys.push(k);
+    }
+    for (const k of keys) localStorage.removeItem(k);
+
+    // sessionStorage uses the same scope rule, so scrub it too.
+    sessionStorage.clear();
+  } catch {
+    /* storage may be disabled in private mode — nothing to do */
+  }
+}
 
 export default function SignOutPage() {
   const router = useRouter();
 
   useEffect(() => {
-    supabase.auth.signOut().then(() => router.push("/auth/login"));
+    (async () => {
+      // Supabase clears its own auth cookies; we clear the *app* caches.
+      try { await supabase.auth.signOut(); } catch { /* already signed out */ }
+      clearUserScopedStorage();
+      router.push("/auth/login");
+    })();
   }, [router]);
 
   return (

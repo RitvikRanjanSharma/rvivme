@@ -1,12 +1,15 @@
 // app/api/ga4/route.ts
 // =============================================================================
-// AI Marketing Lab — GA4 Data API Route
-// Server-side only — service account credentials never reach the browser
-// Returns sessions, users, pageviews, and 30-day traffic trend
+// AI Marketing Lab — GA4 Data API Route (per-user)
+// Server-side only — service account credentials never reach the browser.
+// The *property ID* is now read from the caller's own row in public.users,
+// not from process.env, so each workspace only sees its own GA4 data.
+// Returns sessions, users, pageviews, and 30-day traffic trend.
 // =============================================================================
 
 import { NextResponse } from "next/server";
 import { getGoogleAccessToken } from "@/lib/google-auth";
+import { getCallerOrNull } from "@/lib/supabase-server";
 
 const GA4_API_BASE = "https://analyticsdata.googleapis.com/v1beta";
 const GA4_SCOPE    = "https://www.googleapis.com/auth/analytics.readonly";
@@ -42,18 +45,49 @@ async function runReport(propertyId: string, token: string, body: object) {
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/ga4
 // Returns: summary metrics + 30-day daily trend + top pages + traffic sources
+// for the *authenticated caller's* GA4 property, or a calm `not_configured`
+// signal if they haven't entered a property ID under Settings → Integrations.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function GET() {
   try {
-    const propertyId = process.env.GA4_PROPERTY_ID;
-    if (!propertyId) {
-      // Calm signal — dashboard already has a "Connect GA4" empty state that
-      // fires when the request fails or returns no data.
+    // 1. Require an authenticated session.
+    const caller = await getCallerOrNull();
+    if (!caller) {
+      return NextResponse.json(
+        { success: false, error: "unauthenticated" },
+        { status: 401 }
+      );
+    }
+
+    // 2. Read this caller's own GA4 property via the cookie-aware client,
+    //    so RLS guarantees one user can never read another user's config.
+    //    Manual cast for the same supabase-js reason explained in the GSC
+    //    route: select() string-literal inference collapses to `never`.
+    const { data, error: rowErr } = await caller.supabase
+      .from("users")
+      .select("ga4_property_id")
+      .eq("id", caller.user.id)
+      .single();
+    const row = data as { ga4_property_id: string | null } | null;
+
+    if (rowErr) {
       return NextResponse.json(
         {
           success: false,
           reason:  "not_configured",
-          message: "GA4 is not connected on this workspace yet.",
+          message: "GA4 is not connected for your workspace yet.",
+        },
+        { status: 200 }
+      );
+    }
+
+    const propertyId = row?.ga4_property_id?.trim();
+    if (!propertyId) {
+      return NextResponse.json(
+        {
+          success: false,
+          reason:  "not_configured",
+          message: "GA4 is not connected for your workspace yet.",
         },
         { status: 200 }
       );
@@ -152,10 +186,18 @@ export async function GET() {
     });
 
   } catch (err: any) {
+    // See the sibling comment in app/api/gsc/route.ts — we prefer a 200
+    // with a structured reason to a 500 with a generic error, so the
+    // dashboard banner can surface "here's why this failed" rather than
+    // just "not connected".
     console.error("[ga4/route]", err.message);
     return NextResponse.json(
-      { error: err.message },
-      { status: 500 }
+      {
+        success: false,
+        reason:  "api_error",
+        message: err.message ?? "GA4 API call failed.",
+      },
+      { status: 200 }
     );
   }
 }

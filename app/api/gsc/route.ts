@@ -1,12 +1,15 @@
 // app/api/gsc/route.ts
 // =============================================================================
-// AI Marketing Lab — Google Search Console API Route
-// Reuses the same service account as GA4 (GA4_SERVICE_ACCOUNT_KEY)
-// Returns: impressions, clicks, CTR, avg position, top queries, top pages
+// AI Marketing Lab — Google Search Console API Route (per-user)
+// Reuses the same service account as GA4 (GA4_SERVICE_ACCOUNT_KEY).
+// The *site URL* is now read from the caller's own row in public.users, not
+// from process.env, so each workspace only sees its own GSC data.
+// Returns: impressions, clicks, CTR, avg position, top queries, top pages.
 // =============================================================================
 
 import { NextResponse } from "next/server";
 import { getGoogleAccessToken } from "@/lib/google-auth";
+import { getCallerOrNull } from "@/lib/supabase-server";
 
 const GSC_API_BASE = "https://www.googleapis.com/webmasters/v3";
 const GSC_SCOPE    = "https://www.googleapis.com/auth/webmasters.readonly";
@@ -46,17 +49,55 @@ async function searchAnalytics(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/gsc
-// Returns: summary + top queries + top pages + 30-day daily trend
+// Returns: summary + top queries + top pages + 30-day daily trend for the
+// *authenticated caller's* GSC site, or a calm `not_configured` signal if
+// they haven't entered one under Settings → Integrations.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function GET() {
   try {
-    const siteUrl = process.env.GSC_SITE_URL;
+    // 1. Require an authenticated session. Prevents a logged-out browser (or
+    //    a different user on the same browser before cookies load) from
+    //    stumbling onto a shared dataset.
+    const caller = await getCallerOrNull();
+    if (!caller) {
+      return NextResponse.json(
+        { success: false, error: "unauthenticated" },
+        { status: 401 }
+      );
+    }
+
+    // 2. Read this caller's own GSC property. We go through the cookie-aware
+    //    client so RLS enforces "can only read your own row" server-side.
+    //    Manual cast mirrors the pattern used in lib/useDomain.ts — supabase-js
+    //    2.x narrows string-literal select() results to `never` when combined
+    //    with our generated Database type.
+    const { data, error: rowErr } = await caller.supabase
+      .from("users")
+      .select("gsc_site_url")
+      .eq("id", caller.user.id)
+      .single();
+    const row = data as { gsc_site_url: string | null } | null;
+
+    if (rowErr) {
+      // Treat "no row" as not_configured so brand new users see the empty
+      // state instead of a red error banner.
+      return NextResponse.json(
+        {
+          success: false,
+          reason:  "not_configured",
+          message: "Search Console is not connected for your workspace yet.",
+        },
+        { status: 200 }
+      );
+    }
+
+    const siteUrl = row?.gsc_site_url?.trim();
     if (!siteUrl) {
       return NextResponse.json(
         {
           success: false,
           reason:  "not_configured",
-          message: "Search Console is not connected on this workspace yet.",
+          message: "Search Console is not connected for your workspace yet.",
         },
         { status: 200 }
       );
@@ -155,7 +196,20 @@ export async function GET() {
     });
 
   } catch (err: any) {
+    // The user *has* stored a site URL, but the Google call failed. Most
+    // common reasons: the service account doesn't have Viewer access on the
+    // GSC property, or the URL is formatted wrong (e.g. "example.com"
+    // instead of "sc-domain:example.com"). Return 200 with a structured
+    // reason so the dashboard can show an actionable banner instead of a
+    // generic "not connected".
     console.error("[gsc/route]", err.message);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json(
+      {
+        success: false,
+        reason:  "api_error",
+        message: err.message ?? "Search Console API call failed.",
+      },
+      { status: 200 }
+    );
   }
 }

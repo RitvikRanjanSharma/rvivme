@@ -33,6 +33,11 @@ export type Database = {
           subscription_tier:   "free" | "starter" | "professional" | "enterprise";
           ga4_connected:       boolean;
           gsc_connected:       boolean;
+          // Per-user analytics config (migration 006). Each workspace stores its
+          // own GSC site URL and GA4 property ID so the /api/gsc and /api/ga4
+          // routes don't fall back to a single-tenant env var.
+          gsc_site_url:        string | null;
+          ga4_property_id:     string | null;
           logo_url:            string | null;
           avatar_url:          string | null;
           theme_mode:          "dark" | "light";
@@ -92,19 +97,86 @@ export type Database = {
       };
       ai_strategies: {
         Row: {
-          id:           string;
-          user_id:      string;
-          title:        string;
-          rationale:    string;
-          impact_score: number;
-          effort_score: number;
-          status:       "pending" | "active" | "completed" | "dismissed";
-          generated_at: string;
-          actioned_at:  string | null;
-          created_at:   string;
+          id:               string;
+          user_id:          string;
+          title:            string;
+          rationale:        string;
+          impact_score:     number;
+          effort_score:     number;
+          status:           "pending" | "active" | "completed" | "dismissed";
+          domain:           string | null;
+          category:         string | null;
+          timeframe:        string | null;
+          acronym:          string | null;
+          is_active:        boolean;
+          baseline_metrics: Record<string, unknown> | null;
+          generated_at:     string;
+          actioned_at:      string | null;
+          created_at:       string;
+          updated_at:       string;
         };
         Insert: Partial<Database["public"]["Tables"]["ai_strategies"]["Row"]>;
         Update: Partial<Database["public"]["Tables"]["ai_strategies"]["Row"]>;
+      };
+      strategy_checklist: {
+        Row: {
+          id:                string;
+          strategy_id:       string;
+          user_id:           string;
+          position:          number;
+          title:             string;
+          description:       string | null;
+          action_type:
+            | "blog" | "article" | "landing" | "social" | "email"
+            | "meta" | "internal_link" | "outreach" | "tech" | "custom"
+            | null;
+          action_payload:    Record<string, unknown> | null;
+          is_completed:      boolean;
+          completed_at:      string | null;
+          linked_content_id: string | null;
+          created_at:        string;
+          updated_at:        string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["strategy_checklist"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["strategy_checklist"]["Row"]>;
+      };
+      strategy_keywords: {
+        Row: {
+          id:           string;
+          strategy_id:  string;
+          user_id:      string;
+          keyword:      string;
+          volume:       number | null;
+          difficulty:   number | null;
+          intent:       string | null;
+          source:       "gap" | "opportunity" | "manual" | "ai" | "ranking" | null;
+          baseline_pos: number | null;
+          added_at:     string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["strategy_keywords"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["strategy_keywords"]["Row"]>;
+      };
+      ai_content: {
+        Row: {
+          id:                string;
+          user_id:           string;
+          strategy_id:       string | null;
+          content_type:      "blog" | "article" | "landing" | "social" | "email";
+          title:             string;
+          slug:              string | null;
+          excerpt:           string | null;
+          body_markdown:     string;
+          meta_description:  string | null;
+          target_keywords:   string[];
+          word_count:        number;
+          read_time_minutes: number;
+          status:            "draft" | "published" | "archived";
+          published_to:      string | null;
+          created_at:        string;
+          updated_at:        string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["ai_content"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["ai_content"]["Row"]>;
       };
       blog_posts: {
         Row: {

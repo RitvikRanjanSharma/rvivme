@@ -91,6 +91,10 @@ function Divider() {
 // ─────────────────────────────────────────────────────────────────────────────
 export function RichTextEditor({ content, onChange, brandColor, placeholder = "Start writing your post..." }: EditorProps) {
   const editor = useEditor({
+    // TipTap v2+ in Next.js app-router needs this OFF to avoid SSR/hydration
+    // mismatches. With immediatelyRender=false the editor spins up on the
+    // client after mount, so server HTML and first client render match.
+    immediatelyRender: false,
     extensions: [
       StarterKit.configure({
         codeBlock: false,
