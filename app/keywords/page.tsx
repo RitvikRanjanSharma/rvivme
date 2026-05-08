@@ -700,7 +700,15 @@ export default function KeywordsPage() {
                   </div>
                 : <KwTable
                     keywords={filtered}
-                    cols={["Keyword","Volume","Position","Difficulty","CPC","Intent"]}
+                    columns={[
+                      { header: "Volume",     render: (kw) => numOrDash(kw.volume) },
+                      { header: "Position",   render: (kw) => kw.position },
+                      { header: "Difficulty", render: (kw) => kw.difficulty != null ? <DiffBar d={kw.difficulty} /> : numOrDash(null) },
+                      { header: "CPC",        render: (kw) => numOrDash(kw.cpc, (n) => `£${n.toFixed(2)}`) },
+                      { header: "Intent",     render: (kw) => kw.intent
+                          ? <span style={{ color: intentColor(kw.intent), fontFamily:"var(--font-mono)", fontSize:"11px", letterSpacing:"0.06em", textTransform:"uppercase" }}>{kw.intent}</span>
+                          : numOrDash(null) },
+                    ]}
                     emptyMsg={
                       `No ranked keywords found for ${domain} in the UK SERP. ` +
                       "This usually means the site is too new to have been indexed by Google " +
@@ -773,7 +781,20 @@ export default function KeywordsPage() {
                   </div>
                 : <KwTable
                     keywords={ideas}
-                    cols={["Keyword","Volume","Difficulty","CPC","Competition","Intent","Trend"]}
+                    columns={[
+                      { header: "Volume",      render: (kw) => numOrDash(kw.volume) },
+                      { header: "Difficulty",  render: (kw) => kw.difficulty != null ? <DiffBar d={kw.difficulty} /> : numOrDash(null) },
+                      { header: "CPC",         render: (kw) => numOrDash(kw.cpc, (n) => `£${n.toFixed(2)}`) },
+                      { header: "Competition", render: (kw) => <span style={{ fontSize:"12px", color:"var(--text-secondary)" }}>{kw.competitionLevel || "—"}</span> },
+                      { header: "Intent",      render: (kw) => kw.intent
+                          ? <span style={{ color: intentColor(kw.intent), fontFamily:"var(--font-mono)", fontSize:"11px", letterSpacing:"0.06em", textTransform:"uppercase" }}>{kw.intent}</span>
+                          : numOrDash(null) },
+                      { header: "Trend",       render: (kw) =>
+                          <span style={{ display:"inline-flex", alignItems:"center", gap:"6px" }}>
+                            <TrendIcon d={kw.trending} />
+                            <span style={{ fontSize:"12px", color:"var(--text-secondary)" }}>{kw.trendScore}</span>
+                          </span> },
+                    ]}
                     emptyMsg='Click "Get keyword ideas" to discover opportunities.'
                     brandColor={brandColor}
                     selectable={strategies.length > 0}
@@ -928,7 +949,14 @@ export default function KeywordsPage() {
                 <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:"12px", overflow:"hidden" }}>
                   <KwTable
                     keywords={compSection === "gap" ? gapKws : oppKws}
-                    cols={["Keyword","Volume","Their Pos","Difficulty","CPC","Intent"]}
+                    columns={[
+                      { header: "Volume",     render: (kw) => kw.volume.toLocaleString() },
+                      { header: "Their Pos",  render: (kw) => kw.competitorPos },
+                      { header: "Difficulty", render: (kw) => <DiffBar d={kw.difficulty} /> },
+                      { header: "CPC",        render: (kw) => `£${kw.cpc.toFixed(2)}` },
+                      { header: "Intent",     render: (kw) =>
+                          <span style={{ color: intentColor(kw.intent), fontFamily:"var(--font-mono)", fontSize:"11px", letterSpacing:"0.06em", textTransform:"uppercase" }}>{kw.intent}</span> },
+                    ]}
                     emptyMsg="No keywords found for this section."
                     brandColor={brandColor}
                     compDomain={compDomain}
