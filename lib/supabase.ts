@@ -216,6 +216,128 @@ export type Database = {
         Insert: Partial<Database["public"]["Tables"]["blog_posts"]["Row"]>;
         Update: Partial<Database["public"]["Tables"]["blog_posts"]["Row"]>;
       };
+      keyword_rankings_history: {
+        Row: {
+          id:            string;
+          user_id:       string;
+          keyword:       string;
+          domain:        string;
+          position:      number;
+          search_volume: number | null;
+          url:           string | null;
+          source:        "gsc" | "dataforseo" | "manual";
+          captured_on:   string;
+          created_at:    string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["keyword_rankings_history"]["Row"]>;
+        Update: never;
+      };
+      site_audits: {
+        Row: {
+          id:                   string;
+          user_id:              string;
+          domain:               string;
+          status:               "running" | "completed" | "failed";
+          overall_score:        number | null;
+          pages_crawled:        number;
+          errors_count:         number;
+          warnings_count:       number;
+          notices_count:        number;
+          performance_score:    number | null;
+          accessibility_score:  number | null;
+          best_practices_score: number | null;
+          seo_score:            number | null;
+          lcp_ms:               number | null;
+          cls:                  number | null;
+          inp_ms:               number | null;
+          meta:                 Record<string, unknown> | null;
+          error_message:        string | null;
+          started_at:           string;
+          completed_at:         string | null;
+          created_at:           string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["site_audits"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["site_audits"]["Row"]>;
+      };
+      audit_findings: {
+        Row: {
+          id:         string;
+          audit_id:   string;
+          user_id:    string;
+          rule:       string;
+          severity:   "error" | "warning" | "notice";
+          category:   "on_page" | "technical" | "performance" | "accessibility" | "best_practice" | "content" | "schema";
+          page_url:   string | null;
+          message:    string;
+          detail:     Record<string, unknown> | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["audit_findings"]["Row"]>;
+        Update: never;
+      };
+      alerts: {
+        Row: {
+          id:                string;
+          user_id:           string;
+          rule_type:
+            | "rank_drop" | "rank_gain" | "traffic_drop" | "traffic_spike"
+            | "new_keyword" | "lost_keyword" | "audit_critical"
+            | "broken_page" | "manual";
+          threshold:         number | null;
+          enabled:           boolean;
+          email_enabled:     boolean;
+          last_evaluated_at: string | null;
+          meta:              Record<string, unknown> | null;
+          created_at:        string;
+          updated_at:        string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["alerts"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["alerts"]["Row"]>;
+      };
+      notifications: {
+        Row: {
+          id:         string;
+          user_id:    string;
+          alert_id:   string | null;
+          severity:   "info" | "success" | "warning" | "error";
+          title:      string;
+          body:       string | null;
+          link_href:  string | null;
+          read_at:    string | null;
+          emailed_at: string | null;
+          meta:       Record<string, unknown> | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["notifications"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["notifications"]["Row"]>;
+      };
+      api_usage_quotas: {
+        Row: {
+          id:         string;
+          user_id:    string;
+          provider:   "dataforseo" | "anthropic" | "psi" | "ga4" | "gsc" | "trends";
+          endpoint:   string | null;
+          day:        string;
+          count:      number;
+          cost_units: number;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["api_usage_quotas"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["api_usage_quotas"]["Row"]>;
+      };
+      cache_entries: {
+        Row: {
+          id:         string;
+          user_id:    string | null;
+          namespace:  string;
+          cache_key:  string;
+          value:      Record<string, unknown>;
+          expires_at: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["cache_entries"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["cache_entries"]["Row"]>;
+      };
       newsletter_subscribers: {
         Row: {
           id: string;

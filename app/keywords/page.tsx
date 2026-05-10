@@ -630,7 +630,7 @@ export default function KeywordsPage() {
   const snippets = rankings.filter(k => k.featured).length;
 
   return (
-    <div style={{ background:"var(--bg)", minHeight:"100vh", padding:"32px 24px 80px", maxWidth:"1280px", margin:"0 auto" }}>
+    <div className="aiml-page-pad" style={{ background:"var(--bg)", minHeight:"100vh", padding:"32px 24px 80px", maxWidth:"1280px", margin:"0 auto" }}>
 
       {/* Header */}
       <motion.div initial={{ opacity:0, y:16 }} animate={{ opacity:1, y:0 }} transition={{ duration:0.7, ease:EASE }}

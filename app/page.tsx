@@ -18,89 +18,103 @@ const CAPABILITIES = [
   "Search Console","Traffic Forecasting","Content Strategy","Keyword Research",
   "Backlink Intelligence","Rank Monitoring","GA4 Integration","6-Month Forecasting",
 ];
+// STATS: kept honest. "Forecast horizon" is real (6 months). "Free beta" is
+// the truth right now — closed beta, no payment, capacity for ~50 testers.
+// Anything that sounds like a hard performance number ("85% accuracy", "1000
+// users") would be made up given we haven't launched, so we don't put any.
 const STATS = [
-  { value: "10+", label: "Data sources" },
-  { value: "6mo", label: "Forecast horizon" },
-  { value: "85%", label: "Projection confidence" },
-  { value: "Live", label: "GA4 traffic data" },
+  { value: "6mo",  label: "Forecast horizon"     },
+  { value: "Live", label: "GA4 + Search Console" },
+  { value: "Free", label: "Closed beta"          },
+  { value: "UK",   label: "Built for UK SMBs"    },
 ];
 const FEATURES = [
-  { index: "01", title: "Search intelligence that actually moves.", body: "Connect Google Analytics, Search Console, and DataForSEO in one workspace. Stop context-switching between twelve tabs. See what matters, when it matters.", href: "/dashboard", cta: "Open dashboard" },
-  { index: "02", title: "AI forecasting built on your real traffic.", body: "Not benchmarks. Not estimates. Your actual GA4 sessions projected six months forward with confidence intervals that widen honestly over time.", href: "/dashboard", cta: "See the model" },
-  { index: "03", title: "GEO — the search layer everyone is ignoring.", body: "We track AI Overview citations, structured data gaps, and citation probability before your competitors notice.", href: "/blog", cta: "Read the intelligence" },
+  { index: "01", title: "Search intelligence in one workspace.", body: "Connect Google Analytics 4, Search Console, and DataForSEO once. See your rankings, traffic, audit findings, and competitor gaps in one place — without bouncing between twelve tabs.", href: "/dashboard", cta: "Open dashboard" },
+  { index: "02", title: "Forecasts built on your real traffic.", body: "Not industry benchmarks. Not made-up averages. Your actual GA4 sessions projected six months forward with confidence intervals that widen honestly the further out you look.", href: "/dashboard", cta: "See the model" },
+  { index: "03", title: "GEO — the AI-search layer most tools miss.", body: "Track whether your domain shows up in Google's AI Overview for the keywords you care about, and see who's winning citation share you aren't.", href: "/blog", cta: "Read the intelligence" },
 ];
 
-// Long-form marketing surface — lives below the platform feature rows.
-// These are the product narrative, testimonials, capability grid, and FAQ.
+// Long-form feature narratives below the platform rows. Rewritten to match
+// what the product actually does today (May 2026): keyword tracking, site
+// audit, competitor gap analysis, AI strategy generation, GEO probes. The
+// previous copy talked about Amazon affiliate, Google Ads, and AI rewriters
+// that don't exist — that's been removed. Update this when new features ship.
 const COMMAND_CENTRE_FEATURES = [
   {
     index: "04",
-    title: "Intelligent content creation that converts.",
-    body: "Our advanced AI text generators don't just create content — they craft marketing messages that resonate with your audience and drive action. From product descriptions for affiliate marketing campaigns to compelling ad copy for Google Ads, our AI rewriter understands context, tone, and conversion psychology.",
-    body2: "Stop spending hours wrestling with writer's block. Our AI text generators analyse millions of high-performing marketing campaigns to suggest copy that actually converts — whether you're promoting Amazon affiliate products or launching your next big campaign.",
+    title: "An AI strategy you can actually act on this week.",
+    body: "We don't dump a 40-page audit on you and call it a strategy. The AI looks at your real Search Console data, the audit findings on your site, and the keyword gaps against your top three competitors — then proposes three to five concrete moves with the impact and effort scored honestly.",
+    body2: "Each strategy comes with a checklist you tick off as you go. Pick one, work it for a fortnight, see it move the numbers. No agency retainer, no jargon, no SEO degree required.",
   },
   {
     index: "05",
-    title: "Data-driven marketing intelligence.",
-    body: "Knowledge is power in digital marketing, and our AI marketing lab puts professional-grade analytics at your fingertips. Connect seamlessly with Google Search Console to uncover hidden opportunities in your organic traffic, or leverage our Google Trend analysis tools to spot emerging market opportunities before your competitors do.",
-    body2: "Our intelligent dashboard transforms complex data from Google searches and user behaviour into actionable insights you can implement immediately. No more guessing — make decisions backed by real market intelligence.",
+    title: "Honest data from sources that already know your site.",
+    body: "We connect to your own Google Analytics 4 and Search Console accounts to see your real traffic and ranking positions, not industry benchmarks or estimates. Where you've earned a position, we show it. Where you haven't, we say so plainly.",
+    body2: "On top of that we run a technical site audit using PageSpeed Insights and our own crawler — performance, accessibility, on-page, schema. Everything is backed by a source you can click through to verify.",
   },
   {
     index: "06",
-    title: "Campaign optimisation that actually works.",
-    body: "Running ads with Google becomes infinitely more effective when you have AI working alongside your strategy. Our platform helps you identify winning keywords, optimise bid strategies, and create variations of your best-performing content automatically.",
-    body2: "For affiliate marketers, especially those focused on affiliate marketing of Amazon products, our tools analyse product trends, seasonal patterns, and consumer sentiment to help you choose winners and avoid duds.",
+    title: "Watch yourself appear (or not) in AI search.",
+    body: "AI Overviews and ChatGPT-style answer engines are quietly rerouting search traffic. Most SMB tools haven't caught up. We track whether your domain is being cited in Google's AI Overview for the keywords you care about, and surface where you're losing citation share to competitors.",
+    body2: "Live AI Overview tracking is available when DataForSEO SERP is enabled on your workspace. Without it we run a clearly-labelled simulation so you can still see directional signal — we never pass simulated data off as real measurement.",
   },
 ];
 
-const TESTIMONIALS = [
-  {
-    quote: "The AI rewriter alone has saved our team 15+ hours per week whilst improving our conversion rates.",
-    source: "Marketing Director, UK SaaS",
-  },
-  {
-    quote: "Finally, an AI marketing lab that actually understands British markets and consumer behaviour.",
-    source: "Head of Growth, London",
-  },
-];
+// TESTIMONIALS — empty until real ones come back from the closed beta.
+// UK CMA + ASA rules make fabricated or "representative" testimonials a
+// banned practice (Schedule 1 §11 of the Consumer Protection from Unfair
+// Trading Regs). The home-page render is gated on this array being non-empty
+// so the section disappears entirely while we have nothing real to show.
+const TESTIMONIALS: { quote: string; source: string }[] = [];
 
+// CAPABILITY_GRID — what the product actually does today. If a feature is in
+// development or partially shipped we say so explicitly rather than implying
+// it's done. This grid is what a UK SMB owner sees on the home page; every
+// item here must be verifiable by anyone signing up for the beta.
 const CAPABILITY_GRID = [
-  { title: "Professional AI Text Generator", body: "Create compelling marketing copy in seconds." },
-  { title: "Advanced AI Rewriter",           body: "Transform existing content into fresh, optimised variations." },
-  { title: "AI Detector & Checker Tools",    body: "Ensure your content maintains authenticity and quality." },
-  { title: "Google Ads Integration",         body: "Streamline your PPC campaigns with intelligent automation." },
-  { title: "Affiliate Marketing Toolkit",    body: "Specialised tools for Amazon and other affiliate programmes." },
-  { title: "Google Search Console Analytics", body: "Deep insights into your organic performance." },
-  { title: "Trend Analysis Dashboard",       body: "Spot opportunities using Google Trend data." },
-  { title: "Conversion Tracking",            body: "Monitor what's working and scale your successes." },
-  { title: "Content Calendar Planning",      body: "Strategic content scheduling based on search patterns." },
-  { title: "Competitor Intelligence",        body: "See what's driving your competitors' success." },
+  { title: "Daily rank tracking",         body: "Snapshots your Search Console positions every night so you can see the trend, not just today's number." },
+  { title: "Technical site audit",        body: "Performance, accessibility, on-page, and Core Web Vitals via PageSpeed Insights and our own crawler." },
+  { title: "Keyword research",            body: "Google Trends related-queries plus your own GSC top queries. Volume estimates where we have them." },
+  { title: "Competitor gap analysis",     body: "See keywords competitors rank for that you don't, sorted by likely-winnable opportunity." },
+  { title: "AI strategy generator",       body: "Three to five concrete moves a week, scored on impact and effort, with a checklist to work through." },
+  { title: "Content drafting",            body: "Generate blog and landing-page drafts that target the keywords your strategy says matter most." },
+  { title: "AI Overview tracking",        body: "Watch whether Google's AI Overview cites your domain for keywords you care about. Live mode requires DataForSEO." },
+  { title: "Traffic forecasting",         body: "Six months projected forward from your real GA4 sessions, with confidence intervals that widen honestly." },
+  { title: "Daily alerts",                body: "Email notifications when rankings drop, audit issues appear, or new keywords break into the top 100." },
+  { title: "UK-first",                    body: "Built around UK SERPs, GBP, and Search Console domain properties. No US-centric assumptions baked in." },
 ];
 
+// FAQ_ITEMS — answers reflect the actual product state in May 2026 (closed
+// beta, free, UK SMB focus). If you change pricing or scope, update these.
+// Avoid evergreen-sounding claims that won't age well.
 const FAQ_ITEMS = [
   {
-    q: "How accurate is your AI text generator compared to human writers?",
-    a: "Our AI text generators are trained on millions of high-converting marketing campaigns. Whilst they excel at creating initial drafts and variations, we recommend human oversight for final approval. Many users find our AI produces better first drafts than they could create manually.",
+    q: "Is this free?",
+    a: "Yes — during the closed beta. We're testing with a small group of UK small business owners through summer 2026 to make sure the tool actually moves their numbers before charging anyone. No credit card, no trial expiry, no surprise bills.",
   },
   {
-    q: "Can I use this for affiliate marketing campaigns?",
-    a: "Absolutely. Our tools are particularly effective for affiliate marketing, including Amazon affiliate programmes. We provide product research, trend analysis, and content creation specifically designed for affiliate marketers.",
+    q: "What do I need to connect for it to work?",
+    a: "Your Google Search Console property (so we can see your real rankings) and your Google Analytics 4 property (so we can show your real traffic). Both are free Google products. Connection is one-click via Google sign-in once OAuth is approved — until then you'll add a service-account email as a viewer to each property.",
   },
   {
-    q: "Does the AI checker detect AI-generated content?",
-    a: "Yes, our AI detector helps you understand when content appears AI-generated, allowing you to refine it for a more natural feel. This ensures your marketing materials maintain authenticity.",
+    q: "Will the AI write content for me?",
+    a: "Yes — we generate blog and landing-page drafts targeted at keywords your strategy identifies as worth pursuing. Treat them as a starting point, not finished copy. You'll always want to add your own voice, examples, and judgement before publishing. The AI's job is to remove the blank page, not replace you.",
   },
   {
-    q: "How does the Google Ads integration work?",
-    a: "Our platform connects with your Google Ads account to analyse performance data, suggest optimisations, and help create ad variations. You maintain full control whilst benefiting from AI-powered insights.",
+    q: "How does AI Overview citation tracking work?",
+    a: "When DataForSEO SERP is enabled on your workspace, we query Google's Live SERP for each tracked keyword and check whether your domain appears in the AI Overview's cited references. When it isn't enabled we run a Claude-powered simulation that's clearly labelled as such — you'll always know which mode produced a result.",
   },
   {
-    q: "Is there a free trial available?",
-    a: "We offer a comprehensive 14-day trial so you can experience the full power of our AI marketing lab before committing. No credit card required to start.",
+    q: "Is my data safe? Where is it stored?",
+    a: "Your data lives in a UK-region Supabase project (Postgres) with row-level security so users can only ever read their own rows. We don't sell, share, or train on it. The privacy notice explains exactly what we collect, why, how long we keep it, and how to delete it.",
   },
   {
-    q: "Can I cancel anytime?",
-    a: "Yes, you can cancel your subscription at any time. We believe in earning your business through results, not binding contracts.",
+    q: "How is this different from Ahrefs or SEMrush?",
+    a: "Those are excellent tools built for SEO professionals at agencies. They cost £100+/month and assume you already know what a backlink profile is. We're built for the small business owner who wants 'what should I do this week to get more customers' — fewer levers, more action lists, tuned for the UK SMB context.",
+  },
+  {
+    q: "When will it be available to everyone?",
+    a: "We're aiming to open it up more widely in autumn 2026, after the beta period. If you'd like to be on the list when that happens, sign up now — beta users automatically get continued access on whatever plan we land on.",
   },
 ];
 
@@ -803,17 +817,23 @@ export default function HomePage() {
               </section>
 
               {/* ── Testimonials ─────────────────────────────────────────── */}
-              <section style={{ borderTop: "1px solid var(--border)", maxWidth: "1400px", margin: "0 auto" }}>
-                <FadeUp style={{ padding: "64px 32px 0" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--text-tertiary)" }}>Trusted by marketing professionals across the UK</span>
-                    <div style={{ flex: 1, height: "1px", background: "var(--border)" }} />
+              {/* Section is rendered only when we have real, attributed
+                  testimonials. UK CMA + ASA rules prohibit fabricated or
+                  representative ones, so we'd rather show nothing than fake
+                  social proof while we're still in closed beta. */}
+              {TESTIMONIALS.length > 0 && (
+                <section style={{ borderTop: "1px solid var(--border)", maxWidth: "1400px", margin: "0 auto" }}>
+                  <FadeUp style={{ padding: "64px 32px 0" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--text-tertiary)" }}>What beta users are saying</span>
+                      <div style={{ flex: 1, height: "1px", background: "var(--border)" }} />
+                    </div>
+                  </FadeUp>
+                  <div className="grid-1-mobile" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderTop: "1px solid var(--border)", marginTop: "52px" }}>
+                    {TESTIMONIALS.map((t, i) => <TestimonialCard key={i} t={t} i={i} />)}
                   </div>
-                </FadeUp>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderTop: "1px solid var(--border)", marginTop: "52px" }}>
-                  {TESTIMONIALS.map((t, i) => <TestimonialCard key={i} t={t} i={i} />)}
-                </div>
-              </section>
+                </section>
+              )}
 
               {/* ── Capability grid — "Everything You Need" ──────────────── */}
               <section style={{ borderTop: "1px solid var(--border)", maxWidth: "1400px", margin: "0 auto", padding: "96px 32px 0" }}>
@@ -828,7 +848,7 @@ export default function HomePage() {
                     Everything you need to dominate your market.
                   </h2>
                 </FadeUp>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderBottom: "1px solid var(--border)" }}>
+                <div className="grid-1-mobile" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderBottom: "1px solid var(--border)" }}>
                   {CAPABILITY_GRID.map((item, i) => <CapabilityCell key={i} item={item} i={i} />)}
                 </div>
               </section>

@@ -548,7 +548,7 @@ function SettingsContent() {
   }
 
   return (
-    <div style={{ background: "var(--bg)", minHeight: "100vh", padding: "32px 24px 80px", maxWidth: "1100px", margin: "0 auto" }}>
+    <div className="aiml-page-pad" style={{ background: "var(--bg)", minHeight: "100vh", padding: "32px 24px 80px", maxWidth: "1100px", margin: "0 auto" }}>
       <motion.div variants={pv(0)} initial="hidden" animate="visible" style={{ marginBottom: "32px" }}>
         <h1 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(1.8rem,3vw,2.6rem)", letterSpacing: "-0.04em", lineHeight: 1, fontWeight: 400, color: "var(--text-primary)", marginBottom: "6px" }}>Settings</h1>
         <p style={{ fontFamily: "var(--font-body)", fontSize: "14px", color: "var(--text-secondary)" }}>Manage your account, integrations, and preferences.</p>

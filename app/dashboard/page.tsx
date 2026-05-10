@@ -389,7 +389,7 @@ function ProjectionChart({ brandColor, ga4Trend, ga4Loading }: { brandColor:stri
           </AreaChart>
         </ResponsiveContainer>
 
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"1px", background:"var(--border)", borderTop:"1px solid var(--border)", marginTop:"20px", borderRadius:"0 0 10px 10px", overflow:"hidden" }}>
+        <div className="grid-2-mobile" style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"1px", background:"var(--border)", borderTop:"1px solid var(--border)", marginTop:"20px", borderRadius:"0 0 10px 10px", overflow:"hidden" }}>
           {[{label:"Current MTD",value:currentMTD,suffix:""},{label:"Forecast +6M",value:forecast6M,suffix:""},{label:"Growth",value:growthPct,suffix:"%"},{label:"Confidence",value:confidence,suffix:"%"}].map((s,i)=>(
             <div key={s.label} style={{ background:"var(--surface)", padding:"14px 16px", textAlign:"center" }}>
               <div style={{ fontFamily:"var(--font-mono)", fontSize:"18px", fontWeight:500, color:"var(--text-primary)", letterSpacing:"-0.02em", marginBottom:"3px" }}>
@@ -464,7 +464,7 @@ function BacklinksPanel({ brandColor, domain }: { brandColor:string; domain:stri
           {error} — backlink data unavailable
         </div>
       ) : data ? (
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"12px" }}>
+        <div className="grid-2-mobile" style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"12px" }}>
           {kpis.map(kpi => (
             <Panel key={kpi.label} style={{ padding:"18px 20px" }}>
               <div style={{ fontFamily:"var(--font-display)", fontSize:"clamp(1.4rem,2.5vw,2rem)", letterSpacing:"-0.04em", lineHeight:1, color:"var(--text-primary)", marginBottom:"6px" }}>{kpi.value}</div>
@@ -948,7 +948,7 @@ export default function DashboardPage() {
   const dateStr = new Intl.DateTimeFormat("en-GB",{timeZone:"UTC",weekday:"long",day:"numeric",month:"long",year:"numeric"}).format(new Date());
 
   return (
-    <div style={{ background:"var(--bg)", minHeight:"100vh", padding:"32px 24px 80px", maxWidth:"1280px", margin:"0 auto" }}>
+    <div className="aiml-page-pad" style={{ background:"var(--bg)", minHeight:"100vh", padding:"32px 24px 80px", maxWidth:"1280px", margin:"0 auto" }}>
       <ConnectionBanner
         ga4Connected={ga4Connected} gscConnected={gscConnected}
         ga4Reason={ga4Reason}       gscReason={gscReason}

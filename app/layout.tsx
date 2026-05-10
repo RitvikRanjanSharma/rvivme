@@ -8,6 +8,7 @@
 
 import { Inter, DM_Mono } from "next/font/google";
 import { AppShell } from "./ui/app-shell";
+import { CookieBanner } from "./ui/cookie-banner";
 import "./globals.css";
 
 const inter = Inter({
@@ -36,6 +37,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body style={{ margin:0, padding:0 }}>
         <AppShell>{children}</AppShell>
+        <CookieBanner />
       </body>
     </html>
   );

@@ -8,7 +8,15 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PROTECTED_PREFIXES = ["/dashboard", "/keywords", "/competitors", "/settings"];
+const PROTECTED_PREFIXES = [
+  "/dashboard", "/keywords", "/competitors", "/settings",
+  // Strategy authoring + content generation are dashboard-tier features.
+  "/strategies", "/content",
+  // Onboarding — anonymous visitors should be sent to /auth/login first.
+  "/onboarding",
+  // Alerts inbox + audit detail
+  "/alerts", "/audit",
+];
 const AUTH_ROUTES        = ["/auth/login", "/auth/signup"];
 
 export async function proxy(request: NextRequest) {

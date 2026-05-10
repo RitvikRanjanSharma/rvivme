@@ -24,8 +24,8 @@ import {
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Bell, Brain, ChevronDown, FileText, LayoutDashboard, LogOut, Moon,
-  Newspaper, PenLine, Search, Settings, Sun, Target, User, Users,
+  Bell, Brain, ChevronDown, FileText, LayoutDashboard, LogOut, Menu, Moon,
+  Newspaper, PenLine, Search, Settings, Sun, Target, User, Users, X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -256,6 +256,49 @@ function IconButton({
   );
 }
 
+// ─── Notification bell with unread badge ─────────────────────────────────────
+// Polls /api/notifications every 60s for an unread count. Clicking navigates
+// to /alerts where the user can mark items read. Cheap; we don't need a
+// websocket for sub-minute resolution on a beta tool.
+function NotificationBell() {
+  const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    async function tick() {
+      try {
+        const res = await fetch("/api/notifications");
+        const j   = await res.json();
+        if (alive) setUnread(j?.unread ?? 0);
+      } catch { /* ignore — keep last value */ }
+    }
+    tick();
+    const t = setInterval(tick, 60_000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+
+  return (
+    <Link href="/alerts" style={{ position: "relative", textDecoration: "none" }} title="Notifications">
+      <IconButton title="Notifications">
+        <Bell size={13} />
+      </IconButton>
+      {unread > 0 && (
+        <span aria-label={`${unread} unread notifications`} style={{
+          position: "absolute", top: -2, right: -2,
+          minWidth: 16, height: 16, padding: "0 4px",
+          borderRadius: 999, background: "var(--signal-red, #ef6b6b)",
+          color: "#fff", fontSize: 9, fontWeight: 700,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          border: "2px solid var(--nav-bg, #0b0b0c)",
+          fontFamily: "var(--font-mono)",
+        }}>
+          {unread > 9 ? "9+" : unread}
+        </span>
+      )}
+    </Link>
+  );
+}
+
 // ─── Profile menu ─────────────────────────────────────────────────────────────
 function ProfileMenu({ brandColor, compact = false }: { brandColor: string; compact?: boolean }) {
   const [open, setOpen] = useState(false);
@@ -364,25 +407,32 @@ function MarketingHeader() {
   }, []);
 
   return (
-    <header style={{
-      position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
-      height: "60px", display: "flex", alignItems: "center",
-      justifyContent: "space-between", padding: "0 32px",
-      background:      scrolled ? "var(--nav-bg)"                    : "transparent",
-      backdropFilter:  scrolled ? "blur(20px) saturate(180%)"        : "none",
-      WebkitBackdropFilter: scrolled ? "blur(20px) saturate(180%)"   : "none",
-      borderBottom:    scrolled ? "1px solid var(--border)"          : "1px solid transparent",
-      transition: "background var(--dur-base), border-color var(--dur-base), backdrop-filter var(--dur-base)",
-    }}>
+    <header
+      className="aiml-marketing-header"
+      style={{
+        position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
+        height: "60px", display: "flex", alignItems: "center",
+        justifyContent: "space-between", padding: "0 32px",
+        background:      scrolled ? "var(--nav-bg)"                    : "transparent",
+        backdropFilter:  scrolled ? "blur(20px) saturate(180%)"        : "none",
+        WebkitBackdropFilter: scrolled ? "blur(20px) saturate(180%)"   : "none",
+        borderBottom:    scrolled ? "1px solid var(--border)"          : "1px solid transparent",
+        transition: "background var(--dur-base), border-color var(--dur-base), backdrop-filter var(--dur-base)",
+      }}
+    >
       <Link href="/" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: "10px" }}>
         <LogoMark size={32} brand={brandColor} />
-        <span style={{
-          fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: 600,
-          color: "var(--text-primary)", letterSpacing: "-0.01em",
-        }}>AI Marketing Lab</span>
+        <span
+          className="aiml-marketing-brand-text"
+          style={{
+            fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: 600,
+            color: "var(--text-primary)", letterSpacing: "-0.01em",
+            whiteSpace: "nowrap",
+          }}
+        >AI Marketing Lab</span>
       </Link>
 
-      <nav style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+      <nav className="aiml-marketing-nav" style={{ display: "flex", alignItems: "center", gap: "4px" }}>
         {PUBLIC_NAV.map(({ href, label }) => {
           const active = pathname === href || (href !== "/" && pathname.startsWith(href));
           return (
@@ -423,13 +473,16 @@ function MarketingHeader() {
             </motion.div>
           </AnimatePresence>
         </IconButton>
-        <Link href="/auth/login" style={{
-          fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 500,
-          color: "var(--text-secondary)", textDecoration: "none",
-          padding: "11px 22px", borderRadius: "100px",
-          border: "1px solid var(--border)",
-          transition: "color var(--dur-fast), border-color var(--dur-fast)",
-        }}
+        <Link
+          href="/auth/login"
+          className="aiml-marketing-signin"
+          style={{
+            fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 500,
+            color: "var(--text-secondary)", textDecoration: "none",
+            padding: "11px 22px", borderRadius: "100px",
+            border: "1px solid var(--border)",
+            transition: "color var(--dur-fast), border-color var(--dur-fast)",
+          }}
           onMouseEnter={e => {
             (e.currentTarget as HTMLElement).style.color = "var(--text-primary)";
             (e.currentTarget as HTMLElement).style.borderColor = "var(--border-strong)";
@@ -455,45 +508,74 @@ function MarketingHeader() {
 }
 
 // ─── App header ───────────────────────────────────────────────────────────────
-function AppHeader({ workspaceDomain }: { workspaceDomain: string }) {
+function AppHeader({
+  workspaceDomain, onToggleNav, navOpen,
+}: { workspaceDomain: string; onToggleNav?: () => void; navOpen?: boolean }) {
   const { brandColor, mode, toggleMode } = useTheme();
 
   return (
-    <header style={{
-      position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
-      height: "56px", display: "flex", alignItems: "center",
-      justifyContent: "space-between", padding: "0 20px",
-      background: "var(--nav-bg)",
-      backdropFilter: "blur(16px) saturate(160%)",
-      WebkitBackdropFilter: "blur(16px) saturate(160%)",
-      borderBottom: "1px solid var(--border)",
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0 }}>
+    <header
+      className="aiml-header"
+      style={{
+        position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
+        height: "56px", display: "flex", alignItems: "center",
+        justifyContent: "space-between", padding: "0 20px",
+        background: "var(--nav-bg)",
+        backdropFilter: "blur(16px) saturate(160%)",
+        WebkitBackdropFilter: "blur(16px) saturate(160%)",
+        borderBottom: "1px solid var(--border)",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
+        {/* Hamburger — only visible ≤1024px (sidebar drawer toggle) */}
+        <button
+          className="aiml-mobile-burger"
+          onClick={onToggleNav}
+          aria-label={navOpen ? "Close navigation" : "Open navigation"}
+          aria-expanded={!!navOpen}
+          style={{
+            width: 32, height: 32, alignItems: "center", justifyContent: "center",
+            background: "transparent", border: "1px solid var(--border)",
+            borderRadius: 8, cursor: "pointer", color: "var(--text-secondary)",
+            flexShrink: 0,
+          }}
+        >
+          {navOpen ? <X size={15} /> : <Menu size={15} />}
+        </button>
+
         <Link href="/dashboard" style={{
           textDecoration: "none", display: "flex", alignItems: "center", gap: "10px",
+          minWidth: 0,
         }}>
           <LogoMark size={26} brand={brandColor} />
-          <span style={{
-            fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 600,
-            color: "var(--text-primary)", letterSpacing: "-0.01em",
-          }}>AI Marketing Lab</span>
+          <span
+            className="aiml-header-brand-text"
+            style={{
+              fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 600,
+              color: "var(--text-primary)", letterSpacing: "-0.01em",
+              whiteSpace: "nowrap",
+            }}
+          >AI Marketing Lab</span>
         </Link>
-        <span aria-hidden="true" style={{
+        <span aria-hidden="true" className="aiml-header-divider" style={{
           width: "1px", height: "18px",
           background: "var(--border-strong)", margin: "0 4px",
         }} />
-        <span style={{
-          fontFamily: "var(--font-mono)", fontSize: "10px",
-          letterSpacing: "0.12em", textTransform: "uppercase",
-          color: "var(--text-secondary)",
-          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-        }}>
+        <span
+          className="aiml-header-workspace"
+          style={{
+            fontFamily: "var(--font-mono)", fontSize: "10px",
+            letterSpacing: "0.12em", textTransform: "uppercase",
+            color: "var(--text-secondary)",
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+          }}
+        >
           Workspace · {workspaceDomain}
         </span>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-        <LiveDot label="LIVE" />
+      <div className="aiml-header-actions" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        <span className="aiml-header-live"><LiveDot label="LIVE" /></span>
         <IconButton onClick={toggleMode} title={mode === "dark" ? "Switch to light" : "Switch to dark"}>
           <AnimatePresence mode="wait">
             <motion.div key={mode}
@@ -506,9 +588,7 @@ function AppHeader({ workspaceDomain }: { workspaceDomain: string }) {
             </motion.div>
           </AnimatePresence>
         </IconButton>
-        <IconButton title="Notifications">
-          <Bell size={13} />
-        </IconButton>
+        <NotificationBell />
         <ProfileMenu brandColor={brandColor} compact />
       </div>
     </header>
@@ -516,7 +596,7 @@ function AppHeader({ workspaceDomain }: { workspaceDomain: string }) {
 }
 
 // ─── App sidebar ──────────────────────────────────────────────────────────────
-function AppSidebar() {
+function AppSidebar({ open = false }: { open?: boolean }) {
   const pathname = usePathname();
   const { brandColor } = useTheme();
 
@@ -563,12 +643,15 @@ function AppSidebar() {
   };
 
   return (
-    <aside className="aiml-sidebar" style={{
-      position: "fixed", top: "56px", left: 0, bottom: 0, width: "220px",
-      background: "var(--bg)", borderRight: "1px solid var(--border)",
-      padding: "22px 14px", display: "flex", flexDirection: "column",
-      gap: "2px", zIndex: 50, overflowY: "auto",
-    }}>
+    <aside
+      className={`aiml-sidebar${open ? " aiml-sidebar-open" : ""}`}
+      style={{
+        position: "fixed", top: "56px", left: 0, bottom: 0, width: "220px",
+        background: "var(--bg)", borderRight: "1px solid var(--border)",
+        padding: "22px 14px", display: "flex", flexDirection: "column",
+        gap: "2px", zIndex: 50, overflowY: "auto",
+      }}
+    >
       <span style={{
         padding: "0 12px 12px", fontFamily: "var(--font-mono)",
         fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase",
@@ -640,14 +723,122 @@ function Footer() {
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
 // Per design: marketing = horizontal nav; app = top bar + left sidebar.
-// Inline <style> scopes the 1024px breakpoint — below that the sidebar collapses
-// and the main column reclaims the full width so tables stay readable.
+// On screens ≤1024px the sidebar collapses to a slide-in drawer triggered by
+// a hamburger button in the topbar. The main column reclaims full width so
+// tables stay readable. On ≤768px we additionally hide the brand text +
+// workspace pill + LIVE dot from the topbar so the right-hand actions fit.
 const SHELL_RESPONSIVE_CSS = `
 @media (max-width: 1024px) {
-  .aiml-sidebar { display: none; }
+  .aiml-sidebar {
+    transform: translateX(-100%);
+    transition: transform var(--dur-base) var(--ease-expo);
+    box-shadow: 0 0 24px rgba(0,0,0,0.5);
+    width: 260px !important;
+  }
+  .aiml-sidebar.aiml-sidebar-open { transform: translateX(0); }
   .aiml-main-app { padding-left: 0 !important; }
+  .aiml-mobile-burger { display: inline-flex !important; }
+  .aiml-header-live { display: none !important; }
 }
+@media (max-width: 768px) {
+  .aiml-header-divider, .aiml-header-workspace, .aiml-header-brand-text {
+    display: none !important;
+  }
+  .aiml-header { padding: 0 14px !important; }
+  .aiml-header-actions { gap: 8px !important; }
+  .aiml-marketing-header { padding: 0 16px !important; }
+  .aiml-marketing-brand-text { display: none !important; }
+  .aiml-marketing-nav { display: none !important; }
+  .aiml-marketing-signin { display: none !important; }
+  /* Page-level padding shrinks on mobile so content uses the screen */
+  .aiml-page-pad { padding: 20px 14px 64px !important; }
+  /* Tables that overflow get a horizontal scroll affordance instead of squashing */
+  .aiml-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* Alerts-page rule rows reflow with wrap: icon + text on top line, then
+     threshold + email + enable toggle wrap onto the next line on phones. */
+  .aiml-alert-rule-row {
+    display: flex !important;
+    flex-wrap: wrap;
+    gap: 10px !important;
+  }
+  .aiml-alert-rule-row > :nth-child(2) {
+    flex: 1 1 calc(100% - 36px);
+    min-width: 0;
+  }
+}
+@media (min-width: 1025px) {
+  .aiml-mobile-burger { display: none !important; }
+}
+.aiml-mobile-burger { display: none; }
+.aiml-mobile-backdrop {
+  position: fixed; inset: 56px 0 0 0;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: 49;
+  animation: aiml-fade-in var(--dur-fast) var(--ease-expo);
+}
+@keyframes aiml-fade-in { from { opacity: 0; } to { opacity: 1; } }
 `;
+
+// AppShellWithDrawer
+// -----------------------------------------------------------------------------
+// Holds drawer-open state for the mobile/tablet experience. Wires up:
+//   • Escape to close
+//   • Click outside (backdrop) to close
+//   • Auto-close when route changes (so the sidebar links work)
+//   • Body scroll lock while open (prevents the page scrolling under the drawer)
+function AppShellWithDrawer({
+  workspaceDomain, children,
+}: { workspaceDomain: string; children: React.ReactNode }) {
+  const pathname = usePathname();
+  const [navOpen, setNavOpen] = useState(false);
+
+  // Close on route change (so picking a sidebar link dismisses the drawer)
+  useEffect(() => { setNavOpen(false); }, [pathname]);
+
+  // Escape closes
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setNavOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navOpen]);
+
+  // Body scroll lock while drawer is open on mobile
+  useEffect(() => {
+    if (!navOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [navOpen]);
+
+  return (
+    <>
+      <AppHeader
+        workspaceDomain={workspaceDomain}
+        onToggleNav={() => setNavOpen(o => !o)}
+        navOpen={navOpen}
+      />
+      <AppSidebar open={navOpen} />
+      {navOpen && (
+        <div
+          className="aiml-mobile-backdrop hide-desktop"
+          aria-hidden="true"
+          onClick={() => setNavOpen(false)}
+        />
+      )}
+      <main className="aiml-main-app" style={{
+        paddingTop:  "56px",
+        paddingLeft: "220px",
+        minHeight:   "100vh",
+        background:  "var(--bg)",
+      }}>
+        {children}
+      </main>
+    </>
+  );
+}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -674,18 +865,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <UserCacheGuard />
       <style dangerouslySetInnerHTML={{ __html: SHELL_RESPONSIVE_CSS }} />
       {isApp ? (
-        <>
-          <AppHeader workspaceDomain={workspaceDomain} />
-          <AppSidebar />
-          <main className="aiml-main-app" style={{
-            paddingTop:  "56px",
-            paddingLeft: "220px",
-            minHeight:   "100vh",
-            background:  "var(--bg)",
-          }}>
-            {children}
-          </main>
-        </>
+        <AppShellWithDrawer workspaceDomain={workspaceDomain}>
+          {children}
+        </AppShellWithDrawer>
       ) : (
         <>
           <MarketingHeader />
