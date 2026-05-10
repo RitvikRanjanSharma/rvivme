@@ -19,6 +19,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getCallerOrNull } from "@/lib/supabase-server";
 import { runAudit, type AuditResult } from "@/lib/site-audit";
 import { checkAndIncrement } from "@/lib/quota";
+import type { Database } from "@/lib/supabase";
+
+type FindingInsert = Database["public"]["Tables"]["audit_findings"]["Insert"];
 
 // Audits can take longer than 60s on slow targets; bump where supported.
 export const maxDuration = 120;
@@ -107,18 +110,20 @@ export async function POST(req: NextRequest) {
     .eq("id", auditRow.id);
 
   if (result.findings.length) {
-    await caller.supabase
-      .from("audit_findings")
-      .insert(result.findings.map(f => ({
-        audit_id: auditRow.id,
-        user_id:  caller.user.id,
-        rule:     f.rule,
-        severity: f.severity,
-        category: f.category,
-        page_url: f.page_url ?? null,
-        message:  f.message,
-        detail:   f.detail ?? null,
-      })));
+    // Explicit FindingInsert[] typing — same Supabase v12 typing quirk that
+    // bit /api/alerts. Without the annotation the inferred array element
+    // collapses to `never` and the build fails.
+    const findingRows: FindingInsert[] = result.findings.map(f => ({
+      audit_id: auditRow.id,
+      user_id:  caller.user.id,
+      rule:     f.rule,
+      severity: f.severity,
+      category: f.category,
+      page_url: f.page_url ?? null,
+      message:  f.message,
+      detail:   f.detail ?? null,
+    }));
+    await caller.supabase.from("audit_findings").insert(findingRows);
   }
 
   return NextResponse.json({ success: true, audit_id: auditRow.id, ...result });

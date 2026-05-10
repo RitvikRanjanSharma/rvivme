@@ -89,7 +89,9 @@ export async function GET(req: NextRequest) {
       if (rows.length) {
         const { error: upErr } = await sb
           .from("keyword_rankings_history")
-          .upsert(rows, { onConflict: "user_id,keyword,captured_on" });
+          // Cast matches the project's existing convention for upserting an
+          // array against postgrest v12's strict typing — see keywords/page.tsx.
+          .upsert(rows as never, { onConflict: "user_id,keyword,captured_on" });
         if (upErr) {
           summary.failed.push({ user_id: u.id, reason: `upsert: ${upErr.message}` });
         } else {

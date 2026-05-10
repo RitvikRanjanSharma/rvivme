@@ -127,12 +127,14 @@ export default function OnboardingPage() {
     // Replace existing competitor list with what we have here.
     await supabase.from("competitors").delete().eq("user_id", userId);
     if (urls.length) {
+      // `as never` matches the project convention for array inserts under
+      // postgrest v12 strict typing — see app/keywords/page.tsx for the same.
       await supabase.from("competitors").insert(
         urls.map(u => ({
           user_id:        userId,
           competitor_url: u,
           domain:         hostFor(u),
-        })),
+        })) as never,
       );
     }
   }

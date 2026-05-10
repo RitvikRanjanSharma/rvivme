@@ -12,6 +12,10 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { getCallerOrNull } from "@/lib/supabase-server";
+import type { Database } from "@/lib/supabase";
+
+type AlertInsert = Database["public"]["Tables"]["alerts"]["Insert"];
+type AlertRuleType = NonNullable<AlertInsert["rule_type"]>;
 
 export const dynamic = "force-dynamic";
 
@@ -38,12 +42,12 @@ export async function GET() {
   if (!rows || rows.length === 0) {
     // First visit — seed defaults. Rank drop on by default; everything else
     // off so we don't spam new users while their data is empty.
-    const inserts = DEFAULT_RULES.map((r, i) => ({
+    // Explicit AlertInsert[] typing — Supabase / postgrest v12 needs the
+    // array element type spelled out or it falls back to `never` for the
+    // .insert() parameter and the build fails type-check.
+    const inserts: AlertInsert[] = DEFAULT_RULES.map((r, i) => ({
       user_id:       caller.user.id,
-      rule_type:     r.rule_type as
-        "rank_drop" | "rank_gain" | "traffic_drop" | "traffic_spike"
-        | "new_keyword" | "lost_keyword" | "audit_critical"
-        | "broken_page" | "manual",
+      rule_type:     r.rule_type as AlertRuleType,
       threshold:     r.threshold,
       enabled:       i === 0 || r.rule_type === "audit_critical",
       email_enabled: i === 0,
