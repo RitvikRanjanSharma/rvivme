@@ -17,18 +17,19 @@ export async function GET() {
     return NextResponse.json({ success: false, error: "unauthenticated" }, { status: 401 });
   }
 
-  const { data: notifications } = await caller.supabase
+  const notifRes = await caller.supabase
     .from("notifications")
     .select("*")
     .eq("user_id", caller.user.id)
     .order("created_at", { ascending: false })
     .limit(50);
-
-  const unread = (notifications ?? []).filter(n => !n.read_at).length;
+  // Cast to a shape that has just the field we actually read here.
+  const notifications = (notifRes.data ?? []) as { read_at: string | null }[];
+  const unread = notifications.filter(n => !n.read_at).length;
 
   return NextResponse.json({
     success: true,
-    notifications: notifications ?? [],
+    notifications: notifRes.data ?? [],
     unread,
   });
 }

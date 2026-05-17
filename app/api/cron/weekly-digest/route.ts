@@ -18,6 +18,13 @@ import { NextResponse, type NextRequest } from "next/server";
 import { verifyCron, getServiceSupabase } from "@/lib/cron";
 import { sendEmail, weeklyDigestEmail } from "@/lib/email";
 
+// Local row shapes for SELECTed columns — see check-alerts/route.ts for the
+// reasoning. We cast each Supabase query result to these because postgrest
+// v12 strict typing returns `never` for our hand-written Database type.
+type UserRow      = { id: string; website_url: string | null; onboarding_complete: boolean };
+type RankRow      = { keyword: string; position: number; captured_on: string };
+type AuditSummary = { overall_score: number | null; errors_count: number | null; warnings_count: number | null };
+
 export const maxDuration = 300;
 export const dynamic     = "force-dynamic";
 
@@ -28,17 +35,18 @@ export async function GET(req: NextRequest) {
   const startedAt = Date.now();
   const sb = getServiceSupabase();
 
-  const { data: users, error } = await sb
+  const usersRes = await sb
     .from("users")
     .select("id, website_url, onboarding_complete")
     .eq("onboarding_complete", true);
+  const users = (usersRes.data ?? []) as UserRow[];
 
-  if (error) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  if (usersRes.error) {
+    return NextResponse.json({ success: false, error: usersRes.error.message }, { status: 500 });
   }
 
   const summary = {
-    users_considered: users?.length ?? 0,
+    users_considered: users.length,
     digests_sent:     0,
     skipped_no_data:  0,
     failed:           [] as { user_id: string; reason: string }[],
@@ -47,17 +55,18 @@ export async function GET(req: NextRequest) {
   const today    = new Date().toISOString().slice(0, 10);
   const weekAgo  = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  for (const u of users ?? []) {
+  for (const u of users) {
     try {
       // Pull both snapshots
-      const { data: rows } = await sb
+      const rowsRes = await sb
         .from("keyword_rankings_history")
         .select("keyword, position, captured_on")
         .eq("user_id", u.id)
         .in("captured_on", [today, weekAgo]);
+      const rows = (rowsRes.data ?? []) as RankRow[];
 
       const byKw = new Map<string, { today?: number; weekAgo?: number }>();
-      for (const r of rows ?? []) {
+      for (const r of rows) {
         const e = byKw.get(r.keyword) ?? {};
         if (r.captured_on === today) e.today = r.position;
         else if (r.captured_on === weekAgo) e.weekAgo = r.position;
@@ -87,7 +96,7 @@ export async function GET(req: NextRequest) {
       losses.sort((a, b) => (b.to - b.from) - (a.to - a.from));
 
       // Audit summary
-      const { data: lastAudit } = await sb
+      const lastAuditRes = await sb
         .from("site_audits")
         .select("overall_score, errors_count, warnings_count")
         .eq("user_id", u.id)
@@ -95,6 +104,7 @@ export async function GET(req: NextRequest) {
         .order("started_at", { ascending: false })
         .limit(1)
         .maybeSingle();
+      const lastAudit   = lastAuditRes.data as AuditSummary | null;
       const auditScore  = lastAudit?.overall_score ?? null;
       const auditIssues = (lastAudit?.errors_count ?? 0) + (lastAudit?.warnings_count ?? 0);
 

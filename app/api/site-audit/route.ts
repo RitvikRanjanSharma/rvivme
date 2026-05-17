@@ -139,23 +139,25 @@ export async function GET() {
     return NextResponse.json({ success: false, error: "unauthenticated" }, { status: 401 });
   }
 
-  const { data: latest } = await caller.supabase
+  const latestRes = await caller.supabase
     .from("site_audits")
     .select("*")
     .eq("user_id", caller.user.id)
     .order("started_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  const latest = latestRes.data as { id: string } | null;
 
   if (!latest) {
     return NextResponse.json({ success: true, audit: null, findings: [] });
   }
 
-  const { data: findings } = await caller.supabase
+  const findingsRes = await caller.supabase
     .from("audit_findings")
     .select("*")
     .eq("audit_id", latest.id)
     .order("severity", { ascending: true });
+  const findings = findingsRes.data ?? [];
 
-  return NextResponse.json({ success: true, audit: latest, findings: findings ?? [] });
+  return NextResponse.json({ success: true, audit: latestRes.data, findings });
 }

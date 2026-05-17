@@ -33,13 +33,14 @@ export async function GET() {
     return NextResponse.json({ success: false, error: "unauthenticated" }, { status: 401 });
   }
 
-  let { data: rows } = await caller.supabase
+  const initialRes = await caller.supabase
     .from("alerts")
     .select("*")
     .eq("user_id", caller.user.id)
     .order("created_at", { ascending: true });
+  let rows: unknown[] = (initialRes.data ?? []) as unknown[];
 
-  if (!rows || rows.length === 0) {
+  if (rows.length === 0) {
     // First visit — seed defaults. Rank drop on by default; everything else
     // off so we don't spam new users while their data is empty.
     // Explicit AlertInsert[] typing — Supabase / postgrest v12 needs the
@@ -52,11 +53,11 @@ export async function GET() {
       enabled:       i === 0 || r.rule_type === "audit_critical",
       email_enabled: i === 0,
     }));
-    const { data: seeded } = await caller.supabase
+    const seededRes = await caller.supabase
       .from("alerts")
       .insert(inserts as never)
       .select("*");
-    rows = seeded ?? [];
+    rows = (seededRes.data ?? []) as unknown[];
   }
 
   return NextResponse.json({ success: true, alerts: rows });

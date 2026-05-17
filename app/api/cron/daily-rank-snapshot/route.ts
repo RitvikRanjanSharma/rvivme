@@ -31,6 +31,9 @@ export const maxDuration = 300;
 export const dynamic     = "force-dynamic";
 
 type TrackedKw = { id: string; user_id: string; keyword: string };
+// Cast row shapes — postgrest v12 strict typing returns `never` for our
+// hand-written Database type, so we shape selected rows explicitly.
+type UserRow    = { id: string; gsc_site_url: string | null; website_url: string };
 
 export async function GET(req: NextRequest) {
   const guard = verifyCron(req);
@@ -40,13 +43,14 @@ export async function GET(req: NextRequest) {
   const sb = getServiceSupabase();
 
   // ─── 1. Find users with both a tracked keyword AND a GSC property ─────────
-  const { data: users, error: usersErr } = await sb
+  const usersRes = await sb
     .from("users")
     .select("id, gsc_site_url, website_url")
     .not("gsc_site_url", "is", null);
+  const users = (usersRes.data ?? []) as UserRow[];
 
-  if (usersErr) {
-    return NextResponse.json({ success: false, error: usersErr.message }, { status: 500 });
+  if (usersRes.error) {
+    return NextResponse.json({ success: false, error: usersRes.error.message }, { status: 500 });
   }
 
   const summary = {
@@ -68,18 +72,19 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  for (const u of users ?? []) {
+  for (const u of users) {
     if (!u.gsc_site_url) continue;
 
     // Pull this user's tracked keywords. We snapshot whatever they're
     // tracking right now; if they untrack a keyword later it just stops
     // gaining new history rows (existing rows stay).
-    const { data: tracked } = await sb
+    const trackedRes = await sb
       .from("tracked_keywords")
       .select("id, user_id, keyword")
       .eq("user_id", u.id);
+    const tracked = (trackedRes.data ?? []) as TrackedKw[];
 
-    if (!tracked || tracked.length === 0) {
+    if (tracked.length === 0) {
       summary.skipped_no_kw++;
       continue;
     }

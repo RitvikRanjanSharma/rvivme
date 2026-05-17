@@ -44,6 +44,16 @@ type FiredAlert = {
   link_href: string;
 };
 
+// Local row shapes for SELECTed columns. We cast the Supabase query results
+// to these because postgrest v12's strict typing chain doesn't pick up our
+// hand-written Database type and falls back to `never` for select rows.
+// (Until we regenerate types from `supabase gen types typescript`.)
+type RankRow      = { keyword: string; position: number; captured_on: string };
+type KeywordRow   = { keyword: string };
+type KwPosRow     = { keyword: string; position: number };
+type AuditRow     = { id: string; errors_count: number | null; overall_score: number | null; started_at: string };
+type IdRow        = { id: string };
+
 const APP_URL = process.env.APP_URL ?? "https://aimarketinglab.co.uk";
 
 export async function GET(req: NextRequest) {
@@ -53,24 +63,25 @@ export async function GET(req: NextRequest) {
   const startedAt = Date.now();
   const sb = getServiceSupabase();
 
-  const { data: alerts, error: alertsErr } = await sb
+  const alertsRes = await sb
     .from("alerts")
     .select("id, user_id, rule_type, threshold, enabled, email_enabled")
     .eq("enabled", true);
+  const alerts = (alertsRes.data ?? []) as AlertRow[];
 
-  if (alertsErr) {
-    return NextResponse.json({ success: false, error: alertsErr.message }, { status: 500 });
+  if (alertsRes.error) {
+    return NextResponse.json({ success: false, error: alertsRes.error.message }, { status: 500 });
   }
 
   const summary = {
-    alerts_evaluated:   alerts?.length ?? 0,
+    alerts_evaluated:   alerts.length,
     notifications_sent: 0,
     emails_sent:        0,
     email_failed:       0,
     errors:             [] as { alert_id: string; reason: string }[],
   };
 
-  for (const a of (alerts ?? []) as AlertRow[]) {
+  for (const a of alerts) {
     try {
       const fired = await evaluate(sb, a);
       // Always update last_evaluated_at, even if nothing fires
@@ -157,13 +168,14 @@ async function evaluateRankDrop(
   const today    = new Date().toISOString().slice(0, 10);
   const weekAgo  = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const { data: rows } = await sb
+  const rowsRes = await sb
     .from("keyword_rankings_history")
     .select("keyword, position, captured_on")
     .eq("user_id", alert.user_id)
     .in("captured_on", [today, weekAgo]);
+  const rows = (rowsRes.data ?? []) as RankRow[];
 
-  if (!rows || rows.length === 0) return [];
+  if (rows.length === 0) return [];
 
   // Build map keyword -> {today, weekAgo}
   const byKw = new Map<string, { today?: number; weekAgo?: number }>();
@@ -202,13 +214,14 @@ async function evaluateRankGain(
   const today    = new Date().toISOString().slice(0, 10);
   const weekAgo  = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const { data: rows } = await sb
+  const rowsRes = await sb
     .from("keyword_rankings_history")
     .select("keyword, position, captured_on")
     .eq("user_id", alert.user_id)
     .in("captured_on", [today, weekAgo]);
+  const rows = (rowsRes.data ?? []) as RankRow[];
 
-  if (!rows || rows.length === 0) return [];
+  if (rows.length === 0) return [];
   const byKw = new Map<string, { today?: number; weekAgo?: number }>();
   for (const r of rows) {
     const e = byKw.get(r.keyword) ?? {};
@@ -240,7 +253,7 @@ async function evaluateAuditCritical(
   sb: ReturnType<typeof getServiceSupabase>,
   alert: AlertRow,
 ): Promise<FiredAlert[]> {
-  const { data: latest } = await sb
+  const latestRes = await sb
     .from("site_audits")
     .select("id, errors_count, overall_score, started_at")
     .eq("user_id", alert.user_id)
@@ -248,18 +261,20 @@ async function evaluateAuditCritical(
     .order("started_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  const latest = latestRes.data as AuditRow | null;
 
   if (!latest || !latest.errors_count || latest.errors_count === 0) return [];
 
   // Don't re-fire on the same audit twice. Look for an existing notification
   // tied to this alert that was created after this audit started.
-  const { data: existing } = await sb
+  const existingRes = await sb
     .from("notifications")
     .select("id")
     .eq("alert_id", alert.id)
     .gt("created_at", latest.started_at)
     .limit(1);
-  if (existing && existing.length > 0) return [];
+  const existing = (existingRes.data ?? []) as IdRow[];
+  if (existing.length > 0) return [];
 
   return [{
     alert_id:  alert.id,
@@ -279,15 +294,17 @@ async function evaluateNewKeyword(
   const today    = new Date().toISOString().slice(0, 10);
   const weekAgo  = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const { data: todayRows }   = await sb
+  const todayRes   = await sb
     .from("keyword_rankings_history").select("keyword, position")
     .eq("user_id", alert.user_id).eq("captured_on", today).lt("position", 101);
-  const { data: weekAgoRows } = await sb
+  const weekAgoRes = await sb
     .from("keyword_rankings_history").select("keyword")
     .eq("user_id", alert.user_id).eq("captured_on", weekAgo).lt("position", 101);
+  const todayRows   = (todayRes.data ?? [])   as KwPosRow[];
+  const weekAgoRows = (weekAgoRes.data ?? []) as KeywordRow[];
 
-  if (!todayRows || todayRows.length === 0) return [];
-  const past = new Set((weekAgoRows ?? []).map(r => r.keyword));
+  if (todayRows.length === 0) return [];
+  const past = new Set(weekAgoRows.map(r => r.keyword));
   const newOnes = todayRows.filter(r => !past.has(r.keyword)).map(r => r.keyword);
   if (newOnes.length === 0) return [];
 
@@ -309,15 +326,17 @@ async function evaluateLostKeyword(
   const today    = new Date().toISOString().slice(0, 10);
   const weekAgo  = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const { data: todayRows }   = await sb
+  const todayRes   = await sb
     .from("keyword_rankings_history").select("keyword")
     .eq("user_id", alert.user_id).eq("captured_on", today).lt("position", 101);
-  const { data: weekAgoRows } = await sb
+  const weekAgoRes = await sb
     .from("keyword_rankings_history").select("keyword")
     .eq("user_id", alert.user_id).eq("captured_on", weekAgo).lt("position", 101);
+  const todayRows   = (todayRes.data ?? [])   as KeywordRow[];
+  const weekAgoRows = (weekAgoRes.data ?? []) as KeywordRow[];
 
-  if (!weekAgoRows || weekAgoRows.length === 0) return [];
-  const present = new Set((todayRows ?? []).map(r => r.keyword));
+  if (weekAgoRows.length === 0) return [];
+  const present = new Set(todayRows.map(r => r.keyword));
   const lost = weekAgoRows.filter(r => !present.has(r.keyword)).map(r => r.keyword);
   if (lost.length === 0) return [];
 
