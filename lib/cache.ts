@@ -69,7 +69,8 @@ export async function get<T>(
     .eq("cache_key", cacheKey);
   q = userId ? q.eq("user_id", userId) : q.is("user_id", null);
 
-  const { data } = await q.maybeSingle();
+  const res = await q.maybeSingle();
+  const data = res.data as { value: unknown; expires_at: string } | null;
   if (!data) return null;
   if (new Date(data.expires_at).getTime() < Date.now()) return null;
   return data.value as T;
@@ -102,7 +103,7 @@ export async function set<T extends Record<string, unknown> | unknown[]>(
         cache_key:  cacheKey,
         value:      wrapped as Record<string, unknown>,
         expires_at: nowPlusSeconds(ttlSeconds),
-      },
+      } as never,
       { onConflict: "user_id,namespace,cache_key" },
     );
 }

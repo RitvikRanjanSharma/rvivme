@@ -64,13 +64,15 @@ export async function readUsage(
   userId: string,
   provider: Provider,
 ): Promise<{ count: number; cost_units: number }> {
-  const { data } = await sb
+  const res = await sb
     .from("api_usage_quotas")
     .select("count, cost_units")
     .eq("user_id", userId)
     .eq("provider", provider)
     .eq("day", utcDay())
     .maybeSingle();
+  // Cast — postgrest v12 returns `never` for our hand-written Database type.
+  const data = res.data as { count?: number; cost_units?: number } | null;
   return {
     count:      data?.count      ?? 0,
     cost_units: data?.cost_units ?? 0,
@@ -128,21 +130,22 @@ export async function checkAndIncrement(
   }
 
   // Increment. Try insert first (fresh day); fall back to update.
-  const { data: updated, error: updErr } = await sb
+  const updRes = await sb
     .from("api_usage_quotas")
     .update({
       count:      current.count + 1,
       cost_units: current.cost_units + cost,
       endpoint:   opts.endpoint ?? null,
       updated_at: new Date().toISOString(),
-    })
+    } as never)
     .eq("user_id", userId)
     .eq("provider", provider)
     .eq("day", day)
     .select("count, cost_units")
     .maybeSingle();
+  const updated = updRes.data as { count: number } | null;
 
-  if (!updErr && updated) {
+  if (!updRes.error && updated) {
     return {
       allowed:   true,
       remaining: Math.max(0, cap - updated.count),
@@ -152,7 +155,7 @@ export async function checkAndIncrement(
   }
 
   // No row yet — insert a fresh one.
-  const { data: inserted } = await sb
+  const insRes = await sb
     .from("api_usage_quotas")
     .insert({
       user_id:    userId,
@@ -161,9 +164,10 @@ export async function checkAndIncrement(
       day,
       count:      1,
       cost_units: cost,
-    })
+    } as never)
     .select("count, cost_units")
     .single();
+  const inserted = insRes.data as { count: number } | null;
 
   return {
     allowed:   true,
@@ -178,11 +182,13 @@ export async function checkAndIncrement(
 // Settings → Usage tab so people can see what they're consuming.
 // ---------------------------------------------------------------------------
 export async function usageSummary(sb: SB, userId: string) {
-  const { data } = await sb
+  const res = await sb
     .from("api_usage_quotas")
     .select("provider, count, cost_units")
     .eq("user_id", userId)
     .eq("day", utcDay());
+  // Cast — postgrest v12 returns `never[]` for our hand-written Database type.
+  const data = (res.data ?? []) as { provider: Provider; count: number; cost_units: number }[];
 
   const result: Record<Provider, { used: number; cost: number; cap: number }> =
     Object.fromEntries(
@@ -193,11 +199,10 @@ export async function usageSummary(sb: SB, userId: string) {
       }]),
     ) as Record<Provider, { used: number; cost: number; cap: number }>;
 
-  for (const row of data ?? []) {
-    const p = row.provider as Provider;
-    if (result[p]) {
-      result[p].used = row.count;
-      result[p].cost = row.cost_units;
+  for (const row of data) {
+    if (result[row.provider]) {
+      result[row.provider].used = row.count;
+      result[row.provider].cost = row.cost_units;
     }
   }
 

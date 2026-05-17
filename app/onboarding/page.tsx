@@ -61,11 +61,20 @@ export default function OnboardingPage() {
       if (!user) { router.replace("/auth/login?redirect=/onboarding"); return; }
       setUserId(user.id);
 
-      const { data } = await supabase
+      const userRes = await supabase
         .from("users")
         .select("company_name, website_url, ga4_property_id, gsc_site_url, onboarding_complete")
         .eq("id", user.id)
         .maybeSingle();
+      // Cast — postgrest v12 strict typing collapses our hand-written Database
+      // type to `never`. See docs/RUNBOOK.md for the proper long-term fix.
+      const data = userRes.data as {
+        company_name:        string | null;
+        website_url:         string | null;
+        ga4_property_id:     string | null;
+        gsc_site_url:        string | null;
+        onboarding_complete: boolean | null;
+      } | null;
 
       if (data) {
         // Already completed onboarding — bounce to dashboard.
@@ -80,13 +89,14 @@ export default function OnboardingPage() {
         setGscUrl(data.gsc_site_url ?? "");
       }
 
-      const { data: comps } = await supabase
+      const compsRes = await supabase
         .from("competitors")
         .select("competitor_url")
         .eq("user_id", user.id)
         .order("created_at", { ascending: true })
         .limit(3);
-      if (comps && comps.length) {
+      const comps = (compsRes.data ?? []) as { competitor_url: string }[];
+      if (comps.length) {
         setCompetitors(comps.map(c => c.competitor_url));
       }
     })();
@@ -102,7 +112,7 @@ export default function OnboardingPage() {
       .update({
         company_name: companyName.trim() || "My Workspace",
         website_url:  normaliseUrl(websiteUrl),
-      })
+      } as never)
       .eq("id", userId);
   }
 
@@ -113,7 +123,7 @@ export default function OnboardingPage() {
       .update({
         ga4_property_id: ga4Id.trim() || null,
         gsc_site_url:    gscUrl.trim() || null,
-      })
+      } as never)
       .eq("id", userId);
   }
 
@@ -159,7 +169,7 @@ export default function OnboardingPage() {
     await persistCompetitors();
     await supabase
       .from("users")
-      .update({ onboarding_complete: true })
+      .update({ onboarding_complete: true } as never)
       .eq("id", userId);
     void kickoffFirstAudit();
     router.replace("/dashboard");

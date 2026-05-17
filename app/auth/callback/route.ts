@@ -50,11 +50,12 @@ export async function GET(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   let target = redirect;
   if (user) {
-    const { data: row } = await supabase
+    const rowRes = await supabase
       .from("users")
       .select("onboarding_complete")
       .eq("id", user.id)
       .maybeSingle();
+    const row = rowRes.data as { onboarding_complete?: boolean } | null;
 
     const completed = row?.onboarding_complete === true;
     if (!completed) target = "/onboarding";
