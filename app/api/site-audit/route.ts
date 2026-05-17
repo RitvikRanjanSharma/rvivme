@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
   // Insert running row
   const { data: auditRow, error: insertErr } = await caller.supabase
     .from("site_audits")
-    .insert({ user_id: caller.user.id, domain, status: "running" })
+    .insert({ user_id: caller.user.id, domain, status: "running" } as never)
     .select("id")
     .single();
   if (insertErr || !auditRow) {
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
   } catch (e: any) {
     await caller.supabase
       .from("site_audits")
-      .update({ status: "failed", error_message: String(e?.message ?? e), completed_at: new Date().toISOString() })
+      .update({ status: "failed", error_message: String(e?.message ?? e), completed_at: new Date().toISOString() } as never)
       .eq("id", auditRow.id);
     return NextResponse.json({ success: false, error: String(e?.message ?? e) }, { status: 500 });
   }
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
       inp_ms:               result.inp_ms,
       meta:                 result.meta,
       completed_at:         new Date().toISOString(),
-    })
+    } as never)
     .eq("id", auditRow.id);
 
   if (result.findings.length) {
@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
       message:  f.message,
       detail:   f.detail ?? null,
     }));
-    await caller.supabase.from("audit_findings").insert(findingRows);
+    await caller.supabase.from("audit_findings").insert(findingRows as never);
   }
 
   return NextResponse.json({ success: true, audit_id: auditRow.id, ...result });

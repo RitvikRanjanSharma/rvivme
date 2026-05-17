@@ -45,7 +45,7 @@ export async function PATCH(req: NextRequest) {
   if (body.all) {
     await caller.supabase
       .from("notifications")
-      .update({ read_at: now })
+      .update({ read_at: now } as never)
       .eq("user_id", caller.user.id)
       .is("read_at", null);
     return NextResponse.json({ success: true, all: true });
@@ -54,7 +54,7 @@ export async function PATCH(req: NextRequest) {
   if (typeof body.id === "string" && body.id) {
     await caller.supabase
       .from("notifications")
-      .update({ read_at: now })
+      .update({ read_at: now } as never)
       .eq("id", body.id)
       .eq("user_id", caller.user.id);
     return NextResponse.json({ success: true, id: body.id });

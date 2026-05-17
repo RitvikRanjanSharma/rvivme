@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
     try {
       const fired = await evaluate(sb, a);
       // Always update last_evaluated_at, even if nothing fires
-      await sb.from("alerts").update({ last_evaluated_at: new Date().toISOString() }).eq("id", a.id);
+      await sb.from("alerts").update({ last_evaluated_at: new Date().toISOString() } as never).eq("id", a.id);
 
       for (const f of fired) {
         // Insert notification
@@ -87,7 +87,7 @@ export async function GET(req: NextRequest) {
             title:     f.title,
             body:      f.body,
             link_href: f.link_href,
-          })
+          } as never)
           .select("id")
           .single();
         if (noteErr || !noteRow) {
@@ -102,7 +102,7 @@ export async function GET(req: NextRequest) {
           if (email.success) {
             summary.emails_sent++;
             await sb.from("notifications")
-              .update({ emailed_at: new Date().toISOString() })
+              .update({ emailed_at: new Date().toISOString() } as never)
               .eq("id", noteRow.id);
           } else if (email.reason !== "not_configured") {
             summary.email_failed++;

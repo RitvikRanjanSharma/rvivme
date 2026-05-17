@@ -54,7 +54,7 @@ export async function GET() {
     }));
     const { data: seeded } = await caller.supabase
       .from("alerts")
-      .insert(inserts)
+      .insert(inserts as never)
       .select("*");
     rows = seeded ?? [];
   }
@@ -82,7 +82,7 @@ export async function PUT(req: NextRequest) {
 
   const { data, error } = await caller.supabase
     .from("alerts")
-    .update(update)
+    .update(update as never)
     .eq("id", body.id)
     .eq("user_id", caller.user.id)
     .select("*")
@@ -109,14 +109,11 @@ export async function POST(req: NextRequest) {
     .from("alerts")
     .insert({
       user_id:       caller.user.id,
-      rule_type:     body.rule_type as
-        "rank_drop" | "rank_gain" | "traffic_drop" | "traffic_spike"
-        | "new_keyword" | "lost_keyword" | "audit_critical"
-        | "broken_page" | "manual",
+      rule_type:     body.rule_type as AlertRuleType,
       threshold:     body.threshold ?? null,
       enabled:       true,
       email_enabled: body.email_enabled ?? true,
-    })
+    } as never)
     .select("*")
     .single();
 
