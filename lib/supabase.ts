@@ -93,7 +93,11 @@ export type Database = {
           called_at:   string;
         };
         Insert: Partial<Database["public"]["Tables"]["data_provider_logs"]["Row"]>;
-        Update: never;
+        // Append-only table — but postgrest v12 needs a valid Update shape
+        // for its type inference chain, otherwise every .select() returns
+        // `never[]`. Keep this as Partial<Row>; row-level security still
+        // enforces immutability at the database layer.
+        Update: Partial<Database["public"]["Tables"]["data_provider_logs"]["Row"]>;
       };
       ai_strategies: {
         Row: {
@@ -230,7 +234,7 @@ export type Database = {
           created_at:    string;
         };
         Insert: Partial<Database["public"]["Tables"]["keyword_rankings_history"]["Row"]>;
-        Update: never;
+        Update: Partial<Database["public"]["Tables"]["keyword_rankings_history"]["Row"]>;
       };
       site_audits: {
         Row: {
@@ -273,7 +277,7 @@ export type Database = {
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["audit_findings"]["Row"]>;
-        Update: never;
+        Update: Partial<Database["public"]["Tables"]["audit_findings"]["Row"]>;
       };
       alerts: {
         Row: {
