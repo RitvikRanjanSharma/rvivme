@@ -77,8 +77,11 @@ export async function GET(req: NextRequest) {
       await sb.from("alerts").update({ last_evaluated_at: new Date().toISOString() } as never).eq("id", a.id);
 
       for (const f of fired) {
-        // Insert notification
-        const { data: noteRow, error: noteErr } = await sb
+        // Insert notification. The `as never` cast on the insert payload
+        // satisfies postgrest v12 strict typing but it also collapses the
+        // returned `data` to `never`, so we re-type the destructured result
+        // here so subsequent `.id` access type-checks.
+        const insertResult = await sb
           .from("notifications")
           .insert({
             user_id:   f.user_id,
@@ -89,7 +92,9 @@ export async function GET(req: NextRequest) {
             link_href: f.link_href,
           } as never)
           .select("id")
-          .single();
+          .single() as { data: { id: string } | null; error: { message: string } | null };
+        const noteRow = insertResult.data;
+        const noteErr = insertResult.error;
         if (noteErr || !noteRow) {
           summary.errors.push({ alert_id: a.id, reason: `notify: ${noteErr?.message ?? "no row"}` });
           continue;

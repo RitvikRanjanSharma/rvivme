@@ -62,12 +62,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Insert running row
-  const { data: auditRow, error: insertErr } = await caller.supabase
+  // Insert running row. Re-type the destructured result because the `as
+  // never` insert cast collapses `data` to `never`, which would break
+  // `auditRow.id` access further down.
+  const startResult = await caller.supabase
     .from("site_audits")
     .insert({ user_id: caller.user.id, domain, status: "running" } as never)
     .select("id")
-    .single();
+    .single() as { data: { id: string } | null; error: { message: string } | null };
+  const auditRow  = startResult.data;
+  const insertErr = startResult.error;
   if (insertErr || !auditRow) {
     return NextResponse.json({ success: false, error: insertErr?.message ?? "insert_failed" }, { status: 500 });
   }
