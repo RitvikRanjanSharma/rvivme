@@ -36,11 +36,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     );
 
-    const { data: posts } = await supabase
+    const postsRes = await supabase
       .from("blog_posts")
       .select("slug, updated_at, published_at")
       .eq("status", "published")
       .order("published_at", { ascending: false });
+    // Cast — postgrest v12 strict typing returns `never[]` for our
+    // hand-written Database type. Same convention used across the codebase.
+    const posts = postsRes.data as Array<{
+      slug:         string;
+      updated_at:   string | null;
+      published_at: string | null;
+    }> | null;
 
     if (posts) {
       blogPages = posts.map(post => ({
