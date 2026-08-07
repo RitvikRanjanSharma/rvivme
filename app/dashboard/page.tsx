@@ -421,7 +421,11 @@ function BacklinksPanel({ brandColor, domain }: { brandColor:string; domain:stri
       .then(d => {
         if (d.success) {
           setData(d);
-        } else if (d.reason === "plan_access") {
+        } else if (d.reason === "plan_access" || d.reason === "unavailable") {
+          // "unavailable" is what /api/dataforseo/backlinks returns when DFS
+          // backlinks aren't enabled on our DataForSEO plan. Treat the same
+          // as "plan_access" so we render a calm not-available card instead
+          // of a red error banner.
           setPlanLocked(true);
         } else {
           setError(d.error ?? d.message ?? "Unable to load backlink data");

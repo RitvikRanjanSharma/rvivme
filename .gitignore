@@ -27,3 +27,6 @@ pnpm-debug.log*
 # Archives
 *.zip
 *.7z
+
+# Sibling scratch project — kept locally, never committed to the main repo
+geo-app/

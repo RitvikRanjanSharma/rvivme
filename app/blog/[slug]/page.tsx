@@ -47,6 +47,23 @@ function formatDate(iso: string | null): string {
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 }
 
+// HTML-escape user content before we transform our `**bold**` markers into
+// `<strong>` tags. Without this, anyone with insert access to blog_posts
+// (any signed-in user under current RLS) could embed a `<script>` or
+// `<img onerror=…>` payload that executes for every blog reader.
+function safeBold(line: string): string {
+  const escaped = line
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+  return escaped.replace(
+    /\*\*(.+?)\*\*/g,
+    '<strong style="color:var(--text-primary);font-weight:600">$1</strong>',
+  );
+}
+
 // Minimal markdown renderer
 function renderContent(content: string) {
   const lines = content.split("\n");
@@ -67,7 +84,7 @@ function renderContent(content: string) {
       i--;
       elements.push(
         <ul key={key++} style={{ margin: "12px 0 16px", paddingLeft: "20px" }}>
-          {items.map((item, j) => <li key={j} style={{ fontFamily: "var(--font-body)", fontSize: "15px", color: "var(--text-secondary)", lineHeight: 1.8, marginBottom: "6px" }} dangerouslySetInnerHTML={{ __html: item.replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--text-primary);font-weight:600">$1</strong>') }} />)}
+          {items.map((item, j) => <li key={j} style={{ fontFamily: "var(--font-body)", fontSize: "15px", color: "var(--text-secondary)", lineHeight: 1.8, marginBottom: "6px" }} dangerouslySetInnerHTML={{ __html: safeBold(item) }} />)}
         </ul>
       );
     } else if (/^\d+\. /.test(line)) {
@@ -76,7 +93,7 @@ function renderContent(content: string) {
       i--;
       elements.push(
         <ol key={key++} style={{ margin: "12px 0 16px", paddingLeft: "20px" }}>
-          {items.map((item, j) => <li key={j} style={{ fontFamily: "var(--font-body)", fontSize: "15px", color: "var(--text-secondary)", lineHeight: 1.8, marginBottom: "6px" }} dangerouslySetInnerHTML={{ __html: item.replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--text-primary);font-weight:600">$1</strong>') }} />)}
+          {items.map((item, j) => <li key={j} style={{ fontFamily: "var(--font-body)", fontSize: "15px", color: "var(--text-secondary)", lineHeight: 1.8, marginBottom: "6px" }} dangerouslySetInnerHTML={{ __html: safeBold(item) }} />)}
         </ol>
       );
     } else if (line.startsWith("✓ ")) {
@@ -85,7 +102,7 @@ function renderContent(content: string) {
         <span style={{ fontFamily: "var(--font-body)", fontSize: "14px", color: "var(--text-secondary)", lineHeight: 1.7 }}>{line.slice(2)}</span>
       </div>);
     } else {
-      elements.push(<p key={key++} style={{ fontFamily: "var(--font-body)", fontSize: "16px", color: "var(--text-secondary)", lineHeight: 1.85, marginBottom: "0" }} dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--text-primary);font-weight:600">$1</strong>') }} />);
+      elements.push(<p key={key++} style={{ fontFamily: "var(--font-body)", fontSize: "16px", color: "var(--text-secondary)", lineHeight: 1.85, marginBottom: "0" }} dangerouslySetInnerHTML={{ __html: safeBold(line) }} />);
     }
   }
   return elements;

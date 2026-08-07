@@ -16,7 +16,7 @@ const EASE_EXPO = [0.16, 1, 0.3, 1] as const;
 const CAPABILITIES = [
   "SEO Intelligence","GEO Optimisation","Competitor Analysis","AI Overview Tracking",
   "Search Console","Traffic Forecasting","Content Strategy","Keyword Research",
-  "Backlink Intelligence","Rank Monitoring","GA4 Integration","6-Month Forecasting",
+  "Site Audit","Rank Monitoring","GA4 Integration","6-Month Forecasting",
 ];
 // STATS: kept honest. "Forecast horizon" is real (6 months). "Free beta" is
 // the truth right now — closed beta, no payment, capacity for ~50 testers.
@@ -225,7 +225,11 @@ function MasterCanvas({
         W, H, 3, 5000, "center"
       );
       const hsize  = Math.max(56, Math.min(W * 0.10, 152));
-      const hlines = ["Search", "intelligence", "for those", "who act."];
+      // Particle headline — mirrors the site's primary H1
+      // ("Rank faster with AI-driven SEO & content strategy.") split across
+      // four lines so each glyph gets room to assemble at 150px Georgia.
+      // The ampersand lives on line 3 so it can't end up alone at a line end.
+      const hlines = ["Rank faster", "with AI-driven", "SEO & content", "strategy."];
       const hlh    = hsize * 0.9;
       const hlOff  = document.createElement("canvas");
       hlOff.width  = W; hlOff.height = H;
@@ -234,7 +238,10 @@ function MasterCanvas({
       hlCtx.font         = `400 ${hsize}px Georgia,serif`;
       hlCtx.textBaseline = "top";
       hlCtx.textAlign    = "left";
-      const hlStartY = H * 0.18;
+      // Start the headline lower so there's real breathing room between the
+      // "GEO INTELLIGENCE PLATFORM" eyebrow (positioned at top: 72px) and
+      // the top of the "R" glyphs. 0.28 gives ~200px on a 720px viewport.
+      const hlStartY = H * 0.28;
       hlines.forEach((l, i) => hlCtx.fillText(l, 32, hlStartY + i * hlh));
       const hlImgData = hlOff.getContext("2d")!.getImageData(0, 0, W, H).data;
       const hPtsRaw: Array<{x:number;y:number}> = [];
@@ -317,7 +324,12 @@ function MasterCanvas({
           a  = t < 0.08 ? t / 0.08 : 1;
           p.x = px; p.y = py;
         } else if (ph === "idle") {
-          const disperseT = easeInExpo(sf);
+          // easeInExpo held particles nearly still until sf≈0.5, which is why
+          // the headline appeared to overlap the paragraph below on first
+          // scroll. easeOutQuad kicks in from the very first pixel — particles
+          // fly outward and fade immediately, so by the time the subheadline
+          // scrolls up the headline is already gone.
+          const disperseT = 1 - Math.pow(1 - sf, 2);
           const dirX = p.rx - p.tx;
           const dirY = p.ry - p.ty;
           const dx   = dirX * disperseT * (1 + sf * 2);
@@ -327,7 +339,9 @@ function MasterCanvas({
           p.x   = p.tx + dx + Math.sin(p.dp) * 1.2 * drift;
           p.y   = p.ty + dy + Math.cos(p.dp * 0.7) * 0.6 * drift;
           px    = p.x; py = p.y;
-          a     = clamp(1 - sf * 0.6, 0.02, 1);
+          // Also fade faster so what's still on screen dims noticeably rather
+          // than reading as fully-inked serif letters over the paragraph.
+          a     = clamp(1 - sf * 1.4, 0.02, 1);
         }
 
         if (a <= 0.01) continue;
@@ -670,7 +684,10 @@ export default function HomePage() {
     function onScroll() {
       const heroEl = heroRef.current;
       if (!heroEl) return;
-      scrollFrac.current = clamp(window.scrollY / (heroEl.offsetHeight * 1.8), 0, 1);
+      // Divisor was 1.8× hero height — meant the headline stayed fully drawn
+      // long after the subheadline had scrolled up into it. 0.45× makes the
+      // headline fully dispersed by the time the subheadline reaches it.
+      scrollFrac.current = clamp(window.scrollY / (heroEl.offsetHeight * 0.45), 0, 1);
     }
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
@@ -712,8 +729,10 @@ export default function HomePage() {
 
       <div style={{ background: phase === "converge" ? "transparent" : "var(--bg)", minHeight: "100vh", position: "relative", zIndex: 1 }}>
 
-        {/* Hero */}
-        <div ref={heroRef} style={{ minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "flex-start", padding: "18vh 32px 64px", position: "relative" }}>
+        {/* Hero — padding-top pushed from 18vh → 28vh so the eyebrow row at
+             top:72px is no longer crowding the top of the particle headline.
+             The spacer div below keeps the CTA/subheadline in rhythm. */}
+        <div ref={heroRef} style={{ minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "flex-start", padding: "28vh 32px 64px", position: "relative" }}>
           <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 70% 50% at 50% 0%, rgba(37,99,235,0.05) 0%, transparent 65%)", pointerEvents: "none" }} />
 
           <AnimatePresence>

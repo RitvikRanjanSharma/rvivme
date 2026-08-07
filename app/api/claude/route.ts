@@ -11,7 +11,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // Keeping the same model the browser code used previously so behaviour
 // is unchanged. Override per-call by passing { model } in the request body.
-const DEFAULT_MODEL      = "claude-sonnet-4-20250514";
+const DEFAULT_MODEL      = "claude-sonnet-4-6";
 const DEFAULT_MAX_TOKENS = 1024;
 
 export async function POST(request: NextRequest) {

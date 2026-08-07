@@ -15,6 +15,7 @@ import {
   AlertCircle, RefreshCw, X, Tag, Clock, BarChart3,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { isAdminEmail } from "@/lib/admin";
 import { RichTextEditor } from "./editor";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -521,9 +522,29 @@ export default function BlogAdminPage() {
   const [editPost,   setEditPost]   = useState<BlogPost | null | "new">(null);
   const [error,      setError]      = useState<string | null>(null);
 
+  // Admin gating. Three-state so we can distinguish "still checking session"
+  // from "confirmed not admin" — otherwise the page flashes the admin UI for
+  // a frame before the auth check resolves.
+  //   null    = still resolving the session
+  //   true    = signed-in admin, render the page
+  //   false   = either not signed in or not on the allowlist → render 403
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+
   useEffect(() => {
     const stored = localStorage.getItem("aiml-brand") || localStorage.getItem("rvivme-brand");
     if (stored) setBrandColor(stored);
+  }, []);
+
+  // Resolve the caller once on mount. RLS on the DB is the real defence; this
+  // gate is purely a UX guard so non-admins don't see a broken editor.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (cancelled) return;
+      setIsAdmin(isAdminEmail(user?.email));
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   const loadPosts = useCallback(async () => {
@@ -547,7 +568,44 @@ export default function BlogAdminPage() {
     }
   }, []);
 
-  useEffect(() => { loadPosts(); }, [loadPosts]);
+  // Only load posts once we've confirmed admin — saves an unnecessary DB round-trip
+  // for non-admins and avoids briefly showing their filtered post list.
+  useEffect(() => { if (isAdmin === true) loadPosts(); }, [isAdmin, loadPosts]);
+
+  // ── Gated states ───────────────────────────────────────────────────────
+  if (isAdmin === null) {
+    return (
+      <div style={{ background: "var(--bg)", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ width: 22, height: 22, border: "2px solid var(--border)", borderTopColor: brandColor, borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+  if (isAdmin === false) {
+    return (
+      <div style={{ background: "var(--bg)", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "48px 24px" }}>
+        <div style={{ maxWidth: 460, textAlign: "center" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 48, height: 48, borderRadius: 12, background: "var(--card)", border: "1px solid var(--border)", marginBottom: 20 }}>
+            <Lock size={20} color="var(--text-tertiary)" />
+          </div>
+          <h1 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "clamp(1.4rem, 2.6vw, 1.8rem)", fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.02em", margin: "0 0 10px" }}>
+            Admin only
+          </h1>
+          <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: 14, lineHeight: 1.6, color: "var(--text-secondary)", margin: "0 0 24px" }}>
+            Blog publishing is limited to the AI Marketing Lab operators. If you were expecting access, sign in with an authorised account.
+          </p>
+          <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
+            <Link href="/dashboard" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "var(--font-inter), sans-serif", fontSize: 13, fontWeight: 500, color: "#fff", background: brandColor, textDecoration: "none", padding: "10px 18px", borderRadius: 9 }}>
+              Back to dashboard
+            </Link>
+            <Link href="/blog" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "var(--font-inter), sans-serif", fontSize: 13, fontWeight: 500, color: "var(--text-primary)", background: "transparent", textDecoration: "none", padding: "10px 18px", borderRadius: 9, border: "1px solid var(--border)" }}>
+              Read the public blog
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   async function handleDelete(id: string) {
     const { error: deleteErr } = await supabase.from("blog_posts").delete().eq("id", id);

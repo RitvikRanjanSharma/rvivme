@@ -39,10 +39,20 @@ function Field({ label, children, hint }: { label: string; children: React.React
   );
 }
 
+// Open-redirect guard. `?redirect=//evil.com` is protocol-relative and most
+// browsers will follow it off-origin. Require leading `/` and reject `//`.
+function safeRedirect(raw: string | null): string {
+  const fallback = "/dashboard";
+  if (!raw) return fallback;
+  if (!raw.startsWith("/")) return fallback;
+  if (raw.startsWith("//") || raw.startsWith("/\\")) return fallback;
+  return raw;
+}
+
 function LoginForm() {
   const router       = useRouter();
   const searchParams = useSearchParams();
-  const redirect     = searchParams.get("redirect") ?? "/dashboard";
+  const redirect     = safeRedirect(searchParams.get("redirect"));
 
   const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");

@@ -18,10 +18,21 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 
+// Reject open-redirect attempts. A `?redirect=//evil.com` value is
+// protocol-relative — most browsers happily follow it off-origin. So we
+// require a leading `/` AND a second character that isn't `/` or `\`.
+function safeRedirect(raw: string | null): string {
+  const fallback = "/dashboard";
+  if (!raw) return fallback;
+  if (!raw.startsWith("/")) return fallback;
+  if (raw.startsWith("//") || raw.startsWith("/\\")) return fallback;
+  return raw;
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code     = searchParams.get("code");
-  const redirect = searchParams.get("redirect") ?? "/dashboard";
+  const redirect = safeRedirect(searchParams.get("redirect"));
 
   if (!code) {
     return NextResponse.redirect(`${origin}/auth/login`);

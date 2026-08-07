@@ -24,8 +24,9 @@ import {
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Bell, Brain, ChevronDown, FileText, LayoutDashboard, LogOut, Menu, Moon,
-  Newspaper, PenLine, Search, Settings, Sun, Target, User, Users, X,
+  AlertTriangle, Bell, Brain, ChevronDown, FileText, Gauge, LayoutDashboard,
+  LogOut, Menu, Moon, Newspaper, PenLine, Search, Settings, Sun, Target,
+  User, Users, X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -176,7 +177,9 @@ function UserCacheGuard() {
 const isAppRoute  = (p: string) =>
   p.startsWith("/dashboard")   || p.startsWith("/keywords")   ||
   p.startsWith("/competitors") || p.startsWith("/settings")   ||
-  p.startsWith("/strategies")  || p.startsWith("/content");
+  p.startsWith("/strategies")  || p.startsWith("/content")    ||
+  p.startsWith("/alerts")      || p.startsWith("/audit")      ||
+  p.startsWith("/onboarding");
 const isAuthRoute = (p: string) => p.startsWith("/auth");
 
 // ─── Nav definitions ──────────────────────────────────────────────────────────
@@ -191,11 +194,16 @@ const SIDEBAR_INTEL = [
   { href: "/keywords",       label: "Keywords",    icon: Search          },
   { href: "/competitors",    label: "Competitors", icon: Users           },
   { href: "/content",        label: "Content",     icon: PenLine         },
-  { href: "/dashboard/blog", label: "Blog admin",  icon: FileText        },
+  { href: "/audit",          label: "Site audit",  icon: Gauge           },
+  { href: "/alerts",         label: "Alerts",      icon: AlertTriangle   },
   { href: "/blog",           label: "Public blog", icon: Newspaper       },
 ] as const;
+// SIDEBAR_ADMIN — visible to all signed-in users. Blog admin is reachable
+// directly at /dashboard/blog by the operator (us) for publishing marketing
+// posts; we deliberately don't surface it in the nav so customers don't
+// stumble into a confusing "post to the AI Marketing Lab blog" surface.
 const SIDEBAR_ADMIN = [
-  { href: "/settings",    label: "Settings",    icon: Settings        },
+  { href: "/settings",       label: "Settings",    icon: Settings        },
 ] as const;
 
 // ─── Shared visual primitives ─────────────────────────────────────────────────
