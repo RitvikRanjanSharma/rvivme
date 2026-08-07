@@ -7,7 +7,7 @@
 // Phase 3: converge to headline
 // Phase 4: scroll disperse/reconverge
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence, useInView } from "framer-motion";
 import { ArrowUpRight, ArrowRight } from "lucide-react";
@@ -324,24 +324,25 @@ function MasterCanvas({
           a  = t < 0.08 ? t / 0.08 : 1;
           p.x = px; p.y = py;
         } else if (ph === "idle") {
-          // easeInExpo held particles nearly still until sf≈0.5, which is why
-          // the headline appeared to overlap the paragraph below on first
-          // scroll. easeOutQuad kicks in from the very first pixel — particles
-          // fly outward and fade immediately, so by the time the subheadline
-          // scrolls up the headline is already gone.
-          const disperseT = 1 - Math.pow(1 - sf, 2);
+          // HOLD: the headline stays fully formed (0 dispersal) for the first
+          // half of the scroll range — it shouldn't start breaking apart the
+          // instant the user nudges the wheel. Past the hold point, remap the
+          // remaining scroll into a fresh 0→1 range and ease that out, so all
+          // the dispersal happens in the second half of the scroll distance.
+          const HOLD = 0.5;
+          const sf2  = sf < HOLD ? 0 : (sf - HOLD) / (1 - HOLD);
+          const disperseT = 1 - Math.pow(1 - sf2, 2);
           const dirX = p.rx - p.tx;
           const dirY = p.ry - p.ty;
-          const dx   = dirX * disperseT * (1 + sf * 2);
-          const dy   = dirY * disperseT * (1 + sf * 2);
+          const dx   = dirX * disperseT * (1 + sf2 * 2);
+          const dy   = dirY * disperseT * (1 + sf2 * 2);
           p.dp  += p.dps;
-          const drift = clamp(1 - sf * 6, 0, 1);
+          const drift = clamp(1 - sf2 * 6, 0, 1);
           p.x   = p.tx + dx + Math.sin(p.dp) * 1.2 * drift;
           p.y   = p.ty + dy + Math.cos(p.dp * 0.7) * 0.6 * drift;
           px    = p.x; py = p.y;
-          // Also fade faster so what's still on screen dims noticeably rather
-          // than reading as fully-inked serif letters over the paragraph.
-          a     = clamp(1 - sf * 1.4, 0.02, 1);
+          // Fully opaque through the hold, then fades as it disperses.
+          a     = clamp(1 - sf2 * 1.4, 0.02, 1);
         }
 
         if (a <= 0.01) continue;
@@ -659,9 +660,19 @@ export default function HomePage() {
   const scrollFrac = useRef(0);
   const heroRef    = useRef<HTMLDivElement>(null);
 
-  const [skipIntro] = useState(() =>
-    typeof window !== "undefined" && !!sessionStorage.getItem("aiml-intro-seen")
-  );
+  // Hydration fix: this MUST start false on both server and client so the
+  // first client render matches the server-rendered HTML exactly (server
+  // never has sessionStorage, so it always renders the canvas/intro tree).
+  // Reading sessionStorage inside a layout effect — instead of the useState
+  // initializer — defers the check until after hydration has already
+  // reconciled successfully. useLayoutEffect (not useEffect) fires
+  // synchronously before the browser paints, so a returning visitor still
+  // doesn't see a flash of the counter intro before it flips to "idle".
+  const [skipIntro, setSkipIntro] = useState(false);
+
+  useLayoutEffect(() => {
+    if (sessionStorage.getItem("aiml-intro-seen")) setSkipIntro(true);
+  }, []);
 
   // Detect dark/light mode
   useEffect(() => {
@@ -684,10 +695,14 @@ export default function HomePage() {
     function onScroll() {
       const heroEl = heroRef.current;
       if (!heroEl) return;
-      // Divisor was 1.8× hero height — meant the headline stayed fully drawn
-      // long after the subheadline had scrolled up into it. 0.45× makes the
-      // headline fully dispersed by the time the subheadline reaches it.
-      scrollFrac.current = clamp(window.scrollY / (heroEl.offsetHeight * 0.45), 0, 1);
+      // Divisor was 1.8× hero height originally (headline stayed solid long
+      // after the subheadline scrolled into it), then 0.45× (dispersal started
+      // on the very first pixel — too twitchy), then 0.7×. 0.55× plus the
+      // HOLD=0.5 zone below the particle loop: the headline sits fully formed
+      // for the first ~half of this distance, then disperses over the second
+      // half — still fully gone before the subheadline reaches it, just over
+      // a slightly shorter total scroll distance than 0.7× gave.
+      scrollFrac.current = clamp(window.scrollY / (heroEl.offsetHeight * 0.55), 0, 1);
     }
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);

@@ -317,7 +317,10 @@ async function safeFetchHtml(url: string): Promise<{ ok: true; html: string; sta
     const res = await fetch(url, {
       headers:  { "User-Agent": "AIMarketingLabBot/1.0 (+https://aimarketinglab.co.uk/bot)" },
       redirect: "follow",
-      // @ts-expect-error — Next.js fetch supports this in route handlers
+      // Next.js's fetch types now include `next.revalidate` on RequestInit
+      // directly — the old @ts-expect-error suppressor is stale and TS now
+      // flags it as an unused directive, which fails `next build`'s type
+      // check (this is what broke the last two deployments).
       next: { revalidate: 0 },
     });
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, status: res.status };
