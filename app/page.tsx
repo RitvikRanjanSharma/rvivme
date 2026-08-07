@@ -331,18 +331,32 @@ function MasterCanvas({
           // the dispersal happens in the second half of the scroll distance.
           const HOLD = 0.5;
           const sf2  = sf < HOLD ? 0 : (sf - HOLD) / (1 - HOLD);
-          const disperseT = 1 - Math.pow(1 - sf2, 2);
+          // Gentler ramp than easeOutQuad: cubic-in-out drifts apart slowly at
+          // first and eases out at the end, so the break-up reads as a slow
+          // dissolve rather than an explosion.
+          const disperseT = sf2 < 0.5
+            ? 4 * sf2 * sf2 * sf2
+            : 1 - Math.pow(-2 * sf2 + 2, 3) / 2;
           const dirX = p.rx - p.tx;
           const dirY = p.ry - p.ty;
-          const dx   = dirX * disperseT * (1 + sf2 * 2);
-          const dy   = dirY * disperseT * (1 + sf2 * 2);
+          // Travel multiplier reduced from (1 + sf2*2) to (0.35 + sf2*0.5) so
+          // particles drift a shorter distance and settle into a loose field
+          // behind the content instead of flying off-screen.
+          const spread = 0.35 + sf2 * 0.5;
+          const dx   = dirX * disperseT * spread;
+          const dy   = dirY * disperseT * spread;
           p.dp  += p.dps;
-          const drift = clamp(1 - sf2 * 6, 0, 1);
+          // Keep the ambient sine drift alive the whole way through — it's what
+          // makes the settled field feel like a living background rather than
+          // a frozen scatter.
+          const drift = clamp(1 - sf2 * 0.5, 0.5, 1);
           p.x   = p.tx + dx + Math.sin(p.dp) * 1.2 * drift;
           p.y   = p.ty + dy + Math.cos(p.dp * 0.7) * 0.6 * drift;
           px    = p.x; py = p.y;
-          // Fully opaque through the hold, then fades as it disperses.
-          a     = clamp(1 - sf2 * 1.4, 0.02, 1);
+          // Fade to a 0.5 floor (not 0.02) so the particles never fully vanish
+          // — past full dispersal they persist at half opacity as background
+          // texture, the way the original design read.
+          a     = clamp(1 - sf2 * 0.5, 0.5, 1);
         }
 
         if (a <= 0.01) continue;
@@ -747,7 +761,7 @@ export default function HomePage() {
         {/* Hero — padding-top pushed from 18vh → 28vh so the eyebrow row at
              top:72px is no longer crowding the top of the particle headline.
              The spacer div below keeps the CTA/subheadline in rhythm. */}
-        <div ref={heroRef} style={{ minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "flex-start", padding: "28vh 32px 64px", position: "relative" }}>
+        <div ref={heroRef} style={{ minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "flex-start", padding: "calc(28vh - 10px) 32px 64px", position: "relative" }}>
           <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 70% 50% at 50% 0%, rgba(37,99,235,0.05) 0%, transparent 65%)", pointerEvents: "none" }} />
 
           <AnimatePresence>
@@ -756,7 +770,7 @@ export default function HomePage() {
                 style={{ position: "absolute", top: "72px", left: "32px", right: "32px", display: "flex", justifyContent: "space-between", zIndex: 2 }}
               >
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--text-tertiary)" }}>GEO Intelligence Platform</span>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.1em", color: "var(--text-tertiary)" }}>Est. 2026 · Welwyn Garden City, UK</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.1em", color: "var(--text-tertiary)" }}>Est. 2026 · London, UK</span>
               </motion.div>
             )}
           </AnimatePresence>

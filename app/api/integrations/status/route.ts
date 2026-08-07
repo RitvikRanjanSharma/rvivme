@@ -41,6 +41,17 @@ function anthropicStatus(): Status {
   return "connected";
 }
 
+// Perplexity powers content drafting (see app/api/perplexity/route.ts).
+// Keys are prefixed "pplx-".
+function perplexityStatus(): Status {
+  const k = process.env.PERPLEXITY_API_KEY;
+  if (!ok(k)) return "disconnected";
+  const trimmed = String(k).trim();
+  if (!trimmed.startsWith("pplx-")) return "disconnected";
+  if (trimmed.length < 20) return "disconnected";
+  return "connected";
+}
+
 function supabaseStatus(): Status {
   return ok(process.env.NEXT_PUBLIC_SUPABASE_URL) && ok(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
     ? "connected"
@@ -74,6 +85,7 @@ export async function GET() {
     gsc,
     dataforseo: dfsStatus(),
     anthropic:  anthropicStatus(),
+    perplexity: perplexityStatus(),
     supabase:   supabaseStatus(),
   });
 }

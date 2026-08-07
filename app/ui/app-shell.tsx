@@ -29,6 +29,7 @@ import {
   User, Users, X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { isAdminEmail } from "@/lib/admin";
 
 // ─── Theme context ────────────────────────────────────────────────────────────
 type ThemeMode = "dark" | "light";
@@ -198,12 +199,17 @@ const SIDEBAR_INTEL = [
   { href: "/alerts",         label: "Alerts",      icon: AlertTriangle   },
   { href: "/blog",           label: "Public blog", icon: Newspaper       },
 ] as const;
-// SIDEBAR_ADMIN — visible to all signed-in users. Blog admin is reachable
-// directly at /dashboard/blog by the operator (us) for publishing marketing
-// posts; we deliberately don't surface it in the nav so customers don't
-// stumble into a confusing "post to the AI Marketing Lab blog" surface.
+// SIDEBAR_ADMIN — visible to all signed-in users.
 const SIDEBAR_ADMIN = [
   { href: "/settings",       label: "Settings",    icon: Settings        },
+] as const;
+
+// SIDEBAR_OPERATOR — only rendered for emails on the NEXT_PUBLIC_ADMIN_EMAILS
+// allowlist. Blog publishing writes to the public AI Marketing Lab blog, so
+// customers should never see this entry (previously it was hidden from every
+// user, which meant even operators had to type the URL by hand).
+const SIDEBAR_OPERATOR = [
+  { href: "/dashboard/blog", label: "Blog admin",  icon: Newspaper       },
 ] as const;
 
 // ─── Shared visual primitives ─────────────────────────────────────────────────
@@ -407,6 +413,33 @@ function MarketingHeader() {
   const { brandColor, mode, toggleMode } = useTheme();
   const [scrolled, setScrolled] = useState(false);
 
+  // Auth-aware CTA. Starts null (= "unknown") and renders the signed-out
+  // buttons, which is what the server renders too — keeping the first client
+  // paint identical to the SSR output so we don't reintroduce a hydration
+  // mismatch. Once the session resolves we swap to a single Dashboard button.
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!cancelled) setSignedIn(!!user);
+      } catch {
+        if (!cancelled) setSignedIn(false);
+      }
+    })();
+    // Keep the header in sync if the user signs in/out in another tab or
+    // hits the login page and comes back without a full reload.
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      setSignedIn(!!session?.user);
+    });
+    return () => {
+      cancelled = true;
+      sub?.subscription?.unsubscribe();
+    };
+  }, []);
+
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 20);
     fn();
@@ -481,35 +514,51 @@ function MarketingHeader() {
             </motion.div>
           </AnimatePresence>
         </IconButton>
-        <Link
-          href="/auth/login"
-          className="aiml-marketing-signin"
-          style={{
+        {signedIn ? (
+          /* Signed in — a single Dashboard button replaces both CTAs. */
+          <Link href="/dashboard" style={{
             fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 500,
-            color: "var(--text-secondary)", textDecoration: "none",
+            color: "#fff", background: brandColor, textDecoration: "none",
             padding: "11px 22px", borderRadius: "100px",
-            border: "1px solid var(--border)",
-            transition: "color var(--dur-fast), border-color var(--dur-fast)",
+            boxShadow: "0 0 22px var(--brand-glow)",
+            transition: "opacity var(--dur-fast)",
           }}
-          onMouseEnter={e => {
-            (e.currentTarget as HTMLElement).style.color = "var(--text-primary)";
-            (e.currentTarget as HTMLElement).style.borderColor = "var(--border-strong)";
-          }}
-          onMouseLeave={e => {
-            (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)";
-            (e.currentTarget as HTMLElement).style.borderColor = "var(--border)";
-          }}
-        >Sign in</Link>
-        <Link href="/dashboard" style={{
-          fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 500,
-          color: "#fff", background: brandColor, textDecoration: "none",
-          padding: "11px 22px", borderRadius: "100px",
-          boxShadow: "0 0 22px var(--brand-glow)",
-          transition: "opacity var(--dur-fast)",
-        }}
-          onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "0.85"}
-          onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
-        >Get started</Link>
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "0.85"}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
+          >Dashboard</Link>
+        ) : (
+          <>
+            <Link
+              href="/auth/login"
+              className="aiml-marketing-signin"
+              style={{
+                fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 500,
+                color: "var(--text-secondary)", textDecoration: "none",
+                padding: "11px 22px", borderRadius: "100px",
+                border: "1px solid var(--border)",
+                transition: "color var(--dur-fast), border-color var(--dur-fast)",
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.color = "var(--text-primary)";
+                (e.currentTarget as HTMLElement).style.borderColor = "var(--border-strong)";
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)";
+                (e.currentTarget as HTMLElement).style.borderColor = "var(--border)";
+              }}
+            >Sign in</Link>
+            <Link href="/dashboard" style={{
+              fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 500,
+              color: "#fff", background: brandColor, textDecoration: "none",
+              padding: "11px 22px", borderRadius: "100px",
+              boxShadow: "0 0 22px var(--brand-glow)",
+              transition: "opacity var(--dur-fast)",
+            }}
+              onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "0.85"}
+              onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
+            >Get started</Link>
+          </>
+        )}
       </div>
     </header>
   );
@@ -608,6 +657,29 @@ function AppSidebar({ open = false }: { open?: boolean }) {
   const pathname = usePathname();
   const { brandColor } = useTheme();
 
+  // Operator-only nav (Blog admin). Resolved after mount so the first client
+  // paint matches SSR; non-admins never see the entry at all.
+  const [isOperator, setIsOperator] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!cancelled) setIsOperator(isAdminEmail(user?.email));
+      } catch {
+        if (!cancelled) setIsOperator(false);
+      }
+    })();
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      setIsOperator(isAdminEmail(session?.user?.email));
+    });
+    return () => {
+      cancelled = true;
+      sub?.subscription?.unsubscribe();
+    };
+  }, []);
+
   const renderItem = (
     item: { href: string; label: string; icon: React.ComponentType<{ size?: number; color?: string }> },
   ) => {
@@ -677,6 +749,7 @@ function AppSidebar({ open = false }: { open?: boolean }) {
         color: "var(--text-tertiary)",
       }}>Admin</span>
       {SIDEBAR_ADMIN.map(renderItem)}
+      {isOperator && SIDEBAR_OPERATOR.map(renderItem)}
 
       <div style={{ marginTop: "auto", paddingTop: "20px" }}>
         <div style={{
@@ -707,7 +780,7 @@ function Footer() {
         fontFamily: "var(--font-body)", fontSize: "13px",
         color: "var(--text-tertiary)",
       }}>
-        © {new Date().getFullYear()} AI Marketing Lab · Welwyn Garden City, UK
+        © {new Date().getFullYear()} AI Marketing Lab · London, UK
       </span>
       <div style={{ display: "flex", gap: "24px" }}>
         {[

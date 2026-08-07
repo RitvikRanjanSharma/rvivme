@@ -296,14 +296,25 @@ function ConnectionBanner({
 }
 
 // ── Projection chart ───────────────────────────────────────────────────────────
-function ProjectionChart({ brandColor, ga4Trend, ga4Loading }: { brandColor:string; ga4Trend:GA4TrendPoint[]; ga4Loading:boolean }) {
+function ProjectionChart({ brandColor, ga4Trend, ga4Loading, ga4Reason, ga4Message }: {
+  brandColor:string; ga4Trend:GA4TrendPoint[]; ga4Loading:boolean;
+  ga4Reason?: ConnReason; ga4Message?: string | null;
+}) {
   const chartRef = useRef<HTMLDivElement>(null);
   const inView   = useInView(chartRef, { once:true, margin:"-60px" });
   const { data, currentMTD, forecast6M, growthPct, confidence, handoffMonth } = buildChartData(ga4Trend);
   const isReal = ga4Trend.length > 0;
 
-  // Empty-state — GA4 not connected and not currently loading.
+  // Empty-state. Two very different situations were previously collapsed into
+  // one misleading "Connect GA4" CTA:
+  //   not_configured → genuinely no property ID stored; "Connect GA4" is right.
+  //   api_error      → a property IS stored but Google rejected the call. Most
+  //                    often the shared service account lacks Viewer access on
+  //                    that GA4 property. Telling the user to "connect GA4"
+  //                    here sends them to a settings page that already looks
+  //                    correctly filled in — a dead end. Show the real error.
   if (!isReal && !ga4Loading) {
+    const isApiError = ga4Reason === "api_error";
     return (
       <motion.div ref={chartRef} variants={pv(0.2)} initial="hidden" animate="visible">
         <Panel style={{ padding:"32px 24px" }}>
@@ -311,23 +322,36 @@ function ProjectionChart({ brandColor, ga4Trend, ga4Loading }: { brandColor:stri
             <div style={{ fontFamily:"var(--font-body)", fontSize:"15px", fontWeight:600, color:"var(--text-primary)" }}>
               Organic Traffic · 6-Month AI Projection
             </div>
-            <div style={{ fontFamily:"var(--font-mono)", fontSize:"11px", color:"var(--text-tertiary)", letterSpacing:"0.08em" }}>
-              AWAITING GA4 CONNECTION
+            <div style={{ fontFamily:"var(--font-mono)", fontSize:"11px", color: isApiError ? "var(--signal-amber)" : "var(--text-tertiary)", letterSpacing:"0.08em" }}>
+              {isApiError ? "GA4 CONNECTION ERROR" : "AWAITING GA4 CONNECTION"}
             </div>
           </div>
 
           <div style={{
             display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
-            padding:"44px 24px", background:"var(--card)", border:"1px dashed var(--border)",
+            padding:"44px 24px", background:"var(--card)",
+            border:`1px dashed ${isApiError ? "rgba(255,171,0,0.35)" : "var(--border)"}`,
             borderRadius:"10px", textAlign:"center", gap:"10px",
           }}>
-            <Activity size={18} color="var(--text-tertiary)" />
+            <Activity size={18} color={isApiError ? "var(--signal-amber)" : "var(--text-tertiary)"} />
             <div style={{ fontFamily:"var(--font-body)", fontSize:"14px", fontWeight:500, color:"var(--text-primary)" }}>
-              No traffic data yet
+              {isApiError ? "GA4 rejected the request" : "No traffic data yet"}
             </div>
             <div style={{ fontFamily:"var(--font-body)", fontSize:"13px", color:"var(--text-secondary)", lineHeight:1.6, maxWidth:"460px" }}>
-              Connect Google Analytics 4 to see your actual sessions projected six months forward with honest confidence intervals.
+              {isApiError
+                ? "Your property ID is saved, but Google returned an error. The usual cause is the service account not having Viewer access on this GA4 property — add it under GA4 Admin → Property access management."
+                : "Connect Google Analytics 4 to see your actual sessions projected six months forward with honest confidence intervals."}
             </div>
+            {isApiError && ga4Message && (
+              <div style={{
+                fontFamily:"var(--font-mono)", fontSize:"11px", color:"var(--text-tertiary)",
+                lineHeight:1.5, maxWidth:"560px", marginTop:"2px",
+                wordBreak:"break-word", textAlign:"left",
+                background:"var(--muted)", borderRadius:"6px", padding:"8px 10px",
+              }}>
+                {ga4Message}
+              </div>
+            )}
             <a href="/settings?tab=integrations" style={{
               display:"inline-flex", alignItems:"center", gap:"6px",
               fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:500,
@@ -335,7 +359,7 @@ function ProjectionChart({ brandColor, ga4Trend, ga4Loading }: { brandColor:stri
               padding:"8px 18px", borderRadius:"100px", marginTop:"4px",
               transition:"opacity 0.16s",
             }}>
-              Connect GA4 <ArrowRight size={12}/>
+              {isApiError ? "Review settings" : "Connect GA4"} <ArrowRight size={12}/>
             </a>
           </div>
         </Panel>
@@ -984,7 +1008,7 @@ export default function DashboardPage() {
       <ActiveStrategyBanner brandColor={brandColor}/>
 
       <div style={{ display:"flex", flexDirection:"column", gap:"32px" }}>
-        <ProjectionChart brandColor={brandColor} ga4Trend={ga4Trend} ga4Loading={ga4Loading}/>
+        <ProjectionChart brandColor={brandColor} ga4Trend={ga4Trend} ga4Loading={ga4Loading} ga4Reason={ga4Reason} ga4Message={ga4Message}/>
         <GA4Panel brandColor={brandColor}/>
         <GSCPanel brandColor={brandColor}/>
         <BacklinksPanel brandColor={brandColor} domain={domain}/>

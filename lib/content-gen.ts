@@ -106,7 +106,10 @@ Rules:
 - Weave keywords into headings and first paragraph where it reads natural.
 - End body with a short CTA paragraph (sign up, get started, or contextual).`;
 
-  const res = await fetch("/api/claude", {
+  // Content drafting runs on Perplexity (see app/api/perplexity/route.ts).
+  // Strategy generation and keyword matching still use /api/claude — only
+  // long-form content generation was moved.
+  const res = await fetch("/api/perplexity", {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
     body:    JSON.stringify({ prompt, max_tokens: 4000 }),
@@ -115,14 +118,34 @@ Rules:
   if (data?.reason === "not_configured") throw new Error("AI is not configured on this workspace.");
   if (!res.ok || data.error)             throw new Error(data.error ?? "Draft generation failed");
 
-  const raw  = (data.text ?? "{}").replace(/```json|```/g,"").trim();
-  const json = JSON.parse(raw) as {
+  // Perplexity is chattier than Claude about wrapping structured output — it
+  // often prefixes JSON with a sentence of preamble and appends bracketed
+  // citation markers ([1], [2]) from its web grounding. A bare JSON.parse on
+  // the whole response therefore throws. Strip fences, drop citation markers,
+  // then extract the outermost {...} block before parsing.
+  const cleaned = String(data.text ?? "{}")
+    .replace(/```json|```/g, "")
+    .replace(/\[\d+\]/g, "")
+    .trim();
+
+  const first = cleaned.indexOf("{");
+  const last  = cleaned.lastIndexOf("}");
+  const raw   = first !== -1 && last > first ? cleaned.slice(first, last + 1) : cleaned;
+
+  let json: {
     title:           string;
     slug?:           string;
     excerpt:         string;
     metaDescription: string;
     bodyMarkdown:    string;
   };
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    throw new Error(
+      "The AI returned a draft we couldn't parse. Try generating again — if it keeps happening, the model may be ignoring the JSON format instruction."
+    );
+  }
 
   const words = wordCountOf(json.bodyMarkdown ?? "");
 
