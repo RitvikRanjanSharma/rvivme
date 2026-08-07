@@ -11,6 +11,7 @@ import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react
 import Link from "next/link";
 import { motion, AnimatePresence, useInView } from "framer-motion";
 import { ArrowUpRight, ArrowRight } from "lucide-react";
+import { useAuthState } from "@/app/ui/app-shell";
 
 const EASE_EXPO = [0.16, 1, 0.3, 1] as const;
 const CAPABILITIES = [
@@ -673,6 +674,9 @@ export default function HomePage() {
   const [isDark,          setIsDark]          = useState(true);
   const scrollFrac = useRef(0);
   const heroRef    = useRef<HTMLDivElement>(null);
+  // Drives the closing CTA — signed-in visitors get "Go to your dashboard"
+  // instead of a free-trial pitch.
+  const { signedIn } = useAuthState();
 
   // Hydration fix: this MUST start false on both server and client so the
   // first client render matches the server-rendered HTML exactly (server
@@ -936,10 +940,12 @@ export default function HomePage() {
                   </p>
                 </FadeUp>
                 <FadeUp delay={0.22}>
-                  <Link href="/auth/signup" style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontFamily: "var(--font-body)", fontSize: "15px", fontWeight: 500, color: "#fff", background: "var(--brand)", textDecoration: "none", padding: "15px 36px", borderRadius: "100px", transition: "opacity 0.16s", position: "relative", zIndex: 1 }}
+                  {/* Signed-in visitors shouldn't be pitched a free trial they
+                      already have — send them straight to the dashboard. */}
+                  <Link href={signedIn ? "/dashboard" : "/auth/signup"} style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontFamily: "var(--font-body)", fontSize: "15px", fontWeight: 500, color: "#fff", background: "var(--brand)", textDecoration: "none", padding: "15px 36px", borderRadius: "100px", transition: "opacity 0.16s", position: "relative", zIndex: 1 }}
                     onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "0.85"}
                     onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
-                  >Start your free trial <ArrowUpRight size={15} /></Link>
+                  >{signedIn ? "Go to your dashboard" : "Start your free trial"} <ArrowUpRight size={15} /></Link>
                 </FadeUp>
               </section>
             </motion.div>

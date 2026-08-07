@@ -174,6 +174,51 @@ function UserCacheGuard() {
   return null;
 }
 
+// ─── Auth state hook ──────────────────────────────────────────────────────────
+// Shared by MarketingHeader, AppSidebar and Footer so the three surfaces can't
+// drift out of sync about whether someone is signed in.
+//
+// Returns { signedIn, isOperator }. Both start false so the first client render
+// matches the server-rendered HTML exactly (the server has no session cookie
+// access here) — resolving after mount avoids a hydration mismatch. The
+// practical effect is a brief signed-out flash on first paint, which is the
+// correct trade: rendering the signed-in state optimistically would break
+// hydration for every logged-out visitor.
+export function useAuthState() {
+  const [signedIn,   setSignedIn]   = useState(false);
+  const [isOperator, setIsOperator] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const apply = (email: string | null | undefined, present: boolean) => {
+      if (cancelled) return;
+      setSignedIn(present);
+      setIsOperator(present && isAdminEmail(email));
+    };
+
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        apply(user?.email, !!user);
+      } catch {
+        apply(null, false);
+      }
+    })();
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      apply(session?.user?.email, !!session?.user);
+    });
+
+    return () => {
+      cancelled = true;
+      sub?.subscription?.unsubscribe();
+    };
+  }, []);
+
+  return { signedIn, isOperator };
+}
+
 // ─── Route helpers ────────────────────────────────────────────────────────────
 const isAppRoute  = (p: string) =>
   p.startsWith("/dashboard")   || p.startsWith("/keywords")   ||
@@ -413,32 +458,8 @@ function MarketingHeader() {
   const { brandColor, mode, toggleMode } = useTheme();
   const [scrolled, setScrolled] = useState(false);
 
-  // Auth-aware CTA. Starts null (= "unknown") and renders the signed-out
-  // buttons, which is what the server renders too — keeping the first client
-  // paint identical to the SSR output so we don't reintroduce a hydration
-  // mismatch. Once the session resolves we swap to a single Dashboard button.
-  const [signedIn, setSignedIn] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!cancelled) setSignedIn(!!user);
-      } catch {
-        if (!cancelled) setSignedIn(false);
-      }
-    })();
-    // Keep the header in sync if the user signs in/out in another tab or
-    // hits the login page and comes back without a full reload.
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
-      setSignedIn(!!session?.user);
-    });
-    return () => {
-      cancelled = true;
-      sub?.subscription?.unsubscribe();
-    };
-  }, []);
+  // Auth-aware CTA — signed-in visitors get a single Dashboard button.
+  const { signedIn } = useAuthState();
 
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 20);
@@ -657,28 +678,8 @@ function AppSidebar({ open = false }: { open?: boolean }) {
   const pathname = usePathname();
   const { brandColor } = useTheme();
 
-  // Operator-only nav (Blog admin). Resolved after mount so the first client
-  // paint matches SSR; non-admins never see the entry at all.
-  const [isOperator, setIsOperator] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!cancelled) setIsOperator(isAdminEmail(user?.email));
-      } catch {
-        if (!cancelled) setIsOperator(false);
-      }
-    })();
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
-      setIsOperator(isAdminEmail(session?.user?.email));
-    });
-    return () => {
-      cancelled = true;
-      sub?.subscription?.unsubscribe();
-    };
-  }, []);
+  // Operator-only nav (Blog admin). Non-admins never see the entry at all.
+  const { isOperator } = useAuthState();
 
   const renderItem = (
     item: { href: string; label: string; icon: React.ComponentType<{ size?: number; color?: string }> },
@@ -768,7 +769,24 @@ function AppSidebar({ open = false }: { open?: boolean }) {
 // ─── Footer (marketing only) ──────────────────────────────────────────────────
 function Footer() {
   const pathname = usePathname();
+  // NOTE: this hook must be called before the early return below — bailing out
+  // first would call a different number of hooks on marketing vs app routes and
+  // violate the Rules of Hooks.
+  const { signedIn } = useAuthState();
   if (isAuthRoute(pathname) || isAppRoute(pathname)) return null;
+
+  // Signed-in visitors have no use for a "Sign in" link; drop it rather than
+  // swapping the label, since "Dashboard" is already in this list.
+  const footerLinks = signedIn
+    ? [
+        { href: "/blog",      label: "Blog"      },
+        { href: "/dashboard", label: "Dashboard" },
+      ]
+    : [
+        { href: "/blog",       label: "Blog"      },
+        { href: "/dashboard",  label: "Dashboard" },
+        { href: "/auth/login", label: "Sign in"   },
+      ];
 
   return (
     <footer style={{
@@ -783,11 +801,7 @@ function Footer() {
         © {new Date().getFullYear()} AI Marketing Lab · London, UK
       </span>
       <div style={{ display: "flex", gap: "24px" }}>
-        {[
-          { href: "/blog",       label: "Blog"      },
-          { href: "/dashboard",  label: "Dashboard" },
-          { href: "/auth/login", label: "Sign in"   },
-        ].map(({ href, label }) => (
+        {footerLinks.map(({ href, label }) => (
           <Link key={href} href={href} style={{
             fontFamily: "var(--font-body)", fontSize: "13px",
             color: "var(--text-tertiary)", textDecoration: "none",

@@ -344,7 +344,7 @@ function IntegrationsTab({ brandColor }: { brandColor: string }) {
     { id: "perplexity", name: "Perplexity",              desc: "Blog and landing-page content drafting",      icon: PenLine,  status: pplxSt, note: "PERPLEXITY_API_KEY in server env" },
     { id: "ga4",        name: "Google Analytics 4",      desc: "Traffic, sessions, and user behaviour data",  icon: BarChart3, status: ga4St, note: ga4PropertyId.trim() ? `property ${ga4PropertyId.trim()}` : "Not configured — add your property ID below" },
     { id: "gsc",        name: "Google Search Console",   desc: "Impressions, clicks, positions, CTR",         icon: Globe2,   status: gscSt, note: gscSiteUrl.trim() || `Not configured — add your site URL below` },
-    { id: "dataforseo", name: "DataForSEO",              desc: "Keywords, SERP, backlinks, AI Overviews",     icon: Cpu,      status: dfsSt, note: "UK (2826) · Standard plan" },
+    { id: "dataforseo", name: "DataForSEO",              desc: "Retired — backlinks, competitor data, live SERP", icon: Cpu,  status: dfsSt, note: "Out of credits — keyword data now comes from Google Trends + Search Console" },
   ] as const;
 
   const statusCfg: Record<IntgStatus, { label: string; color: string; bg: string }> = {

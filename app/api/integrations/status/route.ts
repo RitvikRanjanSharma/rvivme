@@ -26,10 +26,13 @@ function serviceAccountOk(): boolean {
   return true;
 }
 
+// DataForSEO is retired: the account is out of credits (top-up minimum is $50)
+// and every /api/dataforseo/* route is now a disabled stub returning
+// { reason: "unavailable" }. Reporting "connected" just because credentials
+// still sit in the env would be a lie — nothing behind it works. Always
+// "disconnected" until/unless the account is funded and the routes restored.
 function dfsStatus(): Status {
-  return ok(process.env.DATAFORSEO_LOGIN) && ok(process.env.DATAFORSEO_PASSWORD)
-    ? "connected"
-    : "disconnected";
+  return "disconnected";
 }
 
 function anthropicStatus(): Status {
