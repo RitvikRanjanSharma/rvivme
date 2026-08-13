@@ -654,7 +654,7 @@ function IntegrationsTab({ brandColor }: { brandColor: string }) {
                   </li>
                   <li>
                     Your <strong>Property ID</strong> is shown top-right — a plain
-                    number like <code style={{ fontFamily: "var(--font-mono)", fontSize: "11.5px", background: "var(--muted)", padding: "1px 5px", borderRadius: "4px" }}>518782250</code>.
+                    number like <code style={{ fontFamily: "var(--font-mono)", fontSize: "11.5px", background: "var(--muted)", padding: "1px 5px", borderRadius: "4px" }}>123456789</code>.
                   </li>
                   <li>Paste just that number above — no “G-”, no spaces.</li>
                 </ol>
