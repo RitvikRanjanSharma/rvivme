@@ -238,6 +238,7 @@ export default function OnboardingPage() {
           {step.id === "audit"       && <AuditStep websiteUrl={websiteUrl} />}
 
           <div
+            className="aiml-button-row"
             style={{
               marginTop:      32,
               display:        "flex",
@@ -254,7 +255,7 @@ export default function OnboardingPage() {
               Back
             </button>
 
-            <div style={{ display: "flex", gap: 10 }}>
+            <div className="aiml-button-row" style={{ display: "flex", gap: 10 }}>
               {!isLast && step.id !== "welcome" && (
                 <button onClick={() => setStepIdx(i => i + 1)} disabled={busy} style={btnGhost(false)}>
                   Skip for now
@@ -378,9 +379,12 @@ function AnalyticsStep({
           fontSize:     13,
         }}
       >
-        You&rsquo;ll need to grant our service account read access to these properties.
-        We&rsquo;ll show you how on the dashboard. Skip for now if you&rsquo;d rather do
-        it later — the rest of the app still works.
+        {/* Copy updated for per-user OAuth — there is no service account to
+            grant access to any more. Settings offers a "Connect Google" button
+            that lists the properties you already have access to. */}
+        You can skip this and connect Google from Settings instead — you&rsquo;ll then
+        pick your property from a list rather than typing IDs. Either way, the rest
+        of the app works without it.
       </div>
     </div>
   );

@@ -285,7 +285,17 @@ export function GSCPanel({ brandColor }: { brandColor: string }) {
       const res = await fetch("/api/gsc");
       if (!res.ok) throw new Error(`API error ${res.status}`);
       const json = await res.json();
-      if (!json.success) throw new Error(json.error ?? "Unknown error");
+      // The API returns { success:false, reason, message } — not `error`.
+      // Reading the wrong field is why every failure surfaced as the useless
+      // "Unknown error". Prefer message, fall back to a reason-specific line.
+      if (!json.success) {
+        const REASONS: Record<string, string> = {
+          not_connected:   "Connect your Google account in Settings to see this data.",
+          reauth_required: "Google access expired — reconnect in Settings.",
+          not_configured:  "Not configured yet. Add your property in Settings.",
+        };
+        throw new Error(json.message ?? REASONS[json.reason] ?? "Could not load data.");
+      }
       setData(json);
       setLastUpdated(new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) + " GMT");
     } catch (e: any) {
@@ -302,7 +312,7 @@ export function GSCPanel({ brandColor }: { brandColor: string }) {
   return (
     <div>
       {/* Section header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
+      <div className="aiml-panel-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <span style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "11px", fontWeight: 700, color: "var(--text-tertiary)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
             Google Search Console · Live
@@ -333,7 +343,7 @@ export function GSCPanel({ brandColor }: { brandColor: string }) {
       </AnimatePresence>
 
       {/* KPI strip */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginBottom: "14px" }}>
+      <div className="aiml-kpi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginBottom: "14px" }}>
         <KpiCard label="Total Clicks (28d)"       value={summary ? fmtNum(summary.clicks)      : "—"} icon={MousePointerClick} color={brandColor}           loading={loading} />
         <KpiCard label="Impressions (28d)"        value={summary ? fmtNum(summary.impressions)  : "—"} icon={Eye}               color="var(--signal-green)"  loading={loading} />
         <KpiCard label="Click-Through Rate"       value={summary ? `${summary.ctr}%`            : "—"} icon={TrendingUp}        color="var(--signal-amber)"  loading={loading} hint="AVG" />
@@ -346,7 +356,7 @@ export function GSCPanel({ brandColor }: { brandColor: string }) {
       </div>
 
       {/* Bottom row — queries + pages */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+      <div className="aiml-split-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
         <TopQueries queries={data?.topQueries ?? []} loading={loading} />
         <TopPages   pages={data?.topPages    ?? []} loading={loading} />
       </div>

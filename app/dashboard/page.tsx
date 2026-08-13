@@ -1012,11 +1012,11 @@ export default function DashboardPage() {
 
       {/* Header */}
       <motion.div variants={pv(0)} initial="hidden" animate="visible" style={{ display:"flex", alignItems:"flex-end", justifyContent:"space-between", marginBottom:"24px", flexWrap:"wrap", gap:"12px" }}>
-        <div>
-          <h1 style={{ fontFamily:"var(--font-display)", fontSize:"clamp(1.5rem,3vw,2.2rem)", letterSpacing:"-0.04em", lineHeight:1, fontWeight:400, color:"var(--text-primary)", marginBottom:"6px" }}>
+        <div style={{ minWidth: 0 }}>
+          <h1 className="aiml-page-title" style={{ fontFamily:"var(--font-display)", fontSize:"clamp(1.5rem,3vw,2.2rem)", letterSpacing:"-0.04em", lineHeight:1.05, fontWeight:400, color:"var(--text-primary)", marginBottom:"6px", overflowWrap:"break-word" }}>
             Intelligence Dashboard
           </h1>
-          <div style={{ display:"flex", alignItems:"center", gap:"12px", flexWrap:"wrap" }}>
+          <div className="aiml-page-meta" style={{ display:"flex", alignItems:"center", gap:"12px", flexWrap:"wrap" }}>
             <span style={{ fontFamily:"var(--font-mono)", fontSize:"11px", color:"var(--text-tertiary)", letterSpacing:"0.06em" }}>{dateStr.toUpperCase()}</span>
             <div style={{ display:"flex", alignItems:"center", gap:"5px" }}>
               <div style={{ width:"6px",height:"6px",borderRadius:"50%",background:brandColor,animation:"brand-pulse 2.5s ease-in-out infinite" }}/>
@@ -1025,9 +1025,9 @@ export default function DashboardPage() {
           </div>
         </div>
         {!domainLoading && domain && (
-          <div style={{ display:"flex", alignItems:"center", gap:"8px", padding:"7px 12px", background:"var(--surface)", border:"1px solid var(--border)", borderRadius:"8px" }}>
-            <Globe2 size={12} color={brandColor}/>
-            <span style={{ fontFamily:"var(--font-mono)", fontSize:"11px", color:"var(--text-secondary)", letterSpacing:"0.06em" }}>{domain}</span>
+          <div style={{ display:"flex", alignItems:"center", gap:"8px", padding:"7px 12px", background:"var(--surface)", border:"1px solid var(--border)", borderRadius:"8px", minWidth:0, maxWidth:"100%" }}>
+            <Globe2 size={12} color={brandColor} style={{ flexShrink: 0 }}/>
+            <span style={{ fontFamily:"var(--font-mono)", fontSize:"11px", color:"var(--text-secondary)", letterSpacing:"0.06em", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{domain}</span>
           </div>
         )}
       </motion.div>

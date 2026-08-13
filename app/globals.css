@@ -315,6 +315,55 @@ body {
 @media (hover: none) and (pointer: coarse) {
   .aiml-touch-target { min-height: 40px; min-width: 40px; }
 }
+
+/* =============================================================================
+   Mobile layout fixes
+   The app is built with inline styles, which can't carry media queries — so
+   anything that must change by viewport opts into a class here.
+============================================================================= */
+
+/* Nothing may exceed the viewport width. `overflow-x: hidden` on body was
+   already set, but a child wider than the screen still forces the whole page
+   to scroll sideways inside it — which is what clipped the dashboard heading
+   off the left edge. Constraining the box model directly is the actual fix. */
+html, body { max-width: 100%; overflow-x: hidden; }
+
+@media (max-width: 768px) {
+  /* Dashboard/panel KPI strips: four columns is ~85px each on a 360px screen,
+     which forces "Click-Through Rate" into four wrapped lines and pushes the
+     fourth card off-screen. Two columns gives each a readable width. */
+  .aiml-kpi-grid { grid-template-columns: repeat(2, 1fr) !important; }
+
+  /* Side-by-side panels (Top Queries / Top Pages) stack. */
+  .aiml-split-grid { grid-template-columns: 1fr !important; }
+
+  /* Panel header: title on one line, meta + refresh on the next, rather than
+     the timestamp colliding with the status dot and the button. */
+  .aiml-panel-header {
+    flex-wrap: wrap !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+  .aiml-panel-header > * { min-width: 0; }
+
+  /* Page title block — long headings and the meta row wrap instead of
+     overflowing. */
+  .aiml-page-title { font-size: clamp(1.6rem, 8vw, 2.2rem) !important; }
+  .aiml-page-meta  { flex-wrap: wrap !important; gap: 6px 10px !important; }
+
+  /* Wizard / dialog button rows: full-width stacked buttons instead of three
+     cramped pills where "Skip for now" wraps onto three lines. */
+  .aiml-button-row {
+    flex-direction: column-reverse !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+  .aiml-button-row > * {
+    width: 100% !important;
+    justify-content: center !important;
+    white-space: nowrap;
+  }
+}
 @media (min-width: 769px) { .hide-desktop { display: none !important; } }
 @media (max-width: 1024px) {
   .hide-tablet   { display: none !important; }
