@@ -259,18 +259,31 @@ const SIDEBAR_OPERATOR = [
 ] as const;
 
 // ─── Shared visual primitives ─────────────────────────────────────────────────
-function LogoMark({ size = 32, brand }: { size?: number; brand: string }) {
-  const inner = Math.round(size * 0.5);
+// Wordmark — replaces the old blue-tile-plus-triangle lockup. Rendered as real
+// text rather than an SVG or image so it:
+//   * uses the site's actual Inter face (no approximation, no extra request)
+//   * inherits the theme via currentColor, so it stays legible in light mode
+//     where a baked-in off-white would vanish
+//   * stays crisp at any zoom / DPI and is selectable + readable by screen
+//     readers without needing alt text
+// Tracking is tightened to -0.04em to match the generated mark, where the
+// letters sit noticeably closer than Inter's default.
+function Wordmark({ size = 20 }: { size?: number }) {
   return (
-    <div style={{
-      width: size, height: size, borderRadius: Math.round(size * 0.25),
-      background: brand, display: "flex", alignItems: "center",
-      justifyContent: "center", flexShrink: 0,
-    }}>
-      <svg width={inner} height={inner} viewBox="0 0 32 32" aria-hidden="true">
-        <path d="M16 7L26 25H6L16 7Z" fill="#fff" fillOpacity="0.92" />
-      </svg>
-    </div>
+    <span
+      style={{
+        fontFamily:    "var(--font-inter), Inter, system-ui, sans-serif",
+        fontSize:      `${size}px`,
+        fontWeight:    600,
+        letterSpacing: "-0.04em",
+        lineHeight:    1,
+        color:         "var(--text-primary)",
+        whiteSpace:    "nowrap",
+        flexShrink:    0,
+      }}
+    >
+      AIML
+    </span>
   );
 }
 
@@ -483,16 +496,15 @@ function MarketingHeader() {
         transition: "background var(--dur-base), border-color var(--dur-base), backdrop-filter var(--dur-base)",
       }}
     >
-      <Link href="/" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: "10px" }}>
-        <LogoMark size={32} brand={brandColor} />
-        <span
-          className="aiml-marketing-brand-text"
-          style={{
-            fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: 600,
-            color: "var(--text-primary)", letterSpacing: "-0.01em",
-            whiteSpace: "nowrap",
-          }}
-        >AI Marketing Lab</span>
+      {/* Wordmark only — the tile + "AI Marketing Lab" lockup is gone. aria-label
+          carries the full name for assistive tech and for the link's accessible
+          name, since "AIML" alone isn't self-explanatory. */}
+      <Link
+        href="/"
+        aria-label="AI Marketing Lab — home"
+        style={{ textDecoration: "none", display: "flex", alignItems: "center" }}
+      >
+        <Wordmark size={22} />
       </Link>
 
       <nav className="aiml-marketing-nav" style={{ display: "flex", alignItems: "center", gap: "4px" }}>
@@ -622,19 +634,15 @@ function AppHeader({
           {navOpen ? <X size={15} /> : <Menu size={15} />}
         </button>
 
-        <Link href="/dashboard" style={{
-          textDecoration: "none", display: "flex", alignItems: "center", gap: "10px",
-          minWidth: 0,
-        }}>
-          <LogoMark size={26} brand={brandColor} />
-          <span
-            className="aiml-header-brand-text"
-            style={{
-              fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 600,
-              color: "var(--text-primary)", letterSpacing: "-0.01em",
-              whiteSpace: "nowrap",
-            }}
-          >AI Marketing Lab</span>
+        <Link
+          href="/dashboard"
+          aria-label="AI Marketing Lab — dashboard"
+          style={{
+            textDecoration: "none", display: "flex", alignItems: "center",
+            minWidth: 0,
+          }}
+        >
+          <Wordmark size={18} />
         </Link>
         <span aria-hidden="true" className="aiml-header-divider" style={{
           width: "1px", height: "18px",

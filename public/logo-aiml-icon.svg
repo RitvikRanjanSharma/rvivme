@@ -1,0 +1,41 @@
+<!--
+  AI Marketing Lab — AIML monogram (square icon)
+  ============================================================================
+  Stacked 2×2 lockup: "AI" over "ML". Stacking (rather than a single AIML row)
+  is what keeps this legible in a 48px LinkedIn avatar — four letters across a
+  square would render each glyph at ~10px.
+
+  "AI" carries the brand blue, "ML" sits in off-white, so the AI half reads
+  first at any size. Letterforms are drawn as stroked geometry rather than
+  live text: no font dependency, renders identically everywhere, and scales
+  losslessly.
+
+  Colours match the app design system:
+    #0B0B0C  near-black background (--bg is #080808)
+    #3B82F6  brand blue, lifted from #2563eb for contrast on dark
+    #F8F8F5  --text-primary
+============================================================================ -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="AIML — AI Marketing Lab">
+  <title>AI Marketing Lab</title>
+
+  <rect width="120" height="120" rx="27" fill="#0B0B0C"/>
+
+  <g fill="none" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Row 1 — "AI" in brand blue -->
+    <g stroke="#3B82F6">
+      <!-- A -->
+      <path d="M37 54 L50 26 L63 54"/>
+      <path d="M42.5 45.5 L57.5 45.5"/>
+      <!-- I -->
+      <path d="M79 26 L79 54"/>
+    </g>
+
+    <!-- Row 2 — "ML" in off-white -->
+    <g stroke="#F8F8F5">
+      <!-- M -->
+      <path d="M29 94 L29 66 L44 84 L59 66 L59 94"/>
+      <!-- L -->
+      <path d="M71 66 L71 94 L91 94"/>
+    </g>
+  </g>
+</svg>

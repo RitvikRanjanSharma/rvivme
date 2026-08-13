@@ -1,0 +1,32 @@
+<!--
+  AI Marketing Lab — AIML wordmark (horizontal)
+  ============================================================================
+  Single-row lockup for site headers, email signatures and LinkedIn banners —
+  anywhere there's horizontal room. Use logo-aiml-icon.svg for square avatars
+  and favicons instead; four letters across a small square won't read.
+
+  Transparent background so it drops onto any surface. "AI" in brand blue,
+  "ML" in off-white — swap the ML stroke to #0A0A08 for light backgrounds.
+============================================================================ -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 60" width="140" height="60" role="img" aria-label="AIML — AI Marketing Lab">
+  <title>AI Marketing Lab</title>
+
+  <g fill="none" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <!-- "AI" — brand blue -->
+    <g stroke="#3B82F6">
+      <!-- A -->
+      <path d="M10 44 L23 16 L36 44"/>
+      <path d="M15.5 35.5 L30.5 35.5"/>
+      <!-- I -->
+      <path d="M52 16 L52 44"/>
+    </g>
+
+    <!-- "ML" — off-white -->
+    <g stroke="#F8F8F5">
+      <!-- M -->
+      <path d="M68 44 L68 16 L83 34 L98 16 L98 44"/>
+      <!-- L -->
+      <path d="M110 16 L110 44 L130 44"/>
+    </g>
+  </g>
+</svg>
