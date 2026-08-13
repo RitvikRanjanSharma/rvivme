@@ -131,7 +131,9 @@ body {
    these classes and let CSS own anything that must change by viewport.
 ============================================================================= */
 
-/* Article prose — desktop baseline. Mobile overrides live in the 768px block. */
+/* Article prose — desktop baseline. Mobile overrides live in the 768px block.
+   These rules style BOTH content sources: the markdown renderer's React
+   elements and the sanitised HTML the TipTap editor produces. */
 .aiml-article p,
 .aiml-article li {
   color: var(--text-reading);
@@ -141,10 +143,103 @@ body {
 .aiml-article p { margin-bottom: 22px; }
 .aiml-article > *:first-child { margin-top: 0; }
 /* Bold inside prose should read as emphasis, not as dimmed body text. */
-.aiml-article strong { color: var(--text-primary); font-weight: 600; }
+.aiml-article strong, .aiml-article b { color: var(--text-primary); font-weight: 600; }
+.aiml-article em, .aiml-article i { font-style: italic; }
 /* Long URLs and code-ish strings shouldn't force horizontal scroll. */
 .aiml-article p, .aiml-article li, .aiml-article h1,
 .aiml-article h2, .aiml-article h3 { overflow-wrap: break-word; }
+
+/* Headings from editor HTML. The markdown path sets these inline, but HTML
+   posts carry bare <h1>/<h2>/<h3> that would otherwise inherit browser
+   defaults and look nothing like the rest of the site. */
+.aiml-article h1,
+.aiml-article h2,
+.aiml-article h3,
+.aiml-article h4 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  color: var(--text-primary);
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+}
+.aiml-article h1 { font-size: clamp(1.7rem, 3.2vw, 2.3rem); margin: 44px 0 16px; }
+.aiml-article h2 { font-size: clamp(1.4rem, 2.5vw, 1.9rem); margin: 48px 0 16px; }
+.aiml-article h3 { font-size: clamp(1.1rem, 2vw, 1.4rem);   margin: 32px 0 12px; }
+.aiml-article h4 { font-size: 1.05rem;                      margin: 26px 0 10px; }
+
+.aiml-article ul, .aiml-article ol { margin: 12px 0 22px; padding-left: 22px; }
+.aiml-article li { margin-bottom: 6px; }
+.aiml-article ul { list-style: disc; }
+.aiml-article ol { list-style: decimal; }
+
+.aiml-article a {
+  color: var(--brand);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.aiml-article blockquote {
+  margin: 24px 0;
+  padding: 4px 0 4px 18px;
+  border-left: 2px solid rgba(var(--brand-rgb), 0.45);
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.aiml-article code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--muted);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.aiml-article pre {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  overflow-x: auto;
+  margin: 22px 0;
+}
+.aiml-article pre code { background: none; padding: 0; font-size: 13px; }
+
+.aiml-article hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 36px 0;
+}
+
+/* Images never overflow the measure, and carry the same rounding as cards. */
+.aiml-article img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  margin: 24px 0;
+}
+.aiml-article figure { margin: 24px 0; }
+.aiml-article figcaption {
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  text-align: center;
+  margin-top: 8px;
+}
+
+.aiml-article table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 22px 0;
+  font-size: 14px;
+}
+.aiml-article th, .aiml-article td {
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  text-align: left;
+  color: var(--text-reading);
+}
+.aiml-article th { background: var(--card); color: var(--text-primary); font-weight: 600; }
 
 /* Post layout: article + sticky sidebar on desktop, single column on mobile. */
 .aiml-post-grid {

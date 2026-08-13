@@ -12,6 +12,7 @@ import { useParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { ArrowLeft, Clock, Share2, Link2, CheckCircle2, Rss } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { sanitizeHtml, looksLikeHtml } from "@/lib/sanitize-html";
 
 const EASE_EXPO = [0.16, 1, 0.3, 1] as const;
 
@@ -63,6 +64,44 @@ function safeBold(line: string): string {
     /\*\*(.+?)\*\*/g,
     '<strong style="color:var(--text-primary);font-weight:600">$1</strong>',
   );
+}
+
+// Renders a post body. Two formats land in blog_posts.content:
+//   • HTML     — from the TipTap editor in Blog Admin (editor.getHTML())
+//   • Markdown — from the AI draft generator (lib/content-gen.ts)
+// The markdown renderer below HTML-escapes everything, so feeding it editor
+// HTML printed raw "<h1>…</h1>" tags on the page as literal text. Detect the
+// format and route accordingly, sanitising the HTML path.
+function PostBody({ content }: { content: string }) {
+  // Sanitisation uses DOMParser, which only exists in the browser, so this has
+  // to run after mount rather than during SSR/first render.
+  const [html, setHtml] = useState<string | null>(null);
+  const isHtml = looksLikeHtml(content);
+
+  useEffect(() => {
+    if (isHtml) setHtml(sanitizeHtml(content));
+  }, [content, isHtml]);
+
+  if (!isHtml) {
+    return <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>{renderContent(content)}</div>;
+  }
+
+  // Brief skeleton while the client-side sanitise pass runs.
+  if (html === null) {
+    return (
+      <div aria-hidden style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+        {[100, 96, 88].map((w, i) => (
+          <div key={i} style={{
+            height: "16px", width: `${w}%`, borderRadius: "4px",
+            background: "linear-gradient(90deg, var(--card) 25%, var(--muted) 50%, var(--card) 75%)",
+            backgroundSize: "200% 100%", animation: "shimmer 1.4s ease-in-out infinite",
+          }} />
+        ))}
+      </div>
+    );
+  }
+
+  return <div dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 // Minimal markdown renderer
@@ -258,9 +297,7 @@ export default function BlogPostPage() {
 
           {/* Article */}
           <motion.article className="aiml-article" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: EASE_EXPO, delay: 0.1 }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
-              {renderContent(post.content)}
-            </div>
+            <PostBody content={post.content} />
 
             {/* Author bio */}
             {post.author_bio && (

@@ -6,13 +6,13 @@
 // Real Supabase CRUD · TipTap rich text editor · SEO fields · Publish controls
 // =============================================================================
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Eye, Edit3, Trash2, Search, Zap, ExternalLink,
   Globe2, Lock, Calendar, Archive, CheckCircle2,
-  AlertCircle, RefreshCw, X, Tag, Clock, BarChart3,
+  AlertCircle, RefreshCw, X, Tag, Clock, BarChart3, Save,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { isAdminEmail } from "@/lib/admin";
@@ -306,10 +306,66 @@ function PostEditor({ post, onClose, onSaved, brandColor }: {
   const [saved,           setSaved]           = useState(false);
   const [slugManual,      setSlugManual]      = useState(!!post?.slug);
 
+  // Close-confirmation. Shown when the user tries to leave with unsaved edits.
+  const [confirmClose, setConfirmClose] = useState(false);
+
+  // Snapshot of the values as first loaded. Comparing against this is more
+  // honest than a boolean "touched" flag — typing a character and undoing it
+  // shouldn't count as unsaved work.
+  const initialRef = useRef({
+    title:           post?.title            ?? "",
+    slug:            post?.slug             ?? "",
+    excerpt:         post?.excerpt          ?? "",
+    content:         post?.content          ?? "",
+    category:        (post?.category        ?? "seo_strategy") as PostCategory,
+    focusKeyword:    post?.focus_keyword    ?? "",
+    metaTitle:       post?.meta_title       ?? "",
+    metaDescription: post?.meta_description ?? "",
+    featured:        post?.featured         ?? false,
+    status:          (post?.status          ?? "draft") as PostStatus,
+  });
+
+  const isDirty =
+    title           !== initialRef.current.title           ||
+    slug            !== initialRef.current.slug            ||
+    excerpt         !== initialRef.current.excerpt         ||
+    content         !== initialRef.current.content         ||
+    category        !== initialRef.current.category        ||
+    focusKeyword    !== initialRef.current.focusKeyword    ||
+    metaTitle       !== initialRef.current.metaTitle       ||
+    metaDescription !== initialRef.current.metaDescription ||
+    featured        !== initialRef.current.featured        ||
+    status          !== initialRef.current.status;
+
+  /** Close request — only interrupts when there's something to lose. */
+  const requestClose = useCallback(() => {
+    if (isDirty) setConfirmClose(true);
+    else         onClose();
+  }, [isDirty, onClose]);
+
   // Auto-generate slug from title
   useEffect(() => {
     if (!slugManual && title) setSlug(slugify(title));
   }, [title, slugManual]);
+
+  // Esc should route through the same guard as the X button, and the browser's
+  // own "leave site?" prompt covers tab close / refresh with unsaved edits.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.stopPropagation(); requestClose(); }
+    };
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!isDirty) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+  }, [requestClose, isDirty]);
 
   const CATEGORIES: { value: PostCategory; label: string }[] = [
     { value: "seo_strategy",      label: "SEO Strategy"     },
@@ -381,7 +437,7 @@ function PostEditor({ post, onClose, onSaved, brandColor }: {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)", zIndex: 200, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "24px 16px", overflowY: "auto" }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={e => { if (e.target === e.currentTarget) requestClose(); }}
     >
       <motion.div
         initial={{ opacity: 0, y: 20, scale: 0.97 }}
@@ -405,7 +461,7 @@ function PostEditor({ post, onClose, onSaved, brandColor }: {
             <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: statusConfig(status).color, background: statusConfig(status).bg, border: `1px solid ${statusConfig(status).border}`, padding: "3px 10px", borderRadius: "100px", letterSpacing: "0.08em", textTransform: "uppercase" }}>
               {statusConfig(status).label}
             </span>
-            <button onClick={onClose} style={{ width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "1px solid var(--border)", borderRadius: "7px", cursor: "pointer", color: "var(--text-secondary)" }}>
+            <button onClick={requestClose} title="Close" style={{ width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "1px solid var(--border)", borderRadius: "7px", cursor: "pointer", color: "var(--text-secondary)" }}>
               <X size={14} />
             </button>
           </div>
@@ -510,6 +566,116 @@ function PostEditor({ post, onClose, onSaved, brandColor }: {
           </div>
         </div>
       </motion.div>
+
+      {/* ── Unsaved-changes confirmation ──────────────────────────────────── */}
+      {/* Sits above the editor modal. Three ways out, in decreasing safety:
+          save the draft, discard it, or cancel and keep editing. */}
+      <AnimatePresence>
+        {confirmClose && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={e => { if (e.target === e.currentTarget) setConfirmClose(false); }}
+            style={{
+              position: "fixed", inset: 0, zIndex: 260,
+              background: "rgba(0,0,0,0.6)", backdropFilter: "blur(3px)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              padding: "24px 16px",
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 14, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0,  scale: 1    }}
+              exit={{    opacity: 0, y: 14, scale: 0.97 }}
+              transition={SP}
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="aiml-close-draft-title"
+              style={{
+                width: "100%", maxWidth: "420px",
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderRadius: "14px",
+                padding: "24px",
+                boxShadow: "0 24px 64px rgba(0,0,0,0.5)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", marginBottom: "8px" }}>
+                <div style={{
+                  width: "34px", height: "34px", borderRadius: "9px", flexShrink: 0,
+                  background: "rgba(255,171,0,0.10)", border: "1px solid rgba(255,171,0,0.25)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  <AlertCircle size={16} color="var(--signal-amber)" />
+                </div>
+                <div>
+                  <div
+                    id="aiml-close-draft-title"
+                    style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "15px", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.01em", marginBottom: "4px" }}
+                  >
+                    You have unsaved changes
+                  </div>
+                  <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.6, margin: 0 }}>
+                    Save this as a draft before closing, or discard the changes
+                    you&rsquo;ve made since opening the editor.
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: "8px", marginTop: "20px", flexWrap: "wrap" }}>
+                <button
+                  onClick={async () => {
+                    setConfirmClose(false);
+                    // handleSave closes the modal itself on success.
+                    await handleSave("draft");
+                  }}
+                  disabled={saving}
+                  style={{
+                    flex: "1 1 140px",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                    padding: "10px 16px",
+                    fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 700,
+                    color: "#fff", background: brandColor,
+                    border: "none", borderRadius: "9px",
+                    cursor: saving ? "default" : "pointer", opacity: saving ? 0.7 : 1,
+                  }}
+                >
+                  <Save size={13} /> {saving ? "Saving…" : "Save draft"}
+                </button>
+
+                <button
+                  onClick={() => { setConfirmClose(false); onClose(); }}
+                  style={{
+                    flex: "0 1 auto",
+                    padding: "10px 16px",
+                    fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 500,
+                    color: "var(--signal-red)", background: "transparent",
+                    border: "1px solid rgba(255,23,68,0.30)", borderRadius: "9px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Discard
+                </button>
+
+                <button
+                  onClick={() => setConfirmClose(false)}
+                  style={{
+                    flex: "0 1 auto",
+                    padding: "10px 16px",
+                    fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 500,
+                    color: "var(--text-secondary)", background: "transparent",
+                    border: "1px solid var(--border)", borderRadius: "9px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Keep editing
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
