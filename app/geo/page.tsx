@@ -29,6 +29,8 @@ type Access = {
   status: "allowed" | "blocked" | "partial";
   matchedBy: "specific" | "wildcard" | "default";
   rule?: string;
+  excluded?: string[];
+  conflicts?: string[];
 };
 
 type Check = { id: string; label: string; passed: boolean; why: string; detail?: string; weight: number };
@@ -43,6 +45,7 @@ type Audit = {
   };
   robots?: { state: "found" | "absent" | "unreachable"; url: string; detail: string | null };
   page?:   { state: "ok" | "absent" | "unreachable";    url: string; detail: string | null };
+  sitemap?: { state: "found" | "absent" | "unreachable"; url: string; pageCount: number };
   access?: Access[];
   readiness?: { score: number; checks: Check[] } | null;
   summary?: {
@@ -231,6 +234,19 @@ export default function GeoPage() {
                 : `No robots.txt exists at ${audit.robots?.url} — ${audit.robots?.detail}. Nothing is restricted, so every crawler is permitted by default. Worth adding one anyway, so the decision is yours rather than a default.`}
             </p>
 
+            {/* Without a sitemap we can list exclusions but can't say whether
+                they matter, and we should say so rather than imply we checked. */}
+            {verdict !== "unknown" && audit.sitemap?.state !== "found" &&
+             (audit.access ?? []).some(a => a.excluded?.length) && (
+              <p style={{
+                fontFamily: "var(--font-body)", fontSize: "12.5px",
+                color: "var(--text-tertiary)", lineHeight: 1.6, margin: "10px 0 0",
+              }}>
+                We couldn&rsquo;t read a sitemap at {audit.sitemap?.url}, so exclusions below are
+                listed as-is — we can&rsquo;t tell which of them cover pages you publish.
+              </p>
+            )}
+
             {audit.site?.resolvedFromFallback && (
               <p style={{
                 fontFamily: "var(--font-body)", fontSize: "12.5px",
@@ -294,11 +310,27 @@ export default function GeoPage() {
                     <p style={{ fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.55, margin: 0 }}>
                       {a.crawler.note}
                     </p>
-                    {a.rule && (
-                      <div style={{ marginTop: "7px", fontFamily: "var(--font-mono)", fontSize: "10.5px", color: "var(--signal-amber)" }}>
+                    {/* An exclusion is only a warning when it covers a page the
+                        site actually publishes. Otherwise it's housekeeping,
+                        and it's shown in grey as context. */}
+                    {a.conflicts?.length ? (
+                      <div style={{ marginTop: "7px", fontFamily: "var(--font-mono)", fontSize: "10.5px", color: "var(--signal-amber)", lineHeight: 1.5 }}>
+                        {a.rule} {a.matchedBy === "wildcard" && <span style={{ color: "var(--text-tertiary)" }}>(via User-agent: *)</span>}
+                        <div style={{ color: "var(--text-tertiary)", marginTop: "3px" }}>
+                          Blocks {a.conflicts.length} page{a.conflicts.length === 1 ? "" : "s"} in your sitemap
+                          {a.conflicts.length <= 2 ? `: ${a.conflicts.join(", ")}` : ""}
+                        </div>
+                      </div>
+                    ) : a.excluded?.length ? (
+                      <div style={{ marginTop: "7px", fontFamily: "var(--font-mono)", fontSize: "10.5px", color: "var(--text-tertiary)", lineHeight: 1.5 }}>
+                        Excludes {a.excluded.slice(0, 3).join(", ")}
+                        {a.excluded.length > 3 ? ` +${a.excluded.length - 3} more` : ""} — no published pages affected
+                      </div>
+                    ) : a.rule ? (
+                      <div style={{ marginTop: "7px", fontFamily: "var(--font-mono)", fontSize: "10.5px", color: "var(--signal-red)" }}>
                         {a.rule} {a.matchedBy === "wildcard" && <span style={{ color: "var(--text-tertiary)" }}>(via User-agent: *)</span>}
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 );
               })}

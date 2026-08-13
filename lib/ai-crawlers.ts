@@ -141,14 +141,39 @@ export function parseRobots(text: string): RobotsGroup[] {
   return groups;
 }
 
+/**
+ * Pull the URL paths out of a sitemap. Deliberately forgiving: sitemaps vary
+ * wildly and a parse failure should degrade to "no evidence" rather than throw.
+ */
+export function extractSitemapPaths(xml: string, origin: string): string[] {
+  const paths = new Set<string>();
+  for (const m of xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)) {
+    try {
+      const u = new URL(m[1]);
+      // Ignore entries pointing somewhere else — including nested sitemap
+      // index files, which we don't follow.
+      if (u.origin === origin) paths.add(u.pathname || "/");
+    } catch { /* skip malformed <loc> */ }
+  }
+  return [...paths];
+}
+
 export type CrawlerAccess = {
   crawler:  AiCrawler;
-  /** "allowed" | "blocked" | "partial" — partial means some paths are blocked. */
+  /**
+   * "blocked"  — the audited path, or the whole site, is off limits.
+   * "partial"  — crawlable, but rules exclude pages the site publishes.
+   * "allowed"  — crawlable; any exclusions cover nothing the site publishes.
+   */
   status:   "allowed" | "blocked" | "partial";
   /** Which group decided it: the crawler's own rules, or the wildcard. */
   matchedBy: "specific" | "wildcard" | "default";
   /** The rule that produced a block, for evidence. */
   rule?:    string;
+  /** Every path prefix the rules exclude — context, not necessarily a problem. */
+  excluded: string[];
+  /** Sitemap URLs that fall inside an excluded prefix. This is the real signal. */
+  conflicts: string[];
 };
 
 /**
@@ -163,6 +188,7 @@ export function crawlerAccess(
   groups: RobotsGroup[],
   crawler: AiCrawler,
   path = "/",
+  publicPaths: string[] = [],
 ): CrawlerAccess {
   const token = crawler.token.toLowerCase();
 
@@ -172,7 +198,7 @@ export function crawlerAccess(
 
   if (!group) {
     // No robots.txt rules at all means everything is permitted.
-    return { crawler, status: "allowed", matchedBy: "default" };
+    return { crawler, status: "allowed", matchedBy: "default", excluded: [], conflicts: [] };
   }
 
   const matchedBy = specific ? "specific" as const : "wildcard" as const;
@@ -189,25 +215,50 @@ export function crawlerAccess(
       status: hasCarveOut ? "partial" : "blocked",
       matchedBy,
       rule: "Disallow: /",
+      excluded: realDisallows,
+      conflicts: [],
     };
   }
 
   const blockingRule = realDisallows.find(d => path.startsWith(d));
   if (blockingRule) {
-    return { crawler, status: "blocked", matchedBy, rule: `Disallow: ${blockingRule}` };
+    return {
+      crawler, status: "blocked", matchedBy,
+      rule: `Disallow: ${blockingRule}`,
+      excluded: realDisallows, conflicts: [],
+    };
   }
+
+  // Almost every site excludes admin, auth and API routes. Reporting that as a
+  // warning on every crawler is noise, and noise is what stops people acting on
+  // the one line that matters.
+  //
+  // So we don't guess which prefixes are "private" — we check the exclusions
+  // against the pages the site itself publishes in its sitemap. A rule that
+  // blocks a URL you asked search engines to index is a real contradiction and
+  // worth flagging. A rule covering nothing in the sitemap is just housekeeping.
+  //
+  // With no sitemap we have no evidence either way, so we report the exclusions
+  // as fact and decline to call them a problem.
+  const conflicts = publicPaths.filter(p => realDisallows.some(d => p.startsWith(d)));
 
   return {
     crawler,
-    status: realDisallows.length ? "partial" : "allowed",
+    status: conflicts.length ? "partial" : "allowed",
     matchedBy,
-    rule: realDisallows.length ? `Disallow: ${realDisallows[0]}` : undefined,
+    rule: conflicts.length ? `Disallow: ${realDisallows.find(d => conflicts[0].startsWith(d))}` : undefined,
+    excluded: realDisallows,
+    conflicts,
   };
 }
 
-export function auditCrawlerAccess(robotsText: string, path = "/"): CrawlerAccess[] {
+export function auditCrawlerAccess(
+  robotsText: string,
+  path = "/",
+  publicPaths: string[] = [],
+): CrawlerAccess[] {
   const groups = parseRobots(robotsText);
-  return AI_CRAWLERS.map(c => crawlerAccess(groups, c, path));
+  return AI_CRAWLERS.map(c => crawlerAccess(groups, c, path, publicPaths));
 }
 
 // ─── answer readiness ────────────────────────────────────────────────────────

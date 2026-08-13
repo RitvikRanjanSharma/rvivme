@@ -13,7 +13,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCallerOrNull } from "@/lib/supabase-server";
 import {
-  auditCrawlerAccess, scoreAnswerReadiness, AI_CRAWLERS,
+  auditCrawlerAccess, scoreAnswerReadiness, extractSitemapPaths, AI_CRAWLERS,
   type CrawlerAccess, type ReadinessReport,
 } from "@/lib/ai-crawlers";
 import { originCandidates, fetchText, fetchAcrossOrigins } from "@/lib/site-fetch";
@@ -64,14 +64,37 @@ export async function GET(request: NextRequest) {
       } catch { /* fall back to origin */ }
     }
 
-    const page = await fetchText(target);
+    // The sitemap is how we tell a meaningful exclusion from routine
+    // housekeeping: a Disallow covering a URL the site publishes is a real
+    // contradiction, one covering /admin is not. Prefer the location robots.txt
+    // declares, since a site may not use the conventional path.
+    const declaredSitemap = robots.kind === "ok"
+      ? robots.text.match(/^\s*sitemap:\s*(\S+)/im)?.[1]
+      : undefined;
+
+    let sitemapUrl = `${origin}/sitemap.xml`;
+    if (declaredSitemap) {
+      try {
+        const u = new URL(declaredSitemap, origin);
+        if (u.origin === origin) sitemapUrl = u.toString();
+      } catch { /* keep the conventional path */ }
+    }
+
+    const [page, sitemap] = await Promise.all([
+      fetchText(target),
+      fetchText(sitemapUrl),
+    ]);
+
+    const publicPaths = sitemap.kind === "ok"
+      ? extractSitemapPaths(sitemap.text, origin)
+      : [];
 
     // Only claim a crawler is allowed when we actually read the rules. An
     // absent robots.txt genuinely does permit everything; an unreachable one
     // tells us nothing, so we return no verdicts rather than ten green ones.
     const robotsKnown = robots.kind !== "unreachable";
     const access: CrawlerAccess[] = robotsKnown
-      ? auditCrawlerAccess(robots.kind === "ok" ? robots.text : "", "/")
+      ? auditCrawlerAccess(robots.kind === "ok" ? robots.text : "", "/", publicPaths)
       : [];
 
     const readiness: ReadinessReport | null =
@@ -108,6 +131,11 @@ export async function GET(request: NextRequest) {
         detail: page.kind === "unreachable" ? page.detail
               : page.kind === "absent"      ? `the server returned ${page.status}`
               : null,
+      },
+      sitemap: {
+        state:      sitemap.kind === "ok" ? "found" : sitemap.kind,
+        url:        sitemapUrl,
+        pageCount:  publicPaths.length,
       },
       access,
       readiness,
