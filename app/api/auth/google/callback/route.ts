@@ -57,13 +57,36 @@ export async function GET(request: NextRequest) {
     return settingsRedirect({ google_error: "missing_code" });
   }
 
+  // Two distinct things can fail here and they have completely different fixes,
+  // so they get distinct error codes rather than one catch-all.
+  let token;
   try {
-    const token = await exchangeCode(code);
+    token = await exchangeCode(code);
+  } catch (err) {
+    // Google rejected the code→token swap. Almost always a wrong
+    // GOOGLE_OAUTH_CLIENT_SECRET, or a redirect_uri that differs between the
+    // consent request and this exchange (they must match exactly).
+    console.error("[auth/google/callback] token exchange failed:", (err as Error).message);
+    return settingsRedirect({ google_error: "exchange_failed" });
+  }
+
+  try {
     const email = await fetchGoogleEmail(token.access_token);
     await saveConnection(caller.user.id, token, email);
     return settingsRedirect({ google: "connected" });
   } catch (err) {
-    console.error("[auth/google/callback]", (err as Error).message);
-    return settingsRedirect({ google_error: "exchange_failed" });
+    // Google was happy; we failed to persist. Usually the google_connections
+    // table doesn't exist (migration 009 not run) or SUPABASE_SERVICE_ROLE_KEY
+    // is missing/incorrect — that table is service-role only by design.
+    const msg = (err as Error).message ?? "";
+    console.error("[auth/google/callback] save failed:", msg);
+
+    if (/relation .*google_connections.* does not exist|could not find the table/i.test(msg)) {
+      return settingsRedirect({ google_error: "table_missing" });
+    }
+    if (/service role|invalid api key|jwt/i.test(msg)) {
+      return settingsRedirect({ google_error: "service_role" });
+    }
+    return settingsRedirect({ google_error: "save_failed" });
   }
 }

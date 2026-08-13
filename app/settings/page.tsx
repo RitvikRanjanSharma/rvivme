@@ -308,7 +308,12 @@ function IntegrationsTab({ brandColor }: { brandColor: string }) {
       session_expired: "Your session expired during sign-in. Please try again.",
       state_mismatch:  "Sign-in could not be verified. Please try again.",
       missing_code:    "Google didn't return an authorisation code. Please try again.",
-      exchange_failed: "Could not complete sign-in with Google. Please try again.",
+      // These three all mean "Google was fine, our side wasn't" — each names
+      // the actual fix rather than saying "try again", which would never work.
+      exchange_failed: "Google rejected the sign-in. Check GOOGLE_OAUTH_CLIENT_SECRET is correct and that the redirect URI matches exactly.",
+      table_missing:   "Sign-in worked, but the google_connections table is missing. Run migration 009 in Supabase.",
+      service_role:    "Sign-in worked, but SUPABASE_SERVICE_ROLE_KEY is missing or invalid on this deployment.",
+      save_failed:     "Sign-in worked, but the connection couldn't be saved. Check the deployment logs for details.",
     };
     const key = ok ?? err ?? "";
     setGBanner({ kind: ok === "connected" ? "ok" : "err", text: messages[key] ?? "Unknown result." });
