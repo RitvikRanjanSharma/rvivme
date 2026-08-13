@@ -700,9 +700,9 @@ function IntegrationsTab({ brandColor }: { brandColor: string }) {
               label="Save analytics properties"
             />
             <div style={{ fontFamily: "var(--font-body)", fontSize: "11px", color: "var(--text-tertiary)", marginTop: "14px" }}>
-              Make sure the Google service account has Viewer access to both
-              properties — otherwise the dashboard will show a connection
-              error when it tries to fetch data.
+              These are read using the Google account connected above — only
+              properties you already have access to are listed, and access is
+              read-only.
               {domain && domain !== "aimarketinglab.co.uk" && (
                 <> Your current workspace domain is <strong>{domain}</strong>.</>
               )}

@@ -298,9 +298,9 @@ function ConnectionBanner({
 }
 
 // ── Projection chart ───────────────────────────────────────────────────────────
-function ProjectionChart({ brandColor, ga4Trend, ga4Loading, ga4Reason, ga4Message }: {
+function ProjectionChart({ brandColor, ga4Trend, ga4Loading, ga4Reason, ga4Message, ga4Connected }: {
   brandColor:string; ga4Trend:GA4TrendPoint[]; ga4Loading:boolean;
-  ga4Reason?: ConnReason; ga4Message?: string | null;
+  ga4Reason?: ConnReason; ga4Message?: string | null; ga4Connected?: boolean;
 }) {
   const chartRef = useRef<HTMLDivElement>(null);
   const inView   = useInView(chartRef, { once:true, margin:"-60px" });
@@ -318,6 +318,11 @@ function ProjectionChart({ brandColor, ga4Trend, ga4Loading, ga4Reason, ga4Messa
   if (!isReal && !ga4Loading) {
     const isApiError = ga4Reason === "api_error";
     const needsAuth  = ga4Reason === "not_connected" || ga4Reason === "reauth_required";
+    // Connected, authorised, no error — GA4 simply has no sessions in the
+    // window. Common for a new property or a site that hasn't launched. This
+    // used to render identically to "not connected", which told people to
+    // connect something that was already connected.
+    const connectedNoData = !!ga4Connected && !isApiError && !needsAuth;
     return (
       <motion.div ref={chartRef} variants={pv(0.2)} initial="hidden" animate="visible">
         <Panel style={{ padding:"32px 24px" }}>
@@ -325,10 +330,11 @@ function ProjectionChart({ brandColor, ga4Trend, ga4Loading, ga4Reason, ga4Messa
             <div style={{ fontFamily:"var(--font-body)", fontSize:"15px", fontWeight:600, color:"var(--text-primary)" }}>
               Organic Traffic · 6-Month AI Projection
             </div>
-            <div style={{ fontFamily:"var(--font-mono)", fontSize:"11px", color: isApiError ? "var(--signal-amber)" : "var(--text-tertiary)", letterSpacing:"0.08em" }}>
+            <div style={{ fontFamily:"var(--font-mono)", fontSize:"11px", color: isApiError ? "var(--signal-amber)" : connectedNoData ? "var(--signal-green)" : "var(--text-tertiary)", letterSpacing:"0.08em" }}>
               {isApiError ? "GA4 CONNECTION ERROR"
                 : ga4Reason === "reauth_required" ? "GOOGLE ACCESS EXPIRED"
                 : needsAuth ? "GOOGLE NOT CONNECTED"
+                : connectedNoData ? "GA4 CONNECTED · NO SESSIONS YET"
                 : "AWAITING GA4 CONNECTION"}
             </div>
           </div>
@@ -336,14 +342,15 @@ function ProjectionChart({ brandColor, ga4Trend, ga4Loading, ga4Reason, ga4Messa
           <div style={{
             display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
             padding:"44px 24px", background:"var(--card)",
-            border:`1px dashed ${isApiError ? "rgba(255,171,0,0.35)" : "var(--border)"}`,
+            border:`1px dashed ${isApiError ? "rgba(255,171,0,0.35)" : connectedNoData ? "rgba(0,230,118,0.30)" : "var(--border)"}`,
             borderRadius:"10px", textAlign:"center", gap:"10px",
           }}>
-            <Activity size={18} color={isApiError ? "var(--signal-amber)" : "var(--text-tertiary)"} />
+            <Activity size={18} color={isApiError ? "var(--signal-amber)" : connectedNoData ? "var(--signal-green)" : "var(--text-tertiary)"} />
             <div style={{ fontFamily:"var(--font-body)", fontSize:"14px", fontWeight:500, color:"var(--text-primary)" }}>
               {isApiError ? "GA4 rejected the request"
                 : ga4Reason === "reauth_required" ? "Google access expired"
                 : needsAuth ? "Connect your Google account"
+                : connectedNoData ? "Connected — waiting for your first sessions"
                 : "No traffic data yet"}
             </div>
             <div style={{ fontFamily:"var(--font-body)", fontSize:"13px", color:"var(--text-secondary)", lineHeight:1.6, maxWidth:"460px" }}>
@@ -353,6 +360,8 @@ function ProjectionChart({ brandColor, ga4Trend, ga4Loading, ga4Reason, ga4Messa
                 ? "Your Google authorisation was revoked or has expired. Reconnect to resume reading your Analytics data."
                 : needsAuth
                 ? "Sign in with Google to let AI Marketing Lab read your own Analytics data. Read-only, and you can disconnect at any time."
+                : connectedNoData
+                ? "GA4 is reading this property fine, but it hasn't recorded any sessions in the last 30 days. The forecast appears once there's traffic to project from. If you expected visits by now, check the GA4 tracking tag is installed on your site."
                 : "Connect Google Analytics 4 to see your actual sessions projected six months forward with honest confidence intervals."}
             </div>
             {isApiError && ga4Message && (
@@ -365,15 +374,20 @@ function ProjectionChart({ brandColor, ga4Trend, ga4Loading, ga4Reason, ga4Messa
                 {ga4Message}
               </div>
             )}
-            <a href="/settings?tab=integrations" style={{
-              display:"inline-flex", alignItems:"center", gap:"6px",
-              fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:500,
-              color:"#fff", background:brandColor, textDecoration:"none",
-              padding:"8px 18px", borderRadius:"100px", marginTop:"4px",
-              transition:"opacity 0.16s",
-            }}>
-              {isApiError ? "Review settings" : needsAuth ? "Connect Google" : "Connect GA4"} <ArrowRight size={12}/>
-            </a>
+            {/* No CTA when it's connected and simply has no data — there's
+                nothing for the user to fix, and a "Connect GA4" button here
+                is actively misleading. */}
+            {!connectedNoData && (
+              <a href="/settings?tab=integrations" style={{
+                display:"inline-flex", alignItems:"center", gap:"6px",
+                fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:500,
+                color:"#fff", background:brandColor, textDecoration:"none",
+                padding:"8px 18px", borderRadius:"100px", marginTop:"4px",
+                transition:"opacity 0.16s",
+              }}>
+                {isApiError ? "Review settings" : needsAuth ? "Connect Google" : "Connect GA4"} <ArrowRight size={12}/>
+              </a>
+            )}
           </div>
         </Panel>
       </motion.div>
@@ -1021,7 +1035,7 @@ export default function DashboardPage() {
       <ActiveStrategyBanner brandColor={brandColor}/>
 
       <div style={{ display:"flex", flexDirection:"column", gap:"32px" }}>
-        <ProjectionChart brandColor={brandColor} ga4Trend={ga4Trend} ga4Loading={ga4Loading} ga4Reason={ga4Reason} ga4Message={ga4Message}/>
+        <ProjectionChart brandColor={brandColor} ga4Trend={ga4Trend} ga4Loading={ga4Loading} ga4Reason={ga4Reason} ga4Message={ga4Message} ga4Connected={ga4Connected}/>
         <GA4Panel brandColor={brandColor}/>
         <GSCPanel brandColor={brandColor}/>
         <BacklinksPanel brandColor={brandColor} domain={domain}/>
