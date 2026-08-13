@@ -32,10 +32,52 @@ const ALLOWED_TAGS = new Set([
 /** Per-tag attribute allowlist. Attributes not listed are dropped. */
 const ALLOWED_ATTRS: Record<string, Set<string>> = {
   a:   new Set(["href", "title", "target", "rel"]),
-  img: new Set(["src", "alt", "title", "width", "height", "loading"]),
+  img: new Set(["src", "alt", "title", "width", "height", "loading", "style"]),
   td:  new Set(["colspan", "rowspan"]),
   th:  new Set(["colspan", "rowspan"]),
+  p:   new Set(["style"]),
+  h1:  new Set(["style"]),
+  h2:  new Set(["style"]),
+  h3:  new Set(["style"]),
+  h4:  new Set(["style"]),
+  h5:  new Set(["style"]),
+  h6:  new Set(["style"]),
 };
+
+/**
+ * `style` is the one attribute where a blanket allow would be dangerous —
+ * `background: url(javascript:…)`, `behavior:`, `expression()` and friends all
+ * live there. So rather than permitting the attribute wholesale, we re-parse it
+ * and keep ONLY declarations we recognise.
+ *
+ * Currently that's text-align, which is what the editor's alignment control
+ * emits. Anything else in the attribute is discarded; if the result is empty
+ * the attribute is dropped entirely.
+ */
+const ALLOWED_STYLE_PROPS: Record<string, Set<string>> = {
+  "text-align": new Set(["left", "center", "right", "justify"]),
+};
+
+function sanitizeStyle(raw: string): string | null {
+  const kept: string[] = [];
+
+  for (const decl of raw.split(";")) {
+    const idx = decl.indexOf(":");
+    if (idx === -1) continue;
+
+    const prop  = decl.slice(0, idx).trim().toLowerCase();
+    const value = decl.slice(idx + 1).trim().toLowerCase();
+    if (!prop || !value) continue;
+
+    const allowedValues = ALLOWED_STYLE_PROPS[prop];
+    if (!allowedValues) continue;          // property not on the list
+    if (!allowedValues.has(value)) continue; // value not on the list
+
+    kept.push(`${prop}: ${value}`);
+  }
+
+  return kept.length ? kept.join("; ") : null;
+}
 
 /** Tags whose entire contents are discarded, not just the tag itself. */
 const VOID_CONTENT_TAGS = new Set(["script", "style", "iframe", "object", "embed", "noscript"]);
@@ -137,6 +179,12 @@ export function sanitizeHtml(dirty: string): string {
           const cleaned = safeUrl(attr.value, tag === "img");
           if (cleaned === null) child.removeAttribute(attr.name);
           else                  child.setAttribute(attr.name, cleaned);
+        }
+
+        if (name === "style") {
+          const cleaned = sanitizeStyle(attr.value);
+          if (cleaned === null) child.removeAttribute(attr.name);
+          else                  child.setAttribute("style", cleaned);
         }
       }
 

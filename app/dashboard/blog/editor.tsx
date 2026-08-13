@@ -13,13 +13,14 @@ import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
 import CharacterCount from "@tiptap/extension-character-count";
 import CodeBlock from "@tiptap/extension-code-block";
-import { Node, mergeAttributes } from "@tiptap/core";
+import { Node, Extension, mergeAttributes } from "@tiptap/core";
 import { useEffect, useCallback, useRef, useState } from "react";
 import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough,
   Heading1, Heading2, Heading3, List, ListOrdered,
   Quote, Code, Link as LinkIcon, Undo, Redo,
   Minus, WrapText, ImagePlus,
+  AlignLeft, AlignCenter, AlignRight, AlignJustify,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -53,6 +54,83 @@ const BlogImage = Node.create({
 
   renderHTML({ HTMLAttributes }) {
     return ["img", mergeAttributes(HTMLAttributes, { loading: "lazy" })];
+  },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Text alignment
+// ─────────────────────────────────────────────────────────────────────────────
+// Same reasoning as BlogImage: @tiptap/extension-text-align isn't installable
+// here, so this is a minimal equivalent on @tiptap/core.
+//
+// Alignment is a GLOBAL ATTRIBUTE rather than a mark — it belongs to the block
+// (paragraph / heading / image), not to a span of characters. Storing it as an
+// inline style keeps the output self-contained: the public post page renders
+// sanitised HTML, and `style` on a block element survives that pipeline without
+// needing a matching CSS class to be shipped alongside.
+//
+// "left" is the default and is written as null so we don't litter every
+// paragraph with style="text-align: left".
+type TextAlignValue = "left" | "center" | "right" | "justify";
+
+const TextAlign = Extension.create({
+  name: "textAlign",
+
+  addOptions() {
+    return {
+      types: ["heading", "paragraph", "image"],
+      alignments: ["left", "center", "right", "justify"] as TextAlignValue[],
+      defaultAlignment: "left" as TextAlignValue,
+    };
+  },
+
+  addGlobalAttributes() {
+    return [
+      {
+        types: this.options.types,
+        attributes: {
+          textAlign: {
+            default: this.options.defaultAlignment,
+            parseHTML: element =>
+              element.style.textAlign || this.options.defaultAlignment,
+            renderHTML: attributes => {
+              if (attributes.textAlign === this.options.defaultAlignment) return {};
+              return { style: `text-align: ${attributes.textAlign}` };
+            },
+          },
+        },
+      },
+    ];
+  },
+
+  addCommands() {
+    return {
+      setTextAlign:
+        (alignment: TextAlignValue) =>
+        ({ commands }: { commands: Record<string, (...args: unknown[]) => boolean> }) => {
+          if (!this.options.alignments.includes(alignment)) return false;
+          // Apply to every configured node type; updateAttributes is a no-op
+          // for types not in the current selection, so this is safe.
+          return this.options.types
+            .map((type: string) => commands.updateAttributes(type, { textAlign: alignment }))
+            .every((ok: boolean) => ok);
+        },
+      unsetTextAlign:
+        () =>
+        ({ commands }: { commands: Record<string, (...args: unknown[]) => boolean> }) =>
+          this.options.types
+            .map((type: string) => commands.resetAttributes(type, "textAlign"))
+            .every((ok: boolean) => ok),
+    } as never;
+  },
+
+  addKeyboardShortcuts() {
+    return {
+      "Mod-Shift-l": () => (this.editor.commands as never as Record<string, (a: string) => boolean>).setTextAlign("left"),
+      "Mod-Shift-e": () => (this.editor.commands as never as Record<string, (a: string) => boolean>).setTextAlign("center"),
+      "Mod-Shift-r": () => (this.editor.commands as never as Record<string, (a: string) => boolean>).setTextAlign("right"),
+      "Mod-Shift-j": () => (this.editor.commands as never as Record<string, (a: string) => boolean>).setTextAlign("justify"),
+    };
   },
 });
 
@@ -147,6 +225,7 @@ export function RichTextEditor({ content, onChange, brandColor, placeholder = "S
       Placeholder.configure({ placeholder }),
       CharacterCount,
       BlogImage,
+      TextAlign,
     ],
     content: content || "",
     onUpdate: ({ editor }) => {
@@ -287,6 +366,31 @@ export function RichTextEditor({ content, onChange, brandColor, placeholder = "S
 
         <Divider />
 
+        {/* Alignment. isActive({ textAlign }) reads the block attribute, so the
+            active state follows the cursor's current block. "left" also lights
+            up when the attribute is unset, since that's the default. */}
+        {([
+          { value: "left",    icon: AlignLeft,    title: "Align left (Ctrl+Shift+L)"   },
+          { value: "center",  icon: AlignCenter,  title: "Align centre (Ctrl+Shift+E)" },
+          { value: "right",   icon: AlignRight,   title: "Align right (Ctrl+Shift+R)"  },
+          { value: "justify", icon: AlignJustify, title: "Justify (Ctrl+Shift+J)"      },
+        ] as const).map(({ value, icon: Icon, title }) => (
+          <ToolbarButton
+            key={value}
+            onClick={() => (editor.chain().focus() as never as Record<string, (a: string) => { run: () => void }>).setTextAlign(value).run()}
+            active={
+              editor.isActive({ textAlign: value }) ||
+              (value === "left" && !editor.isActive({ textAlign: "center" }) && !editor.isActive({ textAlign: "right" }) && !editor.isActive({ textAlign: "justify" }))
+            }
+            title={title}
+            brandColor={brandColor}
+          >
+            <Icon size={13} />
+          </ToolbarButton>
+        ))}
+
+        <Divider />
+
         {/* Images — click inserts a local file, shift-click prompts for a URL */}
         <ToolbarButton
           onClick={() => fileInputRef.current?.click()}
@@ -390,6 +494,10 @@ export function RichTextEditor({ content, onChange, brandColor, placeholder = "S
           outline: 2px solid var(--brand);
           outline-offset: 2px;
         }
+        /* Centred/right-aligned images need auto margins — text-align alone
+           doesn't move a display:block element. */
+        .tiptap-editor img[style*="center"] { margin-left: auto; margin-right: auto; }
+        .tiptap-editor img[style*="right"]  { margin-left: auto; margin-right: 0; }
         .tiptap-editor .is-editor-empty:first-child::before { content: attr(data-placeholder); color: var(--text-tertiary); pointer-events: none; float: left; height: 0; font-style: italic; }
         .tiptap-editor p.is-empty::before { content: attr(data-placeholder); color: var(--text-tertiary); pointer-events: none; float: left; height: 0; font-style: italic; }
       `}</style>

@@ -12,11 +12,11 @@
 // showed no preview.
 // =============================================================================
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { motion } from "framer-motion";
-import { ArrowLeft, Clock, Link2, CheckCircle2, Rss } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ArrowLeft, Clock, Link2, CheckCircle2, Rss, X } from "lucide-react";
 
 // Brand marks as inline SVG. lucide-react dropped its brand icons in v1 (they
 // were removed over trademark concerns), so these are hand-rolled rather than
@@ -193,6 +193,37 @@ export default function PostView() {
   const [email,   setEmail]   = useState("");
   const [subbed,  setSubbed]  = useState(false);
 
+  // Newsletter slide-in. Opens once the reader is ~55% through the article —
+  // late enough that they've had a chance to judge whether the writing is
+  // worth subscribing to, early enough that they haven't already left.
+  // Dismissal and subscription are both remembered so it never nags.
+  const [newsletterOpen, setNewsletterOpen] = useState(false);
+  const promptedRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (localStorage.getItem("aiml-newsletter-dismissed")) return;
+
+    function onScroll() {
+      if (promptedRef.current) return;
+      const scrollable = document.documentElement.scrollHeight - window.innerHeight;
+      if (scrollable <= 0) return;
+      if (window.scrollY / scrollable < 0.55) return;
+      promptedRef.current = true;
+      setNewsletterOpen(true);
+    }
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  function dismissNewsletter() {
+    setNewsletterOpen(false);
+    // Remember for this browser. Deliberately not per-post — being asked on
+    // every article you read is the thing that makes these obnoxious.
+    try { localStorage.setItem("aiml-newsletter-dismissed", "1"); } catch { /* private mode */ }
+  }
+
   useEffect(() => {
     async function load() {
       const { data, error } = await supabase
@@ -229,6 +260,10 @@ export default function PostView() {
       return;
     }
     setSubbed(true);
+    // Show the confirmation briefly, then close the slide-in and stop it
+    // reappearing on future articles.
+    try { localStorage.setItem("aiml-newsletter-dismissed", "1"); } catch { /* private mode */ }
+    setTimeout(() => setNewsletterOpen(false), 2200);
   }
 
   function copyLink() {
@@ -409,35 +444,28 @@ export default function PostView() {
               </div>
             )}
 
-            {/* Newsletter */}
-            <div style={{ padding: "20px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: "10px" }}>
+            {/* Newsletter used to be a ~200px tall card here. It's been moved
+                to a dismissible slide-in (see <NewsletterSlideIn/> below) —
+                stacked on mobile it pushed the "All articles" link almost a
+                full screen down. All that's left inline is a one-line prompt. */}
+            {!subbed && (
+              <button
+                onClick={() => setNewsletterOpen(true)}
+                style={{
+                  display: "flex", alignItems: "center", gap: "7px", width: "100%",
+                  padding: "10px 12px", background: "transparent",
+                  border: "1px solid var(--border)", borderRadius: "9px",
+                  cursor: "pointer", textAlign: "left",
+                  fontFamily: "var(--font-body)", fontSize: "12px",
+                  color: "var(--text-secondary)", transition: "border-color 0.16s, color 0.16s",
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--brand)"; (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; }}
+              >
                 <Rss size={12} color="var(--brand)" />
-                <span style={{ fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 600, color: "var(--text-primary)" }}>Weekly Brief</span>
-              </div>
-              <p style={{ fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: "14px" }}>
-                SEO & GEO intelligence every Tuesday.
-              </p>
-              {subbed ? (
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--signal-green)" }}>
-                  <CheckCircle2 size={13} /> Subscribed
-                </div>
-              ) : (
-                <form onSubmit={handleSubscribe}>
-                  <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="your@email.com" required
-                    style={{ width: "100%", padding: "9px 12px", fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--text-primary)", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "7px", outline: "none", marginBottom: "8px", boxSizing: "border-box" as const }}
-                    onFocus={e => e.currentTarget.style.borderColor = "var(--brand)"}
-                    onBlur={e =>  e.currentTarget.style.borderColor = "var(--border)"}
-                  />
-                  <button type="submit" style={{ width: "100%", padding: "9px", fontFamily: "var(--font-body)", fontSize: "12px", fontWeight: 500, color: "#fff", background: "var(--brand)", border: "none", borderRadius: "7px", cursor: "pointer", transition: "opacity 0.16s" }}
-                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "0.85"}
-                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
-                  >
-                    Subscribe
-                  </button>
-                </form>
-              )}
-            </div>
+                Get the Weekly Brief
+              </button>
+            )}
 
             {/* Back to blog */}
             <div style={{ marginTop: "16px" }}>
@@ -451,7 +479,109 @@ export default function PostView() {
           </motion.aside>
         </div>
       </div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
+      {/* ── Newsletter slide-in ─────────────────────────────────────────────
+          Bottom-right card on desktop, full-width sheet on phones. Replaces
+          the tall sidebar card that was eating most of a mobile screen. */}
+      <AnimatePresence>
+        {newsletterOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{    opacity: 0, y: 16 }}
+            transition={{ duration: 0.32, ease: EASE_EXPO }}
+            role="dialog"
+            aria-label="Subscribe to the Weekly Brief"
+            className="aiml-newsletter-slidein"
+            style={{
+              position: "fixed", right: "20px", bottom: "20px", zIndex: 120,
+              width: "320px", maxWidth: "calc(100vw - 40px)",
+              padding: "16px 18px",
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderRadius: "14px",
+              boxShadow: "0 18px 48px rgba(0,0,0,0.45)",
+            }}
+          >
+            <button
+              onClick={dismissNewsletter}
+              aria-label="Dismiss"
+              style={{
+                position: "absolute", top: "10px", right: "10px",
+                width: "26px", height: "26px", display: "flex",
+                alignItems: "center", justifyContent: "center",
+                background: "transparent", border: "none", borderRadius: "6px",
+                cursor: "pointer", color: "var(--text-tertiary)",
+              }}
+              onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"}
+              onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text-tertiary)"}
+            >
+              <X size={14} />
+            </button>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: "6px" }}>
+              <Rss size={12} color="var(--brand)" />
+              <span style={{ fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 600, color: "var(--text-primary)" }}>
+                Weekly Brief
+              </span>
+            </div>
+
+            {subbed ? (
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", fontFamily: "var(--font-body)", fontSize: "12.5px", color: "var(--signal-green)", paddingTop: "4px" }}>
+                <CheckCircle2 size={13} /> Subscribed — thanks.
+              </div>
+            ) : (
+              <>
+                <p style={{ fontFamily: "var(--font-body)", fontSize: "12.5px", color: "var(--text-secondary)", lineHeight: 1.6, margin: "0 0 12px", paddingRight: "18px" }}>
+                  SEO &amp; GEO intelligence every Tuesday.
+                </p>
+                <form onSubmit={handleSubscribe} style={{ display: "flex", gap: "6px" }}>
+                  <input
+                    type="email" value={email} onChange={e => setEmail(e.target.value)}
+                    placeholder="your@email.com" required
+                    style={{
+                      flex: 1, minWidth: 0, padding: "9px 11px",
+                      fontFamily: "var(--font-body)", fontSize: "12.5px",
+                      color: "var(--text-primary)", background: "var(--card)",
+                      border: "1px solid var(--border)", borderRadius: "8px",
+                      outline: "none", boxSizing: "border-box" as const,
+                    }}
+                    onFocus={e => e.currentTarget.style.borderColor = "var(--brand)"}
+                    onBlur={e =>  e.currentTarget.style.borderColor = "var(--border)"}
+                  />
+                  <button
+                    type="submit"
+                    style={{
+                      flexShrink: 0, padding: "9px 14px",
+                      fontFamily: "var(--font-body)", fontSize: "12.5px", fontWeight: 500,
+                      color: "#fff", background: "var(--brand)",
+                      border: "none", borderRadius: "8px", cursor: "pointer",
+                      transition: "opacity 0.16s",
+                    }}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "0.85"}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
+                  >
+                    Join
+                  </button>
+                </form>
+              </>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @media (max-width: 560px) {
+          .aiml-newsletter-slidein {
+            right: 12px !important;
+            left: 12px !important;
+            bottom: 12px !important;
+            width: auto !important;
+            max-width: none !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

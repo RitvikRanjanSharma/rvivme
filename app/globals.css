@@ -218,6 +218,11 @@ body {
   border: 1px solid var(--border);
   margin: 24px 0;
 }
+/* Alignment set in the editor arrives as an inline text-align style. For a
+   display:block image that has no effect on its own, so translate it into
+   auto margins here. */
+.aiml-article img[style*="center"] { margin-left: auto; margin-right: auto; }
+.aiml-article img[style*="right"]  { margin-left: auto; margin-right: 0; }
 .aiml-article figure { margin: 24px 0; }
 .aiml-article figcaption {
   font-family: var(--font-body);
