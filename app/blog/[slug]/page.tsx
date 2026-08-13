@@ -1,375 +1,129 @@
-"use client";
-
 // app/blog/[slug]/page.tsx
 // =============================================================================
-// AI Marketing Lab — Blog Post
-// Reads from Supabase · New design system · View count · Share buttons
+// AI Marketing Lab — Blog Post (server shell)
+//
+// This file exists to emit per-post Open Graph / Twitter card metadata. Those
+// tags MUST be present in the server-rendered HTML: LinkedIn, Slack, X,
+// WhatsApp and friends fetch the URL with a plain HTTP crawler that does not
+// execute JavaScript. Previously this route was a single "use client"
+// component, so a shared link had no title, description or image — LinkedIn
+// rendered a bare URL.
+//
+// The interactive UI lives in ./post-view.tsx.
 // =============================================================================
 
-import { useState, useEffect } from "react";
-import Link from "next/link";
-import { useParams } from "next/navigation";
-import { motion } from "framer-motion";
-import { ArrowLeft, Clock, Share2, Link2, CheckCircle2, Rss } from "lucide-react";
-import { supabase } from "@/lib/supabase";
-import { sanitizeHtml, looksLikeHtml } from "@/lib/sanitize-html";
+import type { Metadata } from "next";
+import { createClient } from "@supabase/supabase-js";
+import PostView from "./post-view";
 
-const EASE_EXPO = [0.16, 1, 0.3, 1] as const;
-
-interface Post {
-  id:                string;
-  title:             string;
-  slug:              string;
-  excerpt:           string;
-  content:           string;
-  category:          string;
-  read_time_minutes: number;
-  published_at:      string | null;
-  author_name:       string;
-  author_bio:        string | null;
-  focus_keyword:     string | null;
-  meta_description:  string | null;
-  view_count:        number;
-  featured:          boolean;
+// Public, anon-key read. Blog posts are world-readable, so no session needed —
+// and using the cookie-aware client here would opt the route out of caching.
+function publicSupabase() {
+  const url  = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anon) return null;
+  return createClient(url, anon, { auth: { persistSession: false } });
 }
 
-function categoryLabel(id: string): string {
-  const map: Record<string, string> = {
-    seo_strategy: "SEO Strategy", geo_optimisation: "GEO",
-    technical_seo: "Technical SEO", content_marketing: "Content",
-    business_insights: "Business", platform_updates: "Platform",
-    case_studies: "Case Studies", industry_news: "Industry News",
-    consumer_psychology: "Consumer Psychology",
+/** Absolute base URL — OG tags must use absolute URLs, relative ones are ignored. */
+function baseUrl(): string {
+  const explicit = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL;
+  if (explicit) return explicit.replace(/\/$/, "");
+  const domain = process.env.NEXT_PUBLIC_SITE_DOMAIN || "aimarketinglab.co.uk";
+  return `https://${domain}`;
+}
+
+type PostMeta = {
+  title:            string;
+  excerpt:          string | null;
+  meta_title:       string | null;
+  meta_description: string | null;
+  author_name:      string | null;
+  published_at:     string | null;
+  updated_at:       string | null;
+  category:         string | null;
+  focus_keyword:    string | null;
+  content:          string | null;
+};
+
+async function fetchPost(slug: string): Promise<PostMeta | null> {
+  const sb = publicSupabase();
+  if (!sb) return null;
+  const { data } = await sb
+    .from("blog_posts")
+    .select("title, excerpt, meta_title, meta_description, author_name, published_at, updated_at, category, focus_keyword, content")
+    .eq("slug", slug)
+    .eq("status", "published")
+    .single();
+  return (data as PostMeta | null) ?? null;
+}
+
+/**
+ * Pull the first image out of the post body to use as the social preview.
+ * Falls back to the site-wide OG image when the post has none.
+ * Data-URL images are skipped — crawlers can't fetch them.
+ */
+function firstImageFrom(content: string | null): string | null {
+  if (!content) return null;
+  const m = content.match(/<img[^>]+src=["']([^"']+)["']/i);
+  const src = m?.[1];
+  if (!src || src.startsWith("data:")) return null;
+  if (src.startsWith("http")) return src;
+  if (src.startsWith("/"))    return `${baseUrl()}${src}`;
+  return null;
+}
+
+export async function generateMetadata(
+  { params }: { params: Promise<{ slug: string }> }
+): Promise<Metadata> {
+  const { slug } = await params;
+  const post = await fetchPost(slug);
+  const base = baseUrl();
+  const url  = `${base}/blog/${slug}`;
+
+  if (!post) {
+    return {
+      title: "Post not found — AI Marketing Lab",
+      robots: { index: false, follow: true },
+      alternates: { canonical: url },
+    };
+  }
+
+  const title       = post.meta_title       || post.title;
+  const description = post.meta_description || post.excerpt || "";
+  const image       = firstImageFrom(post.content) ?? `${base}/og-default.png`;
+
+  return {
+    title,
+    description,
+    alternates: { canonical: url },
+    // openGraph.type "article" is what makes LinkedIn show the byline and
+    // published date rather than treating it as a generic website card.
+    openGraph: {
+      type:        "article",
+      url,
+      title,
+      description,
+      siteName:    "AI Marketing Lab",
+      locale:      "en_GB",
+      images:      [{ url: image, width: 1200, height: 630, alt: post.title }],
+      publishedTime: post.published_at ?? undefined,
+      modifiedTime:  post.updated_at   ?? undefined,
+      authors:       post.author_name ? [post.author_name] : undefined,
+    },
+    twitter: {
+      card:        "summary_large_image",
+      title,
+      description,
+      images:      [image],
+    },
+    keywords: post.focus_keyword ? [post.focus_keyword] : undefined,
+    authors:  post.author_name ? [{ name: post.author_name }] : undefined,
   };
-  return map[id] ?? id;
-}
-
-function formatDate(iso: string | null): string {
-  if (!iso) return "";
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
-}
-
-// HTML-escape user content before we transform our `**bold**` markers into
-// `<strong>` tags. Without this, anyone with insert access to blog_posts
-// (any signed-in user under current RLS) could embed a `<script>` or
-// `<img onerror=…>` payload that executes for every blog reader.
-function safeBold(line: string): string {
-  const escaped = line
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-  return escaped.replace(
-    /\*\*(.+?)\*\*/g,
-    '<strong style="color:var(--text-primary);font-weight:600">$1</strong>',
-  );
-}
-
-// Renders a post body. Two formats land in blog_posts.content:
-//   • HTML     — from the TipTap editor in Blog Admin (editor.getHTML())
-//   • Markdown — from the AI draft generator (lib/content-gen.ts)
-// The markdown renderer below HTML-escapes everything, so feeding it editor
-// HTML printed raw "<h1>…</h1>" tags on the page as literal text. Detect the
-// format and route accordingly, sanitising the HTML path.
-function PostBody({ content }: { content: string }) {
-  // Sanitisation uses DOMParser, which only exists in the browser, so this has
-  // to run after mount rather than during SSR/first render.
-  const [html, setHtml] = useState<string | null>(null);
-  const isHtml = looksLikeHtml(content);
-
-  useEffect(() => {
-    if (isHtml) setHtml(sanitizeHtml(content));
-  }, [content, isHtml]);
-
-  if (!isHtml) {
-    return <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>{renderContent(content)}</div>;
-  }
-
-  // Brief skeleton while the client-side sanitise pass runs.
-  if (html === null) {
-    return (
-      <div aria-hidden style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-        {[100, 96, 88].map((w, i) => (
-          <div key={i} style={{
-            height: "16px", width: `${w}%`, borderRadius: "4px",
-            background: "linear-gradient(90deg, var(--card) 25%, var(--muted) 50%, var(--card) 75%)",
-            backgroundSize: "200% 100%", animation: "shimmer 1.4s ease-in-out infinite",
-          }} />
-        ))}
-      </div>
-    );
-  }
-
-  return <div dangerouslySetInnerHTML={{ __html: html }} />;
-}
-
-// Minimal markdown renderer
-function renderContent(content: string) {
-  const lines = content.split("\n");
-  const elements: React.ReactNode[] = [];
-  let key = 0;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line.trim()) { elements.push(<div key={key++} style={{ height: "12px" }} />); continue; }
-
-    if (line.startsWith("## ")) {
-      elements.push(<h2 key={key++} style={{ fontFamily: "var(--font-display)", fontSize: "clamp(1.4rem,2.5vw,1.9rem)", letterSpacing: "-0.04em", lineHeight: 1.1, fontWeight: 400, color: "var(--text-primary)", marginTop: "48px", marginBottom: "16px" }}>{line.slice(3)}</h2>);
-    } else if (line.startsWith("### ")) {
-      elements.push(<h3 key={key++} style={{ fontFamily: "var(--font-display)", fontSize: "clamp(1.1rem,2vw,1.4rem)", letterSpacing: "-0.03em", lineHeight: 1.2, fontWeight: 400, color: "var(--text-primary)", marginTop: "32px", marginBottom: "12px" }}>{line.slice(4)}</h3>);
-    } else if (line.startsWith("- ")) {
-      const items: string[] = [];
-      while (i < lines.length && lines[i].startsWith("- ")) { items.push(lines[i].slice(2)); i++; }
-      i--;
-      elements.push(
-        <ul key={key++} style={{ margin: "12px 0 16px", paddingLeft: "20px" }}>
-          {/* Font size / colour / line-height come from .aiml-article in
-              globals.css so they can respond to viewport width. */}
-          {items.map((item, j) => <li key={j} style={{ fontFamily: "var(--font-body)", marginBottom: "6px" }} dangerouslySetInnerHTML={{ __html: safeBold(item) }} />)}
-        </ul>
-      );
-    } else if (/^\d+\. /.test(line)) {
-      const items: string[] = [];
-      while (i < lines.length && /^\d+\. /.test(lines[i])) { items.push(lines[i].replace(/^\d+\. /, "")); i++; }
-      i--;
-      elements.push(
-        <ol key={key++} style={{ margin: "12px 0 16px", paddingLeft: "20px" }}>
-          {items.map((item, j) => <li key={j} style={{ fontFamily: "var(--font-body)", marginBottom: "6px" }} dangerouslySetInnerHTML={{ __html: safeBold(item) }} />)}
-        </ol>
-      );
-    } else if (line.startsWith("✓ ")) {
-      elements.push(<div key={key++} style={{ display: "flex", alignItems: "flex-start", gap: "10px", marginBottom: "8px" }}>
-        <CheckCircle2 size={14} style={{ color: "var(--signal-green)", flexShrink: 0, marginTop: "4px" }} />
-        <span style={{ fontFamily: "var(--font-body)", fontSize: "15px", color: "var(--text-reading)", lineHeight: 1.7 }}>{line.slice(2)}</span>
-      </div>);
-    } else {
-      // Size / colour / line-height / margin all come from .aiml-article.
-      elements.push(<p key={key++} style={{ fontFamily: "var(--font-body)" }} dangerouslySetInnerHTML={{ __html: safeBold(line) }} />);
-    }
-  }
-  return elements;
 }
 
 export default function BlogPostPage() {
-  const params = useParams();
-  const slug   = params.slug as string;
-
-  const [post,    setPost]    = useState<Post | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [notFound,setNotFound]= useState(false);
-  const [copied,  setCopied]  = useState(false);
-  const [email,   setEmail]   = useState("");
-  const [subbed,  setSubbed]  = useState(false);
-
-  useEffect(() => {
-    async function load() {
-      const { data, error } = await supabase
-        .from("blog_posts")
-        .select("id,title,slug,excerpt,content,category,read_time_minutes,published_at,author_name,author_bio,focus_keyword,meta_description,view_count,featured")
-        .eq("slug", slug)
-        .eq("status", "published")
-        .single();
-
-      if (error || !data) { setNotFound(true); setLoading(false); return; }
-      const post = data as Post;
-      setPost(post);
-      setLoading(false);
-
-      // Increment view count. RLS on blog_posts blocks anon/non-author UPDATEs,
-      // so go through the SECURITY DEFINER RPC added in migration 003.
-      // `as never` bypasses the generated RPC type map, which doesn't know about
-      // our custom function yet.
-      await supabase.rpc("increment_post_view" as never, { p_post_id: post.id } as never);
-      // Log the view event (anon has public insert via RLS).
-      await supabase.from("post_view_events").insert({ post_id: post.id, referrer: document.referrer || null } as never);
-    }
-    load();
-  }, [slug]);
-
-  async function handleSubscribe(e: React.FormEvent) {
-    e.preventDefault();
-    if (!email.includes("@")) return;
-    // UNIQUE constraint on email means a duplicate subscribe throws 23505.
-    // Treat "already subscribed" as success from the reader's perspective.
-    const { error } = await supabase.from("newsletter_subscribers").insert({ email, source: "post" } as never);
-    if (error && !/duplicate|unique/i.test(error.message)) {
-      console.error("[subscribe]", error.message);
-      return;
-    }
-    setSubbed(true);
-  }
-
-  function copyLink() {
-    navigator.clipboard.writeText(window.location.href);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  if (loading) {
-    return (
-      <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ width: "20px", height: "20px", border: "2px solid var(--border)", borderTopColor: "var(--brand)", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    );
-  }
-
-  if (notFound || !post) {
-    return (
-      <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "24px", padding: "40px" }}>
-        <h1 style={{ fontFamily: "var(--font-display)", fontSize: "3rem", letterSpacing: "-0.05em", fontWeight: 400, color: "var(--text-primary)" }}>Post not found.</h1>
-        <p style={{ fontFamily: "var(--font-body)", fontSize: "15px", color: "var(--text-secondary)" }}>This article may have been moved or unpublished.</p>
-        <Link href="/blog" style={{ fontFamily: "var(--font-body)", fontSize: "14px", color: "var(--brand)", textDecoration: "underline", textUnderlineOffset: "3px" }}>Browse all articles</Link>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ background: "var(--bg)", minHeight: "100vh" }}>
-
-      {/* Header */}
-      <div className="aiml-post-header" style={{ borderBottom: "1px solid var(--border)", padding: "48px 32px 40px", position: "relative", overflow: "hidden" }}>
-        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(37,99,235,0.05) 0%, transparent 70%)", pointerEvents: "none" }} />
-        <div style={{ maxWidth: "860px", margin: "0 auto", position: "relative" }}>
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: EASE_EXPO }}>
-            <Link href="/blog" style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontFamily: "var(--font-body)", fontSize: "13px", color: "var(--text-tertiary)", textDecoration: "none", marginBottom: "28px", transition: "color 0.16s" }}
-              onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"}
-              onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text-tertiary)"}
-            >
-              <ArrowLeft size={13} /> Intelligence
-            </Link>
-
-            {/* Category + read time */}
-            <div className="aiml-post-meta" style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--brand)", background: "rgba(37,99,235,0.08)", border: "1px solid rgba(37,99,235,0.20)", padding: "3px 10px", borderRadius: "100px" }}>
-                {categoryLabel(post.category)}
-              </span>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.08em", color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: "4px" }}>
-                <Clock size={10} /> {post.read_time_minutes} min read
-              </span>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>
-                {formatDate(post.published_at)}
-              </span>
-            </div>
-
-            {/* Title */}
-            <h1 className="aiml-post-title" style={{ fontFamily: "var(--font-display)", fontSize: "clamp(2rem,4.5vw,3.6rem)", letterSpacing: "-0.05em", lineHeight: 0.95, fontWeight: 400, color: "var(--text-primary)", marginBottom: "20px" }}>
-              {post.title}
-            </h1>
-
-            {/* Excerpt */}
-            <p className="aiml-post-excerpt" style={{ fontFamily: "var(--font-body)", fontSize: "17px", color: "var(--text-reading)", lineHeight: 1.7, maxWidth: "680px", marginBottom: "28px" }}>
-              {post.excerpt}
-            </p>
-
-            {/* Author + share */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <div style={{ width: "34px", height: "34px", borderRadius: "50%", background: "var(--brand)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: "11px", fontWeight: 500, color: "#fff" }}>
-                  {post.author_name.split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase()}
-                </div>
-                <span style={{ fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 500, color: "var(--text-primary)" }}>{post.author_name}</span>
-              </div>
-              <div style={{ display: "flex", gap: "8px" }}>
-                {[
-                  { label: "X",       icon: Share2,                        action: () => window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(post.title)}&url=${encodeURIComponent(window.location.href)}`) },
-                  { label: "LinkedIn",icon: ArrowLeft,                     action: () => window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(window.location.href)}`) },
-                  { label: "Copy",    icon: copied ? CheckCircle2 : Link2, action: copyLink },
-                ].map(({ icon: Icon, label, action }) => (
-                  <button key={label} onClick={action} title={label}
-                    style={{ width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", cursor: "pointer", color: "var(--text-tertiary)", transition: "all 0.15s" }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--brand)"; (e.currentTarget as HTMLElement).style.color = "var(--brand)"; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLElement).style.color = "var(--text-tertiary)"; }}
-                  >
-                    <Icon size={12} />
-                  </button>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      </div>
-
-      {/* Body */}
-      <div className="aiml-post-body" style={{ maxWidth: "860px", margin: "0 auto", padding: "48px 32px 80px" }}>
-        <div className="aiml-post-grid">
-
-          {/* Article */}
-          <motion.article className="aiml-article" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: EASE_EXPO, delay: 0.1 }}>
-            <PostBody content={post.content} />
-
-            {/* Author bio */}
-            {post.author_bio && (
-              <div style={{ marginTop: "56px", paddingTop: "40px", borderTop: "1px solid var(--border)" }}>
-                <div style={{ display: "flex", alignItems: "flex-start", gap: "16px" }}>
-                  <div style={{ width: "44px", height: "44px", borderRadius: "50%", background: "var(--brand)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: "12px", fontWeight: 500, color: "#fff", flexShrink: 0 }}>
-                    {post.author_name.split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase()}
-                  </div>
-                  <div>
-                    <div style={{ fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "6px" }}>{post.author_name}</div>
-                    <p style={{ fontFamily: "var(--font-body)", fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.7, margin: 0 }}>{post.author_bio}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </motion.article>
-
-          {/* Sidebar */}
-          <motion.aside className="aiml-post-sidebar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8, ease: EASE_EXPO, delay: 0.3 }}
-            style={{ position: "sticky", top: "80px" }}
-          >
-            {/* Focus keyword */}
-            {post.focus_keyword && (
-              <div style={{ padding: "14px 16px", background: "rgba(37,99,235,0.05)", border: "1px solid rgba(37,99,235,0.15)", borderRadius: "10px", marginBottom: "20px" }}>
-                <div style={{ fontFamily: "var(--font-mono)", fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--brand)", marginBottom: "5px" }}>Focus Keyword</div>
-                <div style={{ fontFamily: "var(--font-body)", fontSize: "13px", color: "var(--text-primary)", fontWeight: 500 }}>{post.focus_keyword}</div>
-              </div>
-            )}
-
-            {/* Newsletter */}
-            <div style={{ padding: "20px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: "10px" }}>
-                <Rss size={12} color="var(--brand)" />
-                <span style={{ fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 600, color: "var(--text-primary)" }}>Weekly Brief</span>
-              </div>
-              <p style={{ fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: "14px" }}>
-                SEO & GEO intelligence every Tuesday.
-              </p>
-              {subbed ? (
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--signal-green)" }}>
-                  <CheckCircle2 size={13} /> Subscribed
-                </div>
-              ) : (
-                <form onSubmit={handleSubscribe}>
-                  <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="your@email.com" required
-                    style={{ width: "100%", padding: "9px 12px", fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--text-primary)", background: "var(--card)", border: "1px solid var(--border)", borderRadius: "7px", outline: "none", marginBottom: "8px", boxSizing: "border-box" as const }}
-                    onFocus={e => e.currentTarget.style.borderColor = "var(--brand)"}
-                    onBlur={e =>  e.currentTarget.style.borderColor = "var(--border)"}
-                  />
-                  <button type="submit" style={{ width: "100%", padding: "9px", fontFamily: "var(--font-body)", fontSize: "12px", fontWeight: 500, color: "#fff", background: "var(--brand)", border: "none", borderRadius: "7px", cursor: "pointer", transition: "opacity 0.16s" }}
-                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "0.85"}
-                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
-                  >
-                    Subscribe
-                  </button>
-                </form>
-              )}
-            </div>
-
-            {/* Back to blog */}
-            <div style={{ marginTop: "16px" }}>
-              <Link href="/blog" style={{ display: "flex", alignItems: "center", gap: "6px", fontFamily: "var(--font-body)", fontSize: "13px", color: "var(--text-tertiary)", textDecoration: "none", transition: "color 0.16s" }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text-tertiary)"}
-              >
-                <ArrowLeft size={12} /> All articles
-              </Link>
-            </div>
-          </motion.aside>
-        </div>
-      </div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </div>
-  );
+  // PostView reads the slug from useParams and fetches client-side, which keeps
+  // the existing view-count and share behaviour unchanged.
+  return <PostView />;
 }
