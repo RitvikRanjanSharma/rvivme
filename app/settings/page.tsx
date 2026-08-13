@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   User, Palette, Plug, CreditCard, Shield, Database,
   CheckCircle2, AlertCircle, Save, RefreshCw,
-  Globe2, BarChart3, Cpu, Trash2, Eye, EyeOff, Brain, PenLine,
+  Globe2, BarChart3, Cpu, Trash2, Eye, EyeOff, Brain, PenLine, HelpCircle,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useSearchParams } from "next/navigation";
@@ -397,7 +397,7 @@ function IntegrationsTab({ brandColor }: { brandColor: string }) {
                 {analyticsError}
               </div>
             )}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
+            <div className="grid-1-mobile" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
               <Field
                 label="Google Search Console site"
                 hint='e.g. "sc-domain:yourdomain.com" for a domain property, or "https://yourdomain.com/" for a URL-prefix property.'
@@ -411,7 +411,7 @@ function IntegrationsTab({ brandColor }: { brandColor: string }) {
               </Field>
               <Field
                 label="GA4 property ID"
-                hint='The numeric ID of your GA4 property (Admin → Property settings). Looks like "123456789".'
+                hint='The numeric ID of your GA4 property. Not the "G-XXXXXXX" measurement ID — see the steps below.'
               >
                 <TextInput
                   value={ga4PropertyId}
@@ -421,6 +421,82 @@ function IntegrationsTab({ brandColor }: { brandColor: string }) {
                 />
               </Field>
             </div>
+
+            {/* Where-do-I-find-this guide. The single most common setup mistake
+                is pasting the G-XXXXXXX measurement ID, which looks like an ID
+                but is a different thing entirely and silently fails. */}
+            <details style={{ marginTop: "4px", marginBottom: "18px" }}>
+              <summary style={{
+                cursor: "pointer", listStyle: "none",
+                display: "inline-flex", alignItems: "center", gap: "6px",
+                fontFamily: "var(--font-body)", fontSize: "12px", fontWeight: 500,
+                color: brandColor,
+              }}>
+                <HelpCircle size={12} />
+                Where do I find my GA4 property ID?
+              </summary>
+              <div style={{
+                marginTop: "12px", padding: "14px 16px",
+                background: "var(--card)", border: "1px solid var(--border)",
+                borderRadius: "10px",
+              }}>
+                <ol style={{
+                  margin: 0, paddingLeft: "18px",
+                  fontFamily: "var(--font-body)", fontSize: "12.5px",
+                  color: "var(--text-reading)", lineHeight: 1.75,
+                }}>
+                  <li>
+                    Go to{" "}
+                    <a
+                      href="https://analytics.google.com/analytics/web/#/admin"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: brandColor, textDecoration: "underline", textUnderlineOffset: "2px" }}
+                    >
+                      analytics.google.com
+                    </a>{" "}
+                    and sign in.
+                  </li>
+                  <li>Click the <strong>Admin</strong> cog (bottom-left).</li>
+                  <li>
+                    In the <strong>Property</strong> column, make sure the correct
+                    property is selected, then click <strong>Property settings</strong>.
+                  </li>
+                  <li>
+                    Your <strong>Property ID</strong> is shown top-right — a plain
+                    number like <code style={{ fontFamily: "var(--font-mono)", fontSize: "11.5px", background: "var(--muted)", padding: "1px 5px", borderRadius: "4px" }}>518782250</code>.
+                  </li>
+                  <li>Paste just that number above — no “G-”, no spaces.</li>
+                </ol>
+
+                <div style={{
+                  marginTop: "12px", paddingTop: "12px",
+                  borderTop: "1px solid var(--border)",
+                  fontFamily: "var(--font-body)", fontSize: "12px",
+                  color: "var(--text-secondary)", lineHeight: 1.65,
+                }}>
+                  <strong style={{ color: "var(--signal-amber)" }}>Common mix-up:</strong>{" "}
+                  the <code style={{ fontFamily: "var(--font-mono)", fontSize: "11.5px" }}>G-XXXXXXXXXX</code>{" "}
+                  measurement ID (used in your site&rsquo;s tracking snippet) is a
+                  different value and won&rsquo;t work here.
+                </div>
+
+                <div style={{
+                  marginTop: "10px",
+                  fontFamily: "var(--font-body)", fontSize: "12px",
+                  color: "var(--text-secondary)", lineHeight: 1.65,
+                }}>
+                  <strong>One more step:</strong> in the same Admin screen open{" "}
+                  <strong>Property access management</strong> → <strong>+</strong> →
+                  add{" "}
+                  <code style={{ fontFamily: "var(--font-mono)", fontSize: "11px", wordBreak: "break-all" }}>
+                    aiml-ga4-reader@ai-marketing-labs.iam.gserviceaccount.com
+                  </code>{" "}
+                  with the <strong>Viewer</strong> role. Without this the ID saves
+                  fine but the dashboard can&rsquo;t read any data.
+                </div>
+              </div>
+            </details>
             <SaveBtn
               brandColor={brandColor}
               onClick={handleSaveAnalytics}

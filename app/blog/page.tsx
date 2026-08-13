@@ -12,7 +12,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Clock, ArrowRight, Zap, Rss,
   TrendingUp, Code2, FileText, Globe2, Newspaper,
-  Lightbulb, BookOpen, CheckCircle2, X,
+  Lightbulb, BookOpen, CheckCircle2, X, Brain,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -42,6 +42,7 @@ const CATEGORIES = [
   { id: "technical_seo",     label: "Technical SEO",     icon: Code2       },
   { id: "content_marketing", label: "Content",           icon: FileText    },
   { id: "business_insights", label: "Business Insights", icon: Lightbulb   },
+  { id: "consumer_psychology", label: "Consumer Psychology", icon: Brain   },
   { id: "platform_updates",  label: "Platform Updates",  icon: Zap         },
   { id: "case_studies",      label: "Case Studies",      icon: CheckCircle2},
   { id: "industry_news",     label: "Industry News",     icon: Newspaper   },
@@ -340,10 +341,10 @@ export default function BlogIndexPage() {
         </div>
       </div>
 
-      <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "40px 24px 80px" }}>
+      <div className="aiml-blog-pad" style={{ maxWidth: "1200px", margin: "0 auto", padding: "40px 24px 80px" }}>
         {/* Category filter */}
         <motion.div variants={pv(0.1)} initial="hidden" animate="visible" style={{ marginBottom: "32px", overflowX: "auto", paddingBottom: "4px" }}>
-          <div style={{ display: "flex", gap: "6px", width: "max-content" }}>
+          <div className="aiml-blog-cats" style={{ display: "flex", gap: "6px", width: "max-content" }}>
             {CATEGORIES.map(cat => {
               const Icon   = cat.icon;
               const active = activeCategory === cat.id;
@@ -373,7 +374,7 @@ export default function BlogIndexPage() {
 
         {/* Loading skeleton */}
         {loading && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: "16px", marginBottom: "48px" }}>
+          <div className="aiml-blog-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(340px, 100%), 1fr))", gap: "16px", marginBottom: "48px" }}>
             {[1,2,3].map(i => (
               <div key={i} style={{ height: "220px", background: "linear-gradient(90deg, var(--card) 25%, var(--muted) 50%, var(--card) 75%)", backgroundSize: "200% 100%", borderRadius: "12px", animation: "shimmer 1.4s ease-in-out infinite" }} />
             ))}
@@ -388,8 +389,10 @@ export default function BlogIndexPage() {
         {/* Post grid */}
         {!loading && (
           <AnimatePresence mode="wait">
-            <motion.div key={activeCategory + search} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
-              style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: "16px", marginBottom: "48px" }}
+            <motion.div className="aiml-blog-grid" key={activeCategory + search} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
+              /* min(340px, 100%) stops the track from exceeding the viewport on
+                 phones narrower than 340px + padding, which caused sideways scroll. */
+              style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(340px, 100%), 1fr))", gap: "16px", marginBottom: "48px" }}
             >
               {filtered.length > 0
                 ? filtered.map((post, i) => <PostCard key={post.id} post={post} delay={i * 0.06} brandColor={brandColor} />)

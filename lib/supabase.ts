@@ -200,7 +200,8 @@ export type Database = {
             | "business_insights"
             | "platform_updates"
             | "case_studies"
-            | "industry_news";
+            | "industry_news"
+            | "consumer_psychology";
           meta_title: string | null;
           meta_description: string | null;
           focus_keyword: string | null;

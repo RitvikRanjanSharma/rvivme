@@ -25,7 +25,7 @@ type PostStatus   = "draft" | "scheduled" | "published" | "archived";
 type PostCategory =
   | "seo_strategy" | "geo_optimisation" | "technical_seo"
   | "content_marketing" | "business_insights" | "platform_updates"
-  | "case_studies" | "industry_news";
+  | "case_studies" | "industry_news" | "consumer_psychology";
 
 interface BlogPost {
   id:                 string;
@@ -79,6 +79,7 @@ function categoryLabel(id: string): string {
     seo_strategy: "SEO Strategy", geo_optimisation: "GEO", technical_seo: "Technical SEO",
     content_marketing: "Content", business_insights: "Business",
     platform_updates: "Platform", case_studies: "Case Studies", industry_news: "News",
+    consumer_psychology: "Consumer Psychology",
   };
   return map[id] ?? id;
 }
@@ -319,6 +320,7 @@ function PostEditor({ post, onClose, onSaved, brandColor }: {
     { value: "platform_updates",  label: "Platform Updates" },
     { value: "case_studies",      label: "Case Studies"     },
     { value: "industry_news",     label: "Industry News"    },
+    { value: "consumer_psychology", label: "Consumer Psychology" },
   ];
 
   async function handleSave(publishStatus?: PostStatus) {

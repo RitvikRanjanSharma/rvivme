@@ -24,6 +24,10 @@
   --text-primary:   #f8f8f5;
   --text-secondary: rgba(248,248,245,0.50);
   --text-tertiary:  rgba(248,248,245,0.28);
+  /* Long-form reading text. --text-secondary (50%) is fine for UI labels and
+     short supporting copy, but it fails WCAG AA for body text and is genuinely
+     tiring to read over an 8-minute article. Article prose uses this instead. */
+  --text-reading:   rgba(248,248,245,0.82);
   --signal-green: #00e676;
   --signal-amber: #ffab00;
   --signal-red:   #ff1744;
@@ -87,6 +91,7 @@
   --text-primary:   #0a0a08;
   --text-secondary: rgba(10,10,8,0.55);
   --text-tertiary:  rgba(10,10,8,0.30);
+  --text-reading:   rgba(10,10,8,0.86);
   --chart-grid: rgba(0,0,0,0.04);
   --chart-axis: rgba(0,0,0,0.08);
   --chart-tick: rgba(0,0,0,0.28);
@@ -120,11 +125,95 @@ body {
 @keyframes pulse-dot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(.75); } }
 @keyframes fade-up { from { opacity:0; transform:translateY(24px); } to { opacity:1; transform:translateY(0); } }
 
+/* =============================================================================
+   Blog reading experience
+   Inline styles can't carry media queries, so the article surfaces opt into
+   these classes and let CSS own anything that must change by viewport.
+============================================================================= */
+
+/* Article prose — desktop baseline. Mobile overrides live in the 768px block. */
+.aiml-article p,
+.aiml-article li {
+  color: var(--text-reading);
+  font-size: 17px;
+  line-height: 1.75;
+}
+.aiml-article p { margin-bottom: 22px; }
+.aiml-article > *:first-child { margin-top: 0; }
+/* Bold inside prose should read as emphasis, not as dimmed body text. */
+.aiml-article strong { color: var(--text-primary); font-weight: 600; }
+/* Long URLs and code-ish strings shouldn't force horizontal scroll. */
+.aiml-article p, .aiml-article li, .aiml-article h1,
+.aiml-article h2, .aiml-article h3 { overflow-wrap: break-word; }
+
+/* Post layout: article + sticky sidebar on desktop, single column on mobile. */
+.aiml-post-grid {
+  display: grid;
+  grid-template-columns: 1fr 240px;
+  gap: 48px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  /* Sidebar drops below the article rather than squeezing it to ~40% width. */
+  .aiml-post-grid {
+    grid-template-columns: 1fr !important;
+    gap: 40px !important;
+  }
+  .aiml-post-sidebar {
+    position: static !important;
+    top: auto !important;
+  }
+}
+
 @media (max-width: 768px) {
   .hide-mobile   { display: none !important; }
   .grid-2-mobile { grid-template-columns: repeat(2, 1fr) !important; }
   .grid-1-mobile { grid-template-columns: 1fr !important; }
   .stack-mobile  { flex-direction: column !important; }
+
+  /* ── Blog readability on phones ──────────────────────────────────────── */
+  /* 16px is the smallest size iOS won't zoom on focus, and it's the floor for
+     comfortable long-form reading. Line-height opens up slightly because
+     narrow measures need more leading, not less. */
+  .aiml-article p,
+  .aiml-article li {
+    font-size: 16px;
+    line-height: 1.8;
+  }
+  .aiml-article p { margin-bottom: 20px; }
+  .aiml-article h2 { margin-top: 36px !important; margin-bottom: 12px !important; }
+  .aiml-article h3 { margin-top: 26px !important; margin-bottom: 10px !important; }
+  .aiml-article ul, .aiml-article ol { padding-left: 18px !important; }
+
+  /* Post header + body padding: 32px side padding wastes ~18% of a 360px
+     screen. 18px keeps the measure comfortable without feeling edge-to-edge. */
+  .aiml-post-header { padding: 28px 18px 26px !important; }
+  .aiml-post-body   { padding: 32px 18px 64px !important; }
+  .aiml-post-title  { font-size: clamp(1.6rem, 7vw, 2.1rem) !important; line-height: 1.12 !important; }
+  .aiml-post-excerpt { font-size: 16px !important; }
+  /* Meta row (category · read time · date) wraps instead of overflowing. */
+  .aiml-post-meta { flex-wrap: wrap !important; gap: 8px !important; }
+
+  /* Blog index */
+  .aiml-blog-pad     { padding: 28px 18px 64px !important; }
+  .aiml-blog-grid    { grid-template-columns: 1fr !important; gap: 16px !important; }
+  /* Category filter row becomes a horizontal swipe strip rather than wrapping
+     into four tall rows that push content off-screen. */
+  .aiml-blog-cats {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 4px;
+  }
+  .aiml-blog-cats::-webkit-scrollbar { display: none; }
+  .aiml-blog-cats > * { flex: 0 0 auto; }
+}
+
+/* Touch targets: anything interactive should clear ~40px on touch devices. */
+@media (hover: none) and (pointer: coarse) {
+  .aiml-touch-target { min-height: 40px; min-width: 40px; }
 }
 @media (min-width: 769px) { .hide-desktop { display: none !important; } }
 @media (max-width: 1024px) {

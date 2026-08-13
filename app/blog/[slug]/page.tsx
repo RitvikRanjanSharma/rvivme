@@ -38,6 +38,7 @@ function categoryLabel(id: string): string {
     technical_seo: "Technical SEO", content_marketing: "Content",
     business_insights: "Business", platform_updates: "Platform",
     case_studies: "Case Studies", industry_news: "Industry News",
+    consumer_psychology: "Consumer Psychology",
   };
   return map[id] ?? id;
 }
@@ -84,7 +85,9 @@ function renderContent(content: string) {
       i--;
       elements.push(
         <ul key={key++} style={{ margin: "12px 0 16px", paddingLeft: "20px" }}>
-          {items.map((item, j) => <li key={j} style={{ fontFamily: "var(--font-body)", fontSize: "15px", color: "var(--text-secondary)", lineHeight: 1.8, marginBottom: "6px" }} dangerouslySetInnerHTML={{ __html: safeBold(item) }} />)}
+          {/* Font size / colour / line-height come from .aiml-article in
+              globals.css so they can respond to viewport width. */}
+          {items.map((item, j) => <li key={j} style={{ fontFamily: "var(--font-body)", marginBottom: "6px" }} dangerouslySetInnerHTML={{ __html: safeBold(item) }} />)}
         </ul>
       );
     } else if (/^\d+\. /.test(line)) {
@@ -93,16 +96,17 @@ function renderContent(content: string) {
       i--;
       elements.push(
         <ol key={key++} style={{ margin: "12px 0 16px", paddingLeft: "20px" }}>
-          {items.map((item, j) => <li key={j} style={{ fontFamily: "var(--font-body)", fontSize: "15px", color: "var(--text-secondary)", lineHeight: 1.8, marginBottom: "6px" }} dangerouslySetInnerHTML={{ __html: safeBold(item) }} />)}
+          {items.map((item, j) => <li key={j} style={{ fontFamily: "var(--font-body)", marginBottom: "6px" }} dangerouslySetInnerHTML={{ __html: safeBold(item) }} />)}
         </ol>
       );
     } else if (line.startsWith("✓ ")) {
       elements.push(<div key={key++} style={{ display: "flex", alignItems: "flex-start", gap: "10px", marginBottom: "8px" }}>
         <CheckCircle2 size={14} style={{ color: "var(--signal-green)", flexShrink: 0, marginTop: "4px" }} />
-        <span style={{ fontFamily: "var(--font-body)", fontSize: "14px", color: "var(--text-secondary)", lineHeight: 1.7 }}>{line.slice(2)}</span>
+        <span style={{ fontFamily: "var(--font-body)", fontSize: "15px", color: "var(--text-reading)", lineHeight: 1.7 }}>{line.slice(2)}</span>
       </div>);
     } else {
-      elements.push(<p key={key++} style={{ fontFamily: "var(--font-body)", fontSize: "16px", color: "var(--text-secondary)", lineHeight: 1.85, marginBottom: "0" }} dangerouslySetInnerHTML={{ __html: safeBold(line) }} />);
+      // Size / colour / line-height / margin all come from .aiml-article.
+      elements.push(<p key={key++} style={{ fontFamily: "var(--font-body)" }} dangerouslySetInnerHTML={{ __html: safeBold(line) }} />);
     }
   }
   return elements;
@@ -186,7 +190,7 @@ export default function BlogPostPage() {
     <div style={{ background: "var(--bg)", minHeight: "100vh" }}>
 
       {/* Header */}
-      <div style={{ borderBottom: "1px solid var(--border)", padding: "48px 32px 40px", position: "relative", overflow: "hidden" }}>
+      <div className="aiml-post-header" style={{ borderBottom: "1px solid var(--border)", padding: "48px 32px 40px", position: "relative", overflow: "hidden" }}>
         <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(37,99,235,0.05) 0%, transparent 70%)", pointerEvents: "none" }} />
         <div style={{ maxWidth: "860px", margin: "0 auto", position: "relative" }}>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: EASE_EXPO }}>
@@ -198,7 +202,7 @@ export default function BlogPostPage() {
             </Link>
 
             {/* Category + read time */}
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
+            <div className="aiml-post-meta" style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--brand)", background: "rgba(37,99,235,0.08)", border: "1px solid rgba(37,99,235,0.20)", padding: "3px 10px", borderRadius: "100px" }}>
                 {categoryLabel(post.category)}
               </span>
@@ -211,12 +215,12 @@ export default function BlogPostPage() {
             </div>
 
             {/* Title */}
-            <h1 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(2rem,4.5vw,3.6rem)", letterSpacing: "-0.05em", lineHeight: 0.95, fontWeight: 400, color: "var(--text-primary)", marginBottom: "20px" }}>
+            <h1 className="aiml-post-title" style={{ fontFamily: "var(--font-display)", fontSize: "clamp(2rem,4.5vw,3.6rem)", letterSpacing: "-0.05em", lineHeight: 0.95, fontWeight: 400, color: "var(--text-primary)", marginBottom: "20px" }}>
               {post.title}
             </h1>
 
             {/* Excerpt */}
-            <p style={{ fontFamily: "var(--font-body)", fontSize: "17px", color: "var(--text-secondary)", lineHeight: 1.7, maxWidth: "680px", marginBottom: "28px" }}>
+            <p className="aiml-post-excerpt" style={{ fontFamily: "var(--font-body)", fontSize: "17px", color: "var(--text-reading)", lineHeight: 1.7, maxWidth: "680px", marginBottom: "28px" }}>
               {post.excerpt}
             </p>
 
@@ -249,11 +253,11 @@ export default function BlogPostPage() {
       </div>
 
       {/* Body */}
-      <div style={{ maxWidth: "860px", margin: "0 auto", padding: "48px 32px 80px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 240px", gap: "48px", alignItems: "start" }}>
+      <div className="aiml-post-body" style={{ maxWidth: "860px", margin: "0 auto", padding: "48px 32px 80px" }}>
+        <div className="aiml-post-grid">
 
           {/* Article */}
-          <motion.article initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: EASE_EXPO, delay: 0.1 }}>
+          <motion.article className="aiml-article" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: EASE_EXPO, delay: 0.1 }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
               {renderContent(post.content)}
             </div>
@@ -275,7 +279,7 @@ export default function BlogPostPage() {
           </motion.article>
 
           {/* Sidebar */}
-          <motion.aside initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8, ease: EASE_EXPO, delay: 0.3 }}
+          <motion.aside className="aiml-post-sidebar" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8, ease: EASE_EXPO, delay: 0.3 }}
             style={{ position: "sticky", top: "80px" }}
           >
             {/* Focus keyword */}

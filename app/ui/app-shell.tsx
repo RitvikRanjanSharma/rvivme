@@ -230,8 +230,9 @@ const isAuthRoute = (p: string) => p.startsWith("/auth");
 
 // ─── Nav definitions ──────────────────────────────────────────────────────────
 const PUBLIC_NAV = [
-  { href: "/",     label: "Home" },
-  { href: "/blog", label: "Blog" },
+  { href: "/",          label: "Home"      },
+  { href: "/blog",      label: "Blog"      },
+  { href: "/portfolio", label: "Portfolio" },
 ] as const;
 
 const SIDEBAR_INTEL = [
@@ -537,10 +538,10 @@ function MarketingHeader() {
         </IconButton>
         {signedIn ? (
           /* Signed in — a single Dashboard button replaces both CTAs. */
-          <Link href="/dashboard" style={{
+          <Link href="/dashboard" className="aiml-marketing-cta" style={{
             fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 500,
             color: "#fff", background: brandColor, textDecoration: "none",
-            padding: "11px 22px", borderRadius: "100px",
+            padding: "11px 22px", borderRadius: "100px", whiteSpace: "nowrap",
             boxShadow: "0 0 22px var(--brand-glow)",
             transition: "opacity var(--dur-fast)",
           }}
@@ -568,10 +569,10 @@ function MarketingHeader() {
                 (e.currentTarget as HTMLElement).style.borderColor = "var(--border)";
               }}
             >Sign in</Link>
-            <Link href="/dashboard" style={{
+            <Link href="/dashboard" className="aiml-marketing-cta" style={{
               fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 500,
               color: "#fff", background: brandColor, textDecoration: "none",
-              padding: "11px 22px", borderRadius: "100px",
+              padding: "11px 22px", borderRadius: "100px", whiteSpace: "nowrap",
               boxShadow: "0 0 22px var(--brand-glow)",
               transition: "opacity var(--dur-fast)",
             }}
@@ -841,10 +842,17 @@ const SHELL_RESPONSIVE_CSS = `
   }
   .aiml-header { padding: 0 14px !important; }
   .aiml-header-actions { gap: 8px !important; }
-  .aiml-marketing-header { padding: 0 16px !important; }
+  .aiml-marketing-header { padding: 0 12px !important; }
   .aiml-marketing-brand-text { display: none !important; }
-  .aiml-marketing-nav { display: none !important; }
+  /* The nav used to be display:none on mobile, which made Blog and Portfolio
+     completely unreachable on a phone — the only links left were the logo and
+     the CTA. Keep it visible and shrink it instead. */
+  .aiml-marketing-nav { gap: 0 !important; }
+  .aiml-marketing-nav a { padding: 8px 8px !important; font-size: 12px !important; }
+  /* Drop the secondary "Sign in" pill on mobile; the primary CTA still gets
+     people into the app and the row can't fit both under ~380px. */
   .aiml-marketing-signin { display: none !important; }
+  .aiml-marketing-cta { padding: 9px 14px !important; font-size: 12px !important; }
   /* Page-level padding shrinks on mobile so content uses the screen */
   .aiml-page-pad { padding: 20px 14px 64px !important; }
   /* Tables that overflow get a horizontal scroll affordance instead of squashing */
