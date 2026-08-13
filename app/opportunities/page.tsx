@@ -49,8 +49,13 @@ type Report = {
   opportunities?: Opportunity[];
   counts?:   Record<OpportunityKind, number>;
   scale?:    { isEarlyStage: boolean; totalImpressions: number; queryCount: number };
+  brand?:    { detected: boolean; brandedQueries: number; brandedShare: number };
   curve?:    { fromSiteData: boolean; measuredPositions: number };
-  period?:   { queryCount: number; previousQueryCount: number };
+  period?:   {
+    queryCount: number; previousQueryCount: number;
+    current?:  { startDate: string; endDate: string };
+    previous?: { startDate: string; endDate: string };
+  };
 };
 
 const KIND_META: Record<OpportunityKind, { label: string; icon: typeof Target; color: string }> = {
@@ -61,6 +66,14 @@ const KIND_META: Record<OpportunityKind, { label: string; icon: typeof Target; c
 };
 
 const EFFORT_LABEL = { low: "Quick", medium: "Moderate", high: "Involved" } as const;
+
+/** "14 Jul – 10 Aug" — states exactly which window the numbers describe. */
+function fmtRange(r: { startDate: string; endDate: string }): string {
+  const opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" };
+  const from = new Date(r.startDate).toLocaleDateString("en-GB", opts);
+  const to   = new Date(r.endDate).toLocaleDateString("en-GB", opts);
+  return `${from} – ${to}`;
+}
 
 function OpportunityCard({ opp, index, brandColor }: {
   opp: Opportunity; index: number; brandColor: string;
@@ -445,9 +458,17 @@ export default function OpportunitiesPage() {
                 color: "var(--text-tertiary)", lineHeight: 1.65,
               }}>
                 Built from {report.period?.queryCount?.toLocaleString() ?? 0} queries in your
-                Search Console over the last 28 days
-                {report.period?.previousQueryCount
-                  ? `, compared against ${report.period.previousQueryCount.toLocaleString()} from the preceding 28`
+                Search Console
+                {report.period?.current
+                  ? ` for ${fmtRange(report.period.current)}`
+                  : " over the last 28 days"}
+                {report.period?.previousQueryCount && report.period?.previous
+                  ? `, compared against ${report.period.previousQueryCount.toLocaleString()} from ${fmtRange(report.period.previous)}`
+                  : ""}
+                . Search Console finalises data on a 2-3 day delay, so the most recent
+                days are never included — that's Google's lag, not a stale report
+                {report.brand?.detected && report.brand.brandedQueries > 0
+                  ? `. ${report.brand.brandedQueries} brand ${report.brand.brandedQueries === 1 ? "search is" : "searches are"} excluded from the analysis (${report.brand.brandedShare}% of impressions) — you already rank for your own name, so those aren't opportunities`
                   : ""}
                 . {report.curve?.fromSiteData
                   ? `Expected click-through rates are measured from your own pages across ${report.curve.measuredPositions} ranking positions.`

@@ -244,6 +244,103 @@ function confidenceFor(impressions: number): Confidence {
   return "low";
 }
 
+// ─── absolute floors ─────────────────────────────────────────────────────────
+//
+// Adaptive thresholds can scale down, but not indefinitely. Below these values
+// a "finding" is indistinguishable from random variation, and showing it makes
+// the product look credulous rather than helpful.
+//
+// Learned the hard way: a first version surfaced "marketing lab norfolk is
+// losing visibility" on the strength of one impression at position 37.
+const FLOORS = {
+  /** Never report decay on fewer impressions than this, whatever the site size. */
+  decayImpressions: 10,
+  /** Decay past this position is irrelevant — nobody sees page 4 anyway, so
+   *  "losing ground" there is not a loss worth acting on. */
+  decayMaxPosition: 30,
+  /** Striking distance needs at least a couple of impressions to be real. */
+  strikingImpressions: 3,
+};
+
+// ─── branded queries ─────────────────────────────────────────────────────────
+
+/**
+ * Derive brand tokens from the site's domain.
+ *
+ * "aimarketinglab.co.uk" yields both "aimarketinglab" and "ai marketing lab",
+ * because searchers type it both ways and GSC reports them as distinct queries.
+ * The spaced variant is produced by splitting the domain on common word
+ * boundaries — imperfect, but it catches the majority of real brand searches.
+ */
+export function brandTokensFromSite(siteUrl: string): string[] {
+  const host = siteUrl
+    .replace(/^sc-domain:/, "")
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .split("/")[0]
+    .toLowerCase();
+
+  // Strip the public suffix: co.uk, com, org.uk …
+  const bare = host.replace(/\.(co\.uk|org\.uk|ac\.uk|com|net|org|io|ai|dev|app|uk)$/i, "");
+  const compact = bare.replace(/[^a-z0-9]/g, "");
+  if (!compact) return [];
+
+  const tokens = new Set<string>([compact]);
+
+  // Hyphenated or dotted domains give us the word split for free.
+  const parts = bare.split(/[-.]/).filter(Boolean);
+  if (parts.length > 1) tokens.add(parts.join(" "));
+
+  return [...tokens];
+}
+
+/**
+ * Is this query a search for the brand itself?
+ *
+ * Matching is done on a normalised, space-stripped form so "ai marketing lab",
+ * "aimarketinglab" and "ai marketinglab" all collapse to the same string.
+ */
+export function isBrandedQuery(query: string, brandTokens: string[]): boolean {
+  if (!brandTokens.length) return false;
+  const compact = query.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return brandTokens.some(token => {
+    const t = token.replace(/[^a-z0-9]/g, "");
+    return t.length >= 4 && compact.includes(t);
+  });
+}
+
+export type BrandSplit = {
+  branded:    QueryRow[];
+  nonBranded: QueryRow[];
+  brandedImpressionShare: number;
+};
+
+/**
+ * Separate brand searches from everything else.
+ *
+ * This matters more than it looks. Brand searches are existing demand — people
+ * who already know you — so counting them as SEO performance flatters the
+ * numbers and, worse, produces "opportunities" for queries you already own.
+ * Non-branded impressions are the only measure of genuinely new reach.
+ */
+export function splitBranded(rows: QueryRow[], brandTokens: string[]): BrandSplit {
+  const branded: QueryRow[] = [];
+  const nonBranded: QueryRow[] = [];
+
+  for (const r of rows) {
+    (isBrandedQuery(r.query, brandTokens) ? branded : nonBranded).push(r);
+  }
+
+  const total = rows.reduce((s, r) => s + r.impressions, 0);
+  const brandedImpressions = branded.reduce((s, r) => s + r.impressions, 0);
+
+  return {
+    branded,
+    nonBranded,
+    brandedImpressionShare: total ? brandedImpressions / total : 0,
+  };
+}
+
 // ─── 1. striking distance ────────────────────────────────────────────────────
 
 /**
@@ -259,9 +356,9 @@ export function findStrikingDistance(
   curve: CtrCurve,
   opts: { minPosition?: number; maxPosition?: number; minImpressions?: number } = {},
 ): Opportunity[] {
-  const minPos = opts.minPosition    ?? 11;
-  const maxPos = opts.maxPosition    ?? 20;
-  const minImp = opts.minImpressions ?? 50;
+  const minPos = opts.minPosition ?? 11;
+  const maxPos = opts.maxPosition ?? 20;
+  const minImp = Math.max(opts.minImpressions ?? 50, FLOORS.strikingImpressions);
 
   return rows
     .filter(r => r.position >= minPos && r.position <= maxPos && r.impressions >= minImp)
@@ -461,8 +558,9 @@ export function findDecay(
   previous: QueryRow[],
   opts: { minPreviousImpressions?: number; minDropRatio?: number } = {},
 ): Opportunity[] {
-  const minPrevImp  = opts.minPreviousImpressions ?? 100;
-  const minDrop     = opts.minDropRatio           ?? 0.25; // 25% down
+  // Absolute floor wins over any adaptive threshold — see FLOORS.
+  const minPrevImp = Math.max(opts.minPreviousImpressions ?? 100, FLOORS.decayImpressions);
+  const minDrop    = opts.minDropRatio ?? 0.25; // 25% down
 
   const prevByQuery = new Map(previous.map(r => [r.query, r]));
   const out: Opportunity[] = [];
@@ -470,6 +568,10 @@ export function findDecay(
   for (const now of current) {
     const before = prevByQuery.get(now.query);
     if (!before || before.impressions < minPrevImp) continue;
+
+    // Losing ground on page 4 isn't a loss worth acting on — you had no
+    // meaningful visibility to lose.
+    if (before.position > FLOORS.decayMaxPosition) continue;
 
     const impressionDrop = (before.impressions - now.impressions) / before.impressions;
     if (impressionDrop < minDrop) continue;
@@ -544,13 +646,34 @@ export function diagnose(
   rows: QueryRow[],
   opportunities: Opportunity[],
   scale?: SiteScale,
+  split?: BrandSplit,
 ): Diagnosis {
+  // `rows` here is already the non-branded set. A site whose entire footprint
+  // is brand searches has no organic reach yet, which is a finding in itself
+  // and quite different from "no data".
+  if (rows.length === 0 && split && split.branded.length > 0) {
+    const brandImpressions = split.branded.reduce((s, r) => s + r.impressions, 0);
+    return {
+      headline: "Everyone finding you already knows your name",
+      detail:
+        `All ${brandImpressions.toLocaleString()} of your impressions come from brand searches — people typing your company name. ` +
+        `That's existing demand, not new reach. You currently have no non-branded visibility at all, which means search isn't yet bringing you anyone who didn't already know about you. ` +
+        `The priority is content targeting what your customers search for *before* they've heard of you.`,
+    };
+  }
+
   if (rows.length === 0) {
     return {
       headline: "Not enough Search Console data yet",
       detail:   "Once your site has search impressions we can identify where the biggest gains are. This usually takes a few weeks after launch.",
     };
   }
+
+  // A high branded share is worth naming even when there IS non-branded data —
+  // it's the difference between growing reach and harvesting existing demand.
+  const brandNote = split && split.brandedImpressionShare > 0.5 && split.branded.length > 0
+    ? ` Separately, ${Math.round(split.brandedImpressionShare * 100)}% of your total impressions are brand searches — existing demand rather than new reach.`
+    : "";
 
   // Early-stage sites deserve a real reading of what little data they have,
   // not "come back later". What you're *already* being shown for is the single
@@ -571,7 +694,8 @@ export function diagnose(
           `Your strongest showing is "${closest.query}" at position ${round1(closest.position)}. ` +
           `Most visible so far: ${bestList}. ` +
           `At this volume the numbers aren't yet reliable enough to optimise against — but they do tell you what Google currently thinks your site is about. ` +
-          `If that matches your intent, publish more depth around those themes. If it doesn't, your positioning needs work before your content does.`,
+          `If that matches your intent, publish more depth around those themes. If it doesn't, your positioning needs work before your content does.` +
+          brandNote,
       };
     }
 
@@ -581,7 +705,8 @@ export function diagnose(
         `${scale.totalImpressions.toLocaleString()} impressions across ${rows.length} queries, none ranking inside the top 20 yet. ` +
         `That's normal for a new site — Google has found you but hasn't decided where you belong. ` +
         `Most visible so far: ${bestList}. ` +
-        `The priority now is depth on a narrow topic rather than breadth, and earning your first external links.`,
+        `The priority now is depth on a narrow topic rather than breadth, and earning your first external links.` +
+        brandNote,
     };
   }
 
@@ -656,6 +781,12 @@ export type OpportunityReport = {
     totalImpressions: number;
     queryCount:       number;
   };
+  brand: {
+    detected:       boolean;
+    brandedQueries: number;
+    /** Percentage of impressions that are brand searches. */
+    brandedShare:   number;
+  };
 };
 
 /**
@@ -669,21 +800,39 @@ export function buildReport(input: {
   queryPages?:  QueryPageRow[];
   previous?:    QueryRow[];
   limit?:       number;
+  /** Site URL, used to derive brand tokens. Optional — without it we simply
+   *  can't separate branded traffic and treat everything as non-branded. */
+  siteUrl?:     string;
 }): OpportunityReport {
-  const { queries, queryPages = [], previous = [], limit = 25 } = input;
+  const { queries, queryPages = [], previous = [], limit = 25, siteUrl } = input;
 
-  const curve = buildCtrCurve(queries);
+  const brandTokens = siteUrl ? brandTokensFromSite(siteUrl) : [];
+  const split       = splitBranded(queries, brandTokens);
+
+  // Opportunities are computed on NON-BRANDED queries only. You already own
+  // your brand — "push your own company name onto page 1" is not a strategy,
+  // and including branded terms crowds out the queries that represent genuinely
+  // new reach. Branded performance is reported separately in the diagnosis.
+  const working      = brandTokens.length ? split.nonBranded : queries;
+  const workingPages = brandTokens.length
+    ? queryPages.filter(r => !isBrandedQuery(r.query, brandTokens))
+    : queryPages;
+  const workingPrev  = brandTokens.length
+    ? previous.filter(r => !isBrandedQuery(r.query, brandTokens))
+    : previous;
+
+  const curve = buildCtrCurve(working);
   // Thresholds scale to the site so a new property still gets direction rather
   // than an empty page. See computeScale().
-  const scale = computeScale(queries);
+  const scale = computeScale(working);
   const th    = scale.thresholds;
 
   const all: Opportunity[] = [
-    ...findStrikingDistance(queries, curve, { minImpressions: th.strikingDistance }),
-    ...findCtrGaps(queries, curve,          { minImpressions: th.ctrGap }),
-    ...findCannibalisation(queryPages,      { minImpressions: th.cannibalisation }),
-    ...(previous.length
-      ? findDecay(queries, previous, { minPreviousImpressions: th.decayPrevious })
+    ...findStrikingDistance(working, curve, { minImpressions: th.strikingDistance }),
+    ...findCtrGaps(working, curve,          { minImpressions: th.ctrGap }),
+    ...findCannibalisation(workingPages,    { minImpressions: th.cannibalisation }),
+    ...(workingPrev.length
+      ? findDecay(working, workingPrev, { minPreviousImpressions: th.decayPrevious })
       : []),
   ];
 
@@ -695,8 +844,13 @@ export function buildReport(input: {
   const ranked = all.sort((a, b) => b.score - a.score).slice(0, limit);
 
   return {
-    diagnosis: diagnose(queries, all, scale),
+    diagnosis: diagnose(working, all, scale, split),
     opportunities: ranked,
+    brand: {
+      detected:        brandTokens.length > 0,
+      brandedQueries:  split.branded.length,
+      brandedShare:    Math.round(split.brandedImpressionShare * 100),
+    },
     scale: {
       isEarlyStage:     scale.isEarlyStage,
       totalImpressions: scale.totalImpressions,

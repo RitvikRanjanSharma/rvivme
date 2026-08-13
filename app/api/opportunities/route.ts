@@ -26,8 +26,13 @@ import {
 const GSC_API_BASE = "https://www.googleapis.com/webmasters/v3";
 const GSC_SCOPE    = "https://www.googleapis.com/auth/webmasters.readonly";
 
-/** GSC lags ~3 days, so "today" is never a usable end date. */
-const LAG_DAYS = 3;
+// Search Console finalises data on a delay — most metrics land within ~2 days,
+// occasionally 3. Ending the window at "today" would therefore show a fake
+// cliff at the end of every chart, because the last days are always partial.
+//
+// 2 rather than 3: Google's own Performance report defaults to 2, and the extra
+// day of lag was making the report feel staler than it needed to.
+const LAG_DAYS = 2;
 const PERIOD   = 28;
 
 function isoDaysAgo(days: number): string {
@@ -148,7 +153,8 @@ export async function GET(request: NextRequest) {
     const previous   = previousRaw.map(toQueryRow);
     const queryPages = queryPageRaw.map(r => toQueryPageRow(r, siteUrl));
 
-    const report = buildReport({ queries, queryPages, previous, limit });
+    // siteUrl lets the engine derive brand tokens and exclude brand searches.
+    const report = buildReport({ queries, queryPages, previous, limit, siteUrl });
 
     return NextResponse.json({
       success: true,
