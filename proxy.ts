@@ -3,10 +3,16 @@
 // AI Marketing Lab — Route Protection Proxy (Next.js 16+ file convention)
 // Public:    /, /blog, /blog/*, /auth/*
 // Protected: /dashboard, /keywords, /competitors, /settings
+//
+// Next.js 16 renamed `middleware.ts` to `proxy.ts` and allows only ONE such
+// file, so this handles two concerns rather than one:
+//   1. Route protection (below)
+//   2. AI crawler observation (logCrawlerVisit)
 // =============================================================================
 
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { identifyCrawler } from "@/lib/ai-crawlers";
 
 const PROTECTED_PREFIXES = [
   "/dashboard", "/keywords", "/competitors", "/settings",
@@ -19,7 +25,58 @@ const PROTECTED_PREFIXES = [
 ];
 const AUTH_ROUTES        = ["/auth/login", "/auth/signup"];
 
+// ── AI crawler observation ───────────────────────────────────────────────────
+// Records when an answer-engine crawler fetches a page on THIS domain.
+//
+// Why here and not a script tag: crawlers don't execute JavaScript. A
+// client-side tag cannot see them at all — any product claiming to track AI
+// bots that way is measuring nothing. Server-side is the only honest option.
+//
+// Scope, stated plainly: this observes crawlers hitting our own domain. Doing
+// the same for a customer's site needs equivalent logging on their server. The
+// robots.txt + readiness audit in /api/geo/crawlers is what we can offer every
+// customer today with no installation.
+//
+// Deliberately cheap: nothing is awaited, no database call sits in the request
+// lifecycle, and it fails silently. Logging must never break page delivery.
+const SKIP_LOG_PREFIXES = ["/api/", "/_next/"];
+
+function logCrawlerVisit(request: NextRequest): void {
+  try {
+    const { pathname, origin } = request.nextUrl;
+    if (SKIP_LOG_PREFIXES.some(p => pathname.startsWith(p))) return;
+
+    const secret = process.env.INTERNAL_LOG_SECRET;
+    if (!secret) return; // logging disabled rather than posting an empty secret
+
+    const crawler = identifyCrawler(request.headers.get("user-agent"));
+    if (!crawler) return;
+
+    // Fire-and-forget. Not awaited: an edge request must not wait on our own
+    // logging, and a failure here is irrelevant to the visitor.
+    void fetch(`${origin}/api/geo/crawler-hit`, {
+      method:  "POST",
+      headers: {
+        "Content-Type":    "application/json",
+        // Shared secret so the endpoint can't be spammed with fake traffic.
+        "x-aiml-internal": secret,
+      },
+      body: JSON.stringify({
+        crawler: crawler.token,
+        path:    pathname,
+        at:      new Date().toISOString(),
+      }),
+    }).catch(() => { /* logging must never surface to the visitor */ });
+  } catch {
+    /* never let observation break delivery */
+  }
+}
+
 export async function proxy(request: NextRequest) {
+  // Runs first and never throws, so a crawler hit is recorded even when the
+  // request is about to be redirected away from a protected route.
+  logCrawlerVisit(request);
+
   const url     = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 

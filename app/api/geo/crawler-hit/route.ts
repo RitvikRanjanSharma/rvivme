@@ -1,8 +1,8 @@
 // app/api/geo/crawler-hit/route.ts
 // =============================================================================
-// Internal endpoint. Records a crawler visit reported by middleware.ts.
+// Internal endpoint. Records a crawler visit reported by proxy.ts.
 //
-// Guarded by a shared secret rather than a user session, because middleware
+// Guarded by a shared secret rather than a user session, because the proxy
 // runs before auth and the caller is our own edge function. Without the guard
 // anyone could POST fabricated crawler traffic.
 //

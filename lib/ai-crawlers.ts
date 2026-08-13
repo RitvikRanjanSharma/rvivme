@@ -20,7 +20,7 @@
 //      answer engine could lift a clean answer from it.
 //
 // Both are real, prescriptive, and cost nothing. Log-based observation is a
-// separate feature requiring middleware on the customer's own server.
+// separate feature requiring a proxy on the customer's own server.
 //
 // Pure functions. No fetching here — callers supply the text.
 // =============================================================================
@@ -363,12 +363,12 @@ export function scoreAnswerReadiness(html: string, url?: string): ReadinessRepor
   };
 }
 
-// ─── request-time detection (for middleware) ─────────────────────────────────
+// ─── request-time detection (for proxy.ts) ─────────────────────────────────
 
 /**
  * Identify an AI crawler from a User-Agent header.
  *
- * Used by middleware to log real crawler visits to our own domain. This is the
+ * Used by proxy.ts to log real crawler visits to our own domain. This is the
  * only honest way to *observe* crawler behaviour — as noted at the top of the
  * file, JavaScript-based tracking cannot see bots at all.
  */

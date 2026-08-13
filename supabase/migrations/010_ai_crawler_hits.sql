@@ -2,7 +2,7 @@
 -- =============================================================================
 -- AI Marketing Lab — observed AI crawler visits
 --
--- Populated by middleware.ts when an answer-engine bot fetches a page on this
+-- Populated by proxy.ts when an answer-engine bot fetches a page on this
 -- domain. This is the only reliable way to observe crawlers: they don't run
 -- JavaScript, so client-side tracking cannot see them.
 --
@@ -27,8 +27,8 @@ CREATE INDEX IF NOT EXISTS idx_crawler_hits_crawler_time
 ALTER TABLE public.ai_crawler_hits ENABLE ROW LEVEL SECURITY;
 
 -- No policies: anon and authenticated are denied outright. Writes come from
--- middleware via a secret-guarded route using the service role; reads go
+-- the proxy via a secret-guarded route using the service role; reads go
 -- through a server route that aggregates before returning anything.
 
 COMMENT ON TABLE public.ai_crawler_hits IS
-  'AI crawler visits observed by middleware. Service-role access only.';
+  'AI crawler visits observed by proxy.ts. Service-role access only.';
