@@ -17,12 +17,12 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Target, TrendingDown, MousePointerClick, GitMerge, Search,
-  ChevronDown, ChevronUp, RefreshCw, AlertTriangle, ArrowRight, Stethoscope,
+  ChevronDown, ChevronUp, RefreshCw, AlertTriangle, ArrowRight, Stethoscope, Sprout,
 } from "lucide-react";
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
-type OpportunityKind = "striking_distance" | "ctr_gap" | "cannibalisation" | "decay";
+type OpportunityKind = "striking_distance" | "ctr_gap" | "cannibalisation" | "decay" | "foundation";
 
 type Opportunity = {
   kind:        OpportunityKind;
@@ -63,6 +63,7 @@ const KIND_META: Record<OpportunityKind, { label: string; icon: typeof Target; c
   ctr_gap:           { label: "Click-through gap", icon: MousePointerClick,  color: "var(--signal-amber)"  },
   cannibalisation:   { label: "Cannibalisation",   icon: GitMerge,           color: "var(--signal-red)"    },
   decay:             { label: "Losing ground",     icon: TrendingDown,       color: "var(--signal-red)"    },
+  foundation:        { label: "Foundation",         icon: Sprout,             color: "var(--signal-green)"  },
 };
 
 const EFFORT_LABEL = { low: "Quick", medium: "Moderate", high: "Involved" } as const;
@@ -120,10 +121,14 @@ function OpportunityCard({ opp, index, brandColor }: {
               <span style={{ color: meta.color }}>{meta.label}</span>
               <span>·</span>
               <span>{EFFORT_LABEL[opp.effort]}</span>
-              <span>·</span>
-              <span>Pos {opp.metrics.position}</span>
-              <span>·</span>
-              <span>{opp.metrics.impressions.toLocaleString()} impr</span>
+              {opp.kind !== "foundation" && (
+                <>
+                  <span>·</span>
+                  <span>Pos {opp.metrics.position}</span>
+                  <span>·</span>
+                  <span>{opp.metrics.impressions.toLocaleString()} impr</span>
+                </>
+              )}
               {opp.confidence !== "high" && (
                 <>
                   <span>·</span>
@@ -399,7 +404,7 @@ export default function OpportunitiesPage() {
             <>
               {/* Summary + filters */}
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "16px", alignItems: "center" }}>
-                {(["all", "striking_distance", "ctr_gap", "cannibalisation", "decay"] as const).map(k => {
+                {(["all", "striking_distance", "ctr_gap", "cannibalisation", "decay", "foundation"] as const).map(k => {
                   const count = k === "all" ? opportunities.length : (report.counts?.[k] ?? 0);
                   if (k !== "all" && count === 0) return null;
                   const active = filter === k;

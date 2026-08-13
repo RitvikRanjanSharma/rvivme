@@ -34,7 +34,9 @@ export type OpportunityKind =
   | "striking_distance"
   | "ctr_gap"
   | "cannibalisation"
-  | "decay";
+  | "decay"
+  /** Foundational work for sites with nothing to optimise yet. */
+  | "foundation";
 
 /**
  * A single recommended action.
@@ -628,6 +630,158 @@ export function findDecay(
   return out.sort((a, b) => b.score - a.score);
 }
 
+// ─── foundational actions ────────────────────────────────────────────────────
+
+/**
+ * Concrete next steps for a site with nothing to optimise yet.
+ *
+ * The alternative — "no opportunities, come back later" — is the single most
+ * useless thing this product could say. A new site has no striking-distance
+ * keywords by definition, but it emphatically does have a next action, and a
+ * strategist's job is to name it.
+ *
+ * These are derived from the site's real query data wherever possible, so they
+ * read as advice about *this* site rather than a generic SEO checklist.
+ */
+export function foundationalActions(rows: QueryRow[], scale: SiteScale): Opportunity[] {
+  const out: Opportunity[] = [];
+  if (rows.length === 0) return out;
+
+  const sorted     = [...rows].sort((a, b) => b.impressions - a.impressions);
+  const topQueries = sorted.slice(0, 5);
+  const ranking    = sorted.filter(r => r.position <= 20);
+  const deepOnly   = ranking.length === 0;
+
+  // Derive a rough theme from the most common significant word across the
+  // site's visible queries. Crude, but it grounds the advice in their actual
+  // vocabulary rather than generic phrasing.
+  const STOP = new Set([
+    "the","a","an","and","or","for","to","of","in","on","with","is","are",
+    "how","what","why","best","near","me","uk","vs","my","your",
+  ]);
+  const wordCounts = new Map<string, number>();
+  for (const r of sorted.slice(0, 20)) {
+    for (const w of r.query.toLowerCase().split(/\s+/)) {
+      const word = w.replace(/[^a-z0-9]/g, "");
+      if (word.length < 3 || STOP.has(word)) continue;
+      wordCounts.set(word, (wordCounts.get(word) ?? 0) + 1);
+    }
+  }
+  const theme = [...wordCounts.entries()]
+    .sort((a, b) => b[1] - a[1])[0]?.[0];
+
+  // 1. Depth on one theme — the highest-leverage move for a new site.
+  if (theme) {
+    const themeQueries = sorted
+      .filter(r => r.query.toLowerCase().includes(theme))
+      .slice(0, 4);
+
+    out.push({
+      kind:  "foundation",
+      title: `Build depth around "${theme}"`,
+      query: theme,
+      score: 90,
+      clickUpside: null,
+      effort: "high",
+      confidence: "medium",
+      evidence: [
+        `"${theme}" is the recurring term across your visible queries — Google already associates your site with it, weakly.`,
+        themeQueries.length > 1
+          ? `You're appearing for ${themeQueries.map(q => `"${q.query}"`).slice(0, 3).join(", ")}, which cluster around the same idea.`
+          : `It appears in your most visible query so far.`,
+        `New sites rank by being unambiguously about one thing, not slightly about many. Three or four connected pages on a single theme beat a dozen scattered ones.`,
+        `Write for the questions a buyer asks *before* they've heard of you — that's where non-branded discovery starts.`,
+      ],
+      metrics: {
+        clicks:      themeQueries.reduce((s, r) => s + r.clicks, 0),
+        impressions: themeQueries.reduce((s, r) => s + r.impressions, 0),
+        ctr:         0,
+        position:    themeQueries.length
+          ? round1(themeQueries.reduce((s, r) => s + r.position, 0) / themeQueries.length)
+          : 0,
+      },
+    });
+  }
+
+  // 2. Nothing in the top 20 — that's an authority problem, not a content one.
+  if (deepOnly) {
+    out.push({
+      kind:  "foundation",
+      title: "Earn your first external links",
+      query: "",
+      score: 85,
+      clickUpside: null,
+      effort: "high",
+      confidence: "medium",
+      evidence: [
+        `None of your ${rows.length} visible queries rank inside the top 20 — the average position across them is ${round1(sorted.reduce((s, r) => s + r.position, 0) / sorted.length)}.`,
+        `Being indexed but never placed is the signature of an authority problem rather than a content one. More pages will not change it.`,
+        `Realistic first links: your own company profiles, relevant UK directories, suppliers or partners who list clients, and any trade body you belong to.`,
+        `A handful of genuine links usually moves a new site further than a month of publishing.`,
+      ],
+      metrics: {
+        clicks:      sorted.reduce((s, r) => s + r.clicks, 0),
+        impressions: scale.totalImpressions,
+        ctr:         0,
+        position:    round1(sorted.reduce((s, r) => s + r.position, 0) / sorted.length),
+      },
+    });
+  }
+
+  // 3. Best-placed query — the one to defend and build on.
+  const best = ranking.sort((a, b) => a.position - b.position)[0];
+  if (best) {
+    out.push({
+      kind:  "foundation",
+      title: `Strengthen the page behind "${best.query}"`,
+      query: best.query,
+      score: 80,
+      clickUpside: null,
+      effort: "medium",
+      confidence: confidenceFor(best.impressions),
+      evidence: [
+        `This is your strongest placement at position ${round1(best.position)} — the closest you currently are to real visibility.`,
+        `${best.impressions} impressions and ${best.clicks} clicks so far.`,
+        `Your first page-1 ranking is disproportionately valuable: it proves the site can rank, and pages that already have traction respond fastest to improvement.`,
+        `Make this page unambiguously the best answer for that query before starting anything new.`,
+      ],
+      metrics: {
+        clicks:      best.clicks,
+        impressions: best.impressions,
+        ctr:         round1(best.ctr),
+        position:    round1(best.position),
+      },
+    });
+  }
+
+  // 4. Watch what emerges — with the actual terms named.
+  if (topQueries.length >= 3) {
+    out.push({
+      kind:  "foundation",
+      title: "Check these queries match what you sell",
+      query: "",
+      score: 70,
+      clickUpside: null,
+      effort: "low",
+      confidence: "low",
+      evidence: [
+        `Google is currently showing you for: ${topQueries.map(q => `"${q.query}"`).join(", ")}.`,
+        `That's its current guess at what your site is about, formed from your titles, headings and copy.`,
+        `If those terms match what you actually offer, you're aligned — publish more depth there.`,
+        `If they don't, the mismatch is in your on-page language, and no amount of new content will fix it until the existing pages say plainly what you do.`,
+      ],
+      metrics: {
+        clicks:      topQueries.reduce((s, r) => s + r.clicks, 0),
+        impressions: topQueries.reduce((s, r) => s + r.impressions, 0),
+        ctr:         0,
+        position:    round1(topQueries.reduce((s, r) => s + r.position, 0) / topQueries.length),
+      },
+    });
+  }
+
+  return out;
+}
+
 // ─── headline diagnosis ──────────────────────────────────────────────────────
 
 export type Diagnosis = {
@@ -836,6 +990,13 @@ export function buildReport(input: {
       : []),
   ];
 
+  // Nothing to optimise yet doesn't mean nothing to do. Fall back to
+  // foundational work rather than telling the user to come back later —
+  // that advice is useless and it's exactly when they need direction most.
+  if (all.length === 0) {
+    all.push(...foundationalActions(working, scale));
+  }
+
   const counts = all.reduce((acc, o) => {
     acc[o.kind] = (acc[o.kind] ?? 0) + 1;
     return acc;
@@ -865,6 +1026,7 @@ export function buildReport(input: {
       ctr_gap:           counts.ctr_gap           ?? 0,
       cannibalisation:   counts.cannibalisation   ?? 0,
       decay:             counts.decay             ?? 0,
+      foundation:        counts.foundation        ?? 0,
     },
   };
 }
