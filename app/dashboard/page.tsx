@@ -21,6 +21,7 @@ import {
   Link2, Brain, Eye, Search, ArrowUpRight,
 } from "lucide-react";
 import { GA4Panel }  from "./ga4-panel";
+import { RetrospectivePanel } from "./retrospective-panel";
 import { GSCPanel }  from "./gsc-panel";
 import { useDomain } from "@/lib/useDomain";
 import {
@@ -1035,6 +1036,7 @@ export default function DashboardPage() {
       <ActiveStrategyBanner brandColor={brandColor}/>
 
       <div style={{ display:"flex", flexDirection:"column", gap:"32px" }}>
+        <RetrospectivePanel brandColor={brandColor} />
         <ProjectionChart brandColor={brandColor} ga4Trend={ga4Trend} ga4Loading={ga4Loading} ga4Reason={ga4Reason} ga4Message={ga4Message} ga4Connected={ga4Connected}/>
         <GA4Panel brandColor={brandColor}/>
         <GSCPanel brandColor={brandColor}/>
