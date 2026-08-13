@@ -32,6 +32,7 @@ type Opportunity = {
   score:       number;
   clickUpside: number | null;
   effort:      "low" | "medium" | "high";
+  confidence:  "high" | "medium" | "low";
   evidence:    string[];
   metrics: {
     clicks: number; impressions: number; ctr: number; position: number;
@@ -47,6 +48,7 @@ type Report = {
   diagnosis?: { headline: string; detail: string };
   opportunities?: Opportunity[];
   counts?:   Record<OpportunityKind, number>;
+  scale?:    { isEarlyStage: boolean; totalImpressions: number; queryCount: number };
   curve?:    { fromSiteData: boolean; measuredPositions: number };
   period?:   { queryCount: number; previousQueryCount: number };
 };
@@ -109,6 +111,19 @@ function OpportunityCard({ opp, index, brandColor }: {
               <span>Pos {opp.metrics.position}</span>
               <span>·</span>
               <span>{opp.metrics.impressions.toLocaleString()} impr</span>
+              {opp.confidence !== "high" && (
+                <>
+                  <span>·</span>
+                  <span
+                    title={opp.confidence === "low"
+                      ? "Based on a small number of impressions — treat as a hint, not a finding."
+                      : "Moderate sample size."}
+                    style={{ color: opp.confidence === "low" ? "var(--signal-amber)" : "var(--text-tertiary)" }}
+                  >
+                    {opp.confidence} confidence
+                  </span>
+                </>
+              )}
             </div>
           </div>
 

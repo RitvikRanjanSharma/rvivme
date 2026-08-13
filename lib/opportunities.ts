@@ -54,6 +54,8 @@ export type Opportunity = {
    *  genuinely can't estimate — never a fabricated number. */
   clickUpside: number | null;
   effort:      "low" | "medium" | "high";
+  /** How much weight this finding deserves, given the volume behind it. */
+  confidence:  "high" | "medium" | "low";
   evidence:    string[];
   /** Raw numbers so the UI can render a table without re-deriving anything. */
   metrics: {
@@ -157,6 +159,91 @@ function toMonthly(value: number, periodDays = 28): number {
   return Math.round((value / periodDays) * 30);
 }
 
+function percentile(values: number[], p: number): number {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const idx = Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length));
+  return sorted[idx];
+}
+
+// ─── adaptive thresholds ─────────────────────────────────────────────────────
+
+/**
+ * Fixed impression minimums (50 for striking distance, 100 for CTR gaps) are
+ * right for an established site and useless for a new one. A site with 53 total
+ * impressions across 14 queries clears none of them, so it gets an empty page
+ * at exactly the moment it most needs direction.
+ *
+ * So the floors scale to the site's own distribution: we take a percentile of
+ * its query impressions and clamp into a sane band. A large site keeps strict
+ * thresholds (avoiding noise); a small site gets its proportionally-best
+ * queries surfaced, clearly marked as low-confidence.
+ *
+ * The alternative — showing nothing until a site is "big enough" — is the
+ * behaviour we're specifically trying to avoid.
+ */
+export type SiteScale = {
+  totalImpressions: number;
+  queryCount:       number;
+  /** Impressions at the 60th percentile of queries — the "typical good" query. */
+  typicalImpressions: number;
+  /** True when the site is too small for standard thresholds. */
+  isEarlyStage: boolean;
+  thresholds: {
+    strikingDistance: number;
+    ctrGap:           number;
+    cannibalisation:  number;
+    decayPrevious:    number;
+  };
+};
+
+export function computeScale(rows: QueryRow[]): SiteScale {
+  const totalImpressions = rows.reduce((s, r) => s + r.impressions, 0);
+  const typical = percentile(rows.map(r => r.impressions), 60);
+
+  // Under ~500 total impressions there simply isn't enough volume for the
+  // standard floors to admit anything.
+  const isEarlyStage = totalImpressions < 500;
+
+  // Clamp so we never go below 3 (one impression is not a signal) and never
+  // above the established-site defaults.
+  const clamp = (v: number, min: number, max: number) =>
+    Math.max(min, Math.min(max, Math.round(v)));
+
+  return {
+    totalImpressions,
+    queryCount: rows.length,
+    typicalImpressions: typical,
+    isEarlyStage,
+    thresholds: isEarlyStage
+      ? {
+          strikingDistance: clamp(typical * 0.5, 3, 50),
+          ctrGap:           clamp(typical,       5, 100),
+          cannibalisation:  clamp(typical * 0.5, 3, 50),
+          decayPrevious:    clamp(typical,       5, 100),
+        }
+      : {
+          strikingDistance: 50,
+          ctrGap:           100,
+          cannibalisation:  50,
+          decayPrevious:    100,
+        },
+  };
+}
+
+/**
+ * Confidence in a single opportunity, driven by the evidence behind it.
+ * Surfaced in the UI so a 6-impression finding isn't presented with the same
+ * authority as a 6,000-impression one.
+ */
+export type Confidence = "high" | "medium" | "low";
+
+function confidenceFor(impressions: number): Confidence {
+  if (impressions >= 300) return "high";
+  if (impressions >= 50)  return "medium";
+  return "low";
+}
+
 // ─── 1. striking distance ────────────────────────────────────────────────────
 
 /**
@@ -201,6 +288,7 @@ export function findStrikingDistance(
         score,
         clickUpside: toMonthly(gainedClicks),
         effort: (r.position <= 15 ? "low" : "medium") as "low" | "medium",
+        confidence: confidenceFor(r.impressions),
         evidence: [
           `Currently position ${round1(r.position)} — just off page 1.`,
           `${r.impressions.toLocaleString()} impressions in the last 28 days, so the demand is already there.`,
@@ -263,6 +351,7 @@ export function findCtrGaps(
         score,
         clickUpside: toMonthly(gainedClicks),
         effort: "low" as const,
+        confidence: confidenceFor(r.impressions),
         evidence: [
           `Ranking position ${round1(r.position)} with ${r.impressions.toLocaleString()} impressions — visibility isn't the problem.`,
           `CTR is ${round1(r.ctr)}%, against ${round1(expected)}% expected at this position${curve.fromSiteData ? " based on your own pages" : ""}.`,
@@ -337,6 +426,7 @@ export function findCannibalisation(
       // predictable, and inventing a number here would undermine the rest.
       clickUpside: null,
       effort: "medium",
+      confidence: confidenceFor(totalImpressions),
       evidence: [
         `${competing.length} URLs rank for this query, splitting ${totalImpressions.toLocaleString()} impressions between them.`,
         `Strongest is ${best.page} at position ${round1(best.position)} with ${best.impressions.toLocaleString()} impressions.`,
@@ -420,6 +510,7 @@ export function findDecay(
       score,
       clickUpside: clicksLost > 0 ? toMonthly(clicksLost) : null,
       effort: positionMove > 0.5 ? "medium" : "low",
+      confidence: confidenceFor(before.impressions),
       evidence,
       metrics: {
         clicks:              now.clicks,
@@ -449,11 +540,48 @@ export type Diagnosis = {
  * single dominant pattern rather than listing everything — the whole point is
  * to direct attention.
  */
-export function diagnose(rows: QueryRow[], opportunities: Opportunity[]): Diagnosis {
+export function diagnose(
+  rows: QueryRow[],
+  opportunities: Opportunity[],
+  scale?: SiteScale,
+): Diagnosis {
   if (rows.length === 0) {
     return {
       headline: "Not enough Search Console data yet",
       detail:   "Once your site has search impressions we can identify where the biggest gains are. This usually takes a few weeks after launch.",
+    };
+  }
+
+  // Early-stage sites deserve a real reading of what little data they have,
+  // not "come back later". What you're *already* being shown for is the single
+  // most useful signal at this point: it tells you what Google currently thinks
+  // you're about, which is what you either lean into or correct.
+  if (scale?.isEarlyStage) {
+    const sorted   = [...rows].sort((a, b) => b.impressions - a.impressions);
+    const top      = sorted.slice(0, 3);
+    const best     = sorted.filter(r => r.position <= 20);
+    const bestList = top.map(r => `"${r.query}"`).join(", ");
+
+    if (best.length > 0) {
+      const closest = [...best].sort((a, b) => a.position - b.position)[0];
+      return {
+        headline: "Google is starting to place you — here's where",
+        detail:
+          `${scale.totalImpressions.toLocaleString()} impressions across ${rows.length} queries so far. ` +
+          `Your strongest showing is "${closest.query}" at position ${round1(closest.position)}. ` +
+          `Most visible so far: ${bestList}. ` +
+          `At this volume the numbers aren't yet reliable enough to optimise against — but they do tell you what Google currently thinks your site is about. ` +
+          `If that matches your intent, publish more depth around those themes. If it doesn't, your positioning needs work before your content does.`,
+      };
+    }
+
+    return {
+      headline: "Indexed, but not yet placed",
+      detail:
+        `${scale.totalImpressions.toLocaleString()} impressions across ${rows.length} queries, none ranking inside the top 20 yet. ` +
+        `That's normal for a new site — Google has found you but hasn't decided where you belong. ` +
+        `Most visible so far: ${bestList}. ` +
+        `The priority now is depth on a narrow topic rather than breadth, and earning your first external links.`,
     };
   }
 
@@ -522,6 +650,12 @@ export type OpportunityReport = {
     measuredPositions: number;
   };
   counts: Record<OpportunityKind, number>;
+  /** Surfaced so the UI can caveat findings on a small sample honestly. */
+  scale: {
+    isEarlyStage:     boolean;
+    totalImpressions: number;
+    queryCount:       number;
+  };
 };
 
 /**
@@ -539,12 +673,18 @@ export function buildReport(input: {
   const { queries, queryPages = [], previous = [], limit = 25 } = input;
 
   const curve = buildCtrCurve(queries);
+  // Thresholds scale to the site so a new property still gets direction rather
+  // than an empty page. See computeScale().
+  const scale = computeScale(queries);
+  const th    = scale.thresholds;
 
   const all: Opportunity[] = [
-    ...findStrikingDistance(queries, curve),
-    ...findCtrGaps(queries, curve),
-    ...findCannibalisation(queryPages),
-    ...(previous.length ? findDecay(queries, previous) : []),
+    ...findStrikingDistance(queries, curve, { minImpressions: th.strikingDistance }),
+    ...findCtrGaps(queries, curve,          { minImpressions: th.ctrGap }),
+    ...findCannibalisation(queryPages,      { minImpressions: th.cannibalisation }),
+    ...(previous.length
+      ? findDecay(queries, previous, { minPreviousImpressions: th.decayPrevious })
+      : []),
   ];
 
   const counts = all.reduce((acc, o) => {
@@ -555,8 +695,13 @@ export function buildReport(input: {
   const ranked = all.sort((a, b) => b.score - a.score).slice(0, limit);
 
   return {
-    diagnosis: diagnose(queries, all),
+    diagnosis: diagnose(queries, all, scale),
     opportunities: ranked,
+    scale: {
+      isEarlyStage:     scale.isEarlyStage,
+      totalImpressions: scale.totalImpressions,
+      queryCount:       scale.queryCount,
+    },
     curve: {
       fromSiteData:      curve.fromSiteData,
       measuredPositions: curve.measuredPositions,
