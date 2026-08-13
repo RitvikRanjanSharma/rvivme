@@ -24,7 +24,7 @@ import {
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  AlertTriangle, Bell, Brain, ChevronDown, FileText, Gauge, LayoutDashboard,
+  AlertTriangle, Bell, Brain, ChevronDown, FileText, Flag, Gauge, LayoutDashboard,
   LogOut, Menu, Moon, Newspaper, PenLine, Search, Settings, Sun, Target,
   User, Users, X,
 } from "lucide-react";
@@ -225,6 +225,7 @@ const isAppRoute  = (p: string) =>
   p.startsWith("/competitors") || p.startsWith("/settings")   ||
   p.startsWith("/strategies")  || p.startsWith("/content")    ||
   p.startsWith("/alerts")      || p.startsWith("/audit")      ||
+  p.startsWith("/opportunities") ||
   p.startsWith("/onboarding");
 const isAuthRoute = (p: string) => p.startsWith("/auth");
 
@@ -237,7 +238,8 @@ const PUBLIC_NAV = [
 
 const SIDEBAR_INTEL = [
   { href: "/dashboard",      label: "Dashboard",   icon: LayoutDashboard },
-  { href: "/strategies",     label: "Strategies",  icon: Target          },
+  { href: "/opportunities",  label: "Opportunities", icon: Target        },
+  { href: "/strategies",     label: "Strategies",  icon: Flag            },
   { href: "/keywords",       label: "Keywords",    icon: Search          },
   { href: "/competitors",    label: "Competitors", icon: Users           },
   { href: "/content",        label: "Content",     icon: PenLine         },
