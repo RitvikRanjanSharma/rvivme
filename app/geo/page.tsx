@@ -37,14 +37,19 @@ type Audit = {
   success: boolean;
   reason?: string;
   message?: string;
-  site?: { origin: string; auditedUrl: string; robotsFound: boolean };
+  site?: {
+    origin: string; auditedUrl: string;
+    resolvedFromFallback?: boolean; requestedOrigin?: string;
+  };
+  robots?: { state: "found" | "absent" | "unreachable"; url: string; detail: string | null };
+  page?:   { state: "ok" | "absent" | "unreachable";    url: string; detail: string | null };
   access?: Access[];
   readiness?: { score: number; checks: Check[] } | null;
   summary?: {
     answerBotsTotal: number; answerBotsBlocked: number;
     trainingBotsBlocked: number; criticalBlocks: string[];
   };
-  pageFetched?: boolean;
+  crawlerCount?: number;
 };
 
 type Observed = {
@@ -93,6 +98,19 @@ export default function GeoPage() {
   useEffect(() => { load(); }, [load]);
 
   const criticalBlocks = audit?.summary?.criticalBlocks ?? [];
+
+  // Three states, not two. "We couldn't read the rules" is a different claim
+  // from "the rules permit everything", and collapsing them produces a green
+  // verdict out of a network failure.
+  const robotsUnknown = audit?.robots?.state === "unreachable";
+  const verdict: "unknown" | "blocked" | "clear" =
+    robotsUnknown ? "unknown" : criticalBlocks.length ? "blocked" : "clear";
+
+  const VERDICT_TONE = {
+    unknown: { bg: "rgba(255,171,0,0.07)", border: "rgba(255,171,0,0.25)", color: "var(--signal-amber)" },
+    blocked: { bg: "rgba(255,23,68,0.06)", border: "rgba(255,23,68,0.22)", color: "var(--signal-red)"   },
+    clear:   { bg: "rgba(0,230,118,0.05)", border: "rgba(0,230,118,0.22)", color: "var(--signal-green)" },
+  }[verdict];
 
   return (
     <div className="aiml-page-pad" style={{
@@ -177,15 +195,15 @@ export default function GeoPage() {
             transition={{ duration: 0.55, ease: EASE, delay: 0.05 }}
             style={{
               padding: "20px 22px", borderRadius: "14px",
-              background: criticalBlocks.length ? "rgba(255,23,68,0.06)" : "rgba(0,230,118,0.05)",
-              border: `1px solid ${criticalBlocks.length ? "rgba(255,23,68,0.22)" : "rgba(0,230,118,0.22)"}`,
+              background: VERDICT_TONE.bg,
+              border: `1px solid ${VERDICT_TONE.border}`,
             }}
           >
             <div style={{
               display: "flex", alignItems: "center", gap: "7px", marginBottom: "8px",
               fontFamily: "var(--font-mono)", fontSize: "9.5px",
               letterSpacing: "0.12em", textTransform: "uppercase",
-              color: criticalBlocks.length ? "var(--signal-red)" : "var(--signal-green)",
+              color: VERDICT_TONE.color,
             }}>
               <Bot size={11} /> Crawler access
             </div>
@@ -194,7 +212,9 @@ export default function GeoPage() {
               letterSpacing: "-0.02em", lineHeight: 1.3, fontWeight: 400,
               color: "var(--text-primary)", marginBottom: "10px",
             }}>
-              {criticalBlocks.length
+              {verdict === "unknown"
+                ? "We couldn't read your robots.txt"
+                : verdict === "blocked"
                 ? `${criticalBlocks.length} answer engine${criticalBlocks.length === 1 ? " is" : "s are"} blocked from your site`
                 : "Answer engines can read your site"}
             </div>
@@ -202,17 +222,53 @@ export default function GeoPage() {
               fontFamily: "var(--font-body)", fontSize: "13.5px",
               color: "var(--text-reading)", lineHeight: 1.7, margin: 0,
             }}>
-              {criticalBlocks.length
+              {verdict === "unknown"
+                ? `We tried ${audit.robots?.url} and ${audit.robots?.detail}. That's a connection problem, not a finding — until we can read the file we can't tell you which crawlers are allowed, so nothing below is a verdict on your site. The usual cause is that the domain in Settings points at a hostname that isn't serving the site.`
+                : verdict === "blocked"
                 ? `Your robots.txt blocks ${criticalBlocks.join(", ")}. These crawlers fetch pages to build live answers with citations, so blocking them removes you from those answers entirely. This is usually accidental — a broad Disallow rule, or a robots file copied from elsewhere.`
-                : audit.site?.robotsFound
-                ? `Your robots.txt allows the crawlers that build live answers. ${audit.summary?.trainingBotsBlocked ? `${audit.summary.trainingBotsBlocked} training-only crawler${audit.summary.trainingBotsBlocked === 1 ? " is" : "s are"} blocked, which is a legitimate editorial choice and doesn't affect citations.` : ""}`
-                : `No robots.txt was found at ${audit.site?.origin}/robots.txt, which means nothing is restricted — every crawler is permitted by default.`}
+                : audit.robots?.state === "found"
+                ? `Read from ${audit.robots.url}. It allows the crawlers that build live answers.${audit.summary?.trainingBotsBlocked ? ` ${audit.summary.trainingBotsBlocked} training-only crawler${audit.summary.trainingBotsBlocked === 1 ? " is" : "s are"} blocked, which is a legitimate editorial choice and doesn't affect citations.` : ""}`
+                : `No robots.txt exists at ${audit.robots?.url} — ${audit.robots?.detail}. Nothing is restricted, so every crawler is permitted by default. Worth adding one anyway, so the decision is yours rather than a default.`}
             </p>
+
+            {audit.site?.resolvedFromFallback && (
+              <p style={{
+                fontFamily: "var(--font-body)", fontSize: "12.5px",
+                color: "var(--text-tertiary)", lineHeight: 1.6, margin: "10px 0 0",
+              }}>
+                Note: {audit.site.requestedOrigin} didn&rsquo;t respond, so this audit used{" "}
+                {audit.site.origin} instead.
+              </p>
+            )}
           </motion.div>
 
-          {/* Per-crawler grid */}
+          {/* Per-crawler grid. Suppressed entirely when robots.txt couldn't be
+              read — showing ten "Allowed" badges we didn't verify would be the
+              same lie as the green verdict, just in smaller type. */}
           <div>
             <SectionLabel>Crawler by crawler</SectionLabel>
+            {robotsUnknown ? (
+              <div style={{
+                padding: "16px 18px", background: "var(--surface)",
+                border: "1px solid var(--border)", borderRadius: "12px",
+                fontFamily: "var(--font-body)", fontSize: "13px",
+                color: "var(--text-secondary)", lineHeight: 1.7,
+              }}>
+                Per-crawler status is unavailable until the robots.txt fetch succeeds.
+                We track {audit.crawlerCount ?? 0} answer-engine and training crawlers —
+                fix the site URL in Settings and re-run to see where each one stands.
+                <div style={{ marginTop: "12px" }}>
+                  <Link href="/settings?tab=integrations" style={{
+                    display: "inline-flex", alignItems: "center", gap: "6px",
+                    fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 500,
+                    color: "#fff", background: brandColor, textDecoration: "none",
+                    padding: "8px 16px", borderRadius: "100px",
+                  }}>
+                    Open settings <ArrowRight size={12} />
+                  </Link>
+                </div>
+              </div>
+            ) : (
             <div className="aiml-kpi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "10px" }}>
               {(audit.access ?? []).map(a => {
                 const meta = STATUS_META[a.status];
@@ -247,6 +303,7 @@ export default function GeoPage() {
                 );
               })}
             </div>
+            )}
           </div>
 
           {/* Observed activity — honest about what it covers */}
@@ -259,7 +316,7 @@ export default function GeoPage() {
               {observed?.success && (observed.totalHits ?? 0) > 0 ? (
                 <>
                   <div style={{ fontFamily: "var(--font-body)", fontSize: "13.5px", color: "var(--text-reading)", lineHeight: 1.7, marginBottom: "10px" }}>
-                    {observed.seenCount} of {audit.access?.length} crawlers have fetched pages in the last {observed.days} days
+                    {observed.seenCount} of {audit.crawlerCount ?? 0} crawlers have fetched pages in the last {observed.days} days
                     {" "}({observed.totalHits} requests).
                   </div>
                   {(observed.crawlers ?? []).filter(c => c.hits > 0).map(c => (
@@ -362,13 +419,19 @@ export default function GeoPage() {
             </div>
           )}
 
-          {!audit.pageFetched && (
+          {/* Report the reason we actually observed rather than guessing at
+              one. The previous copy said "it may be blocking our crawler",
+              which sent you looking at the wrong thing entirely. */}
+          {audit.page && audit.page.state !== "ok" && (
             <div style={{
-              display: "flex", alignItems: "center", gap: "8px",
-              fontFamily: "var(--font-body)", fontSize: "12.5px", color: "var(--text-tertiary)",
+              display: "flex", alignItems: "flex-start", gap: "8px",
+              fontFamily: "var(--font-body)", fontSize: "12.5px",
+              color: "var(--text-tertiary)", lineHeight: 1.6,
             }}>
-              <FileSearch size={13} /> Couldn&rsquo;t fetch the page for a readiness check — it may be
-              blocking our crawler, or slow to respond.
+              <FileSearch size={13} style={{ flexShrink: 0, marginTop: 2 }} />
+              <span>
+                No readiness score: we requested {audit.page.url} and {audit.page.detail}.
+              </span>
             </div>
           )}
         </div>

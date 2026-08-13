@@ -16,41 +16,9 @@ import {
   auditCrawlerAccess, scoreAnswerReadiness, AI_CRAWLERS,
   type CrawlerAccess, type ReadinessReport,
 } from "@/lib/ai-crawlers";
+import { originCandidates, fetchText, fetchAcrossOrigins } from "@/lib/site-fetch";
 
 export const dynamic = "force-dynamic";
-
-/** GSC stores "sc-domain:example.com" or "https://example.com/" — normalise. */
-function toOrigin(siteUrl: string): string | null {
-  const raw = siteUrl.trim();
-  if (raw.startsWith("sc-domain:")) {
-    const host = raw.slice("sc-domain:".length).trim();
-    return host ? `https://${host}` : null;
-  }
-  try {
-    return new URL(raw).origin;
-  } catch {
-    return null;
-  }
-}
-
-const UA = "AIMarketingLabBot/1.0 (+https://www.aimarketinglab.co.uk/bot)";
-
-async function fetchText(url: string, timeoutMs = 8000): Promise<string | null> {
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    const res = await fetch(url, {
-      headers: { "User-Agent": UA },
-      signal:  controller.signal,
-      redirect: "follow",
-    });
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    return await res.text();
-  } catch {
-    return null;
-  }
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -71,14 +39,18 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const origin = toOrigin(siteUrl);
-    if (!origin) {
+    const candidates = originCandidates(siteUrl);
+    if (candidates.length === 0) {
       return NextResponse.json({
         success: false,
         reason:  "invalid_site",
         message: `Could not derive a URL from "${siteUrl}".`,
       });
     }
+
+    // Resolve robots.txt first: whichever host answers is the host we then
+    // audit the page on, so both halves of the report describe the same site.
+    const { result: robots, origin } = await fetchAcrossOrigins(candidates, "/robots.txt");
 
     // Optional override so the user can audit a specific page rather than the
     // homepage — homepages are often the least representative page on a site.
@@ -92,17 +64,18 @@ export async function GET(request: NextRequest) {
       } catch { /* fall back to origin */ }
     }
 
-    const [robotsText, pageHtml] = await Promise.all([
-      fetchText(`${origin}/robots.txt`),
-      fetchText(target),
-    ]);
+    const page = await fetchText(target);
 
-    // No robots.txt is not an error — it means everything is permitted.
-    const access: CrawlerAccess[] = auditCrawlerAccess(robotsText ?? "", "/");
+    // Only claim a crawler is allowed when we actually read the rules. An
+    // absent robots.txt genuinely does permit everything; an unreachable one
+    // tells us nothing, so we return no verdicts rather than ten green ones.
+    const robotsKnown = robots.kind !== "unreachable";
+    const access: CrawlerAccess[] = robotsKnown
+      ? auditCrawlerAccess(robots.kind === "ok" ? robots.text : "", "/")
+      : [];
 
-    const readiness: ReadinessReport | null = pageHtml
-      ? scoreAnswerReadiness(pageHtml, target)
-      : null;
+    const readiness: ReadinessReport | null =
+      page.kind === "ok" ? scoreAnswerReadiness(page.text, target) : null;
 
     // Summarise the access picture, separating the two cases that mean very
     // different things.
@@ -113,7 +86,29 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      site: { origin, auditedUrl: target, robotsFound: robotsText !== null },
+      site: {
+        origin,
+        auditedUrl: target,
+        // True when the stored site URL named a host we couldn't reach and a
+        // sibling answered instead — worth surfacing, since it usually means
+        // the apex is misconfigured.
+        resolvedFromFallback: origin !== candidates[0],
+        requestedOrigin: candidates[0],
+      },
+      robots: {
+        state:  robots.kind === "ok" ? "found" : robots.kind === "absent" ? "absent" : "unreachable",
+        url:    robots.url,
+        detail: robots.kind === "unreachable" ? robots.detail
+              : robots.kind === "absent"      ? `the server returned ${robots.status}`
+              : null,
+      },
+      page: {
+        state:  page.kind === "ok" ? "ok" : page.kind === "absent" ? "absent" : "unreachable",
+        url:    target,
+        detail: page.kind === "unreachable" ? page.detail
+              : page.kind === "absent"      ? `the server returned ${page.status}`
+              : null,
+      },
       access,
       readiness,
       summary: {
@@ -125,7 +120,6 @@ export async function GET(request: NextRequest) {
         criticalBlocks: answerBlocked.map(a => a.crawler.name),
       },
       crawlerCount: AI_CRAWLERS.length,
-      pageFetched: pageHtml !== null,
     });
 
   } catch (err) {
