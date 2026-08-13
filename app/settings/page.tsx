@@ -260,6 +260,78 @@ function IntegrationsTab({ brandColor }: { brandColor: string }) {
   const [analyticsSaved,   setAnalyticsSaved]   = useState<boolean>(false);
   const [analyticsError,   setAnalyticsError]   = useState<string | null>(null);
 
+  // ── Google OAuth connection ──────────────────────────────────────────────
+  type Ga4Property = { id: string; name: string; account?: string };
+  type GscSite     = { siteUrl: string; permissionLevel: string };
+  const [gConfigured,  setGConfigured]  = useState(true);
+  const [gConnected,   setGConnected]   = useState(false);
+  const [gNeedsReauth, setGNeedsReauth] = useState(false);
+  const [gEmail,       setGEmail]       = useState<string | null>(null);
+  const [gProps,       setGProps]       = useState<Ga4Property[]>([]);
+  const [gSites,       setGSites]       = useState<GscSite[]>([]);
+  const [gLoading,     setGLoading]     = useState(true);
+  const [gBanner,      setGBanner]      = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  const loadGoogle = useCallback(async () => {
+    setGLoading(true);
+    try {
+      const r = await fetch("/api/integrations/google");
+      if (!r.ok) { setGConnected(false); return; }
+      const d = await r.json();
+      setGConfigured(d.configured !== false);
+      setGConnected(!!d.connected);
+      setGNeedsReauth(!!d.needsReauth);
+      setGEmail(d.googleEmail ?? null);
+      setGProps(d.ga4Properties ?? []);
+      setGSites(d.gscSites ?? []);
+    } catch {
+      setGConnected(false);
+    } finally {
+      setGLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadGoogle(); }, [loadGoogle]);
+
+  // The OAuth callback bounces back here with ?google=… / ?google_error=…
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search);
+    const ok  = q.get("google");
+    const err = q.get("google_error");
+    if (!ok && !err) return;
+
+    const messages: Record<string, string> = {
+      connected:       "Google account connected.",
+      cancelled:       "Connection cancelled — nothing was changed.",
+      not_configured:  "Google sign-in isn't set up on this deployment yet.",
+      session_expired: "Your session expired during sign-in. Please try again.",
+      state_mismatch:  "Sign-in could not be verified. Please try again.",
+      missing_code:    "Google didn't return an authorisation code. Please try again.",
+      exchange_failed: "Could not complete sign-in with Google. Please try again.",
+    };
+    const key = ok ?? err ?? "";
+    setGBanner({ kind: ok === "connected" ? "ok" : "err", text: messages[key] ?? "Unknown result." });
+
+    // Strip the params so a refresh doesn't re-show the banner.
+    q.delete("google"); q.delete("google_error");
+    const rest = q.toString();
+    window.history.replaceState({}, "", window.location.pathname + (rest ? `?${rest}` : ""));
+  }, []);
+
+  async function disconnectGoogle() {
+    setGLoading(true);
+    try {
+      await fetch("/api/auth/google/disconnect", { method: "POST" });
+      setGBanner({ kind: "ok", text: "Google account disconnected." });
+      await loadGoogle();
+    } catch {
+      setGBanner({ kind: "err", text: "Could not disconnect. Please try again." });
+    } finally {
+      setGLoading(false);
+    }
+  }
+
   useEffect(() => {
     const d = localStorage.getItem("aiml-domain");
     if (d) setDomain(d);
@@ -397,28 +469,146 @@ function IntegrationsTab({ brandColor }: { brandColor: string }) {
                 {analyticsError}
               </div>
             )}
+            {/* ── Google account connection ──────────────────────────────── */}
+            {gBanner && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: "8px",
+                padding: "10px 14px", marginBottom: "16px", borderRadius: "9px",
+                background: gBanner.kind === "ok" ? "rgba(0,230,118,0.08)" : "rgba(255,171,0,0.08)",
+                border: `1px solid ${gBanner.kind === "ok" ? "rgba(0,230,118,0.25)" : "rgba(255,171,0,0.25)"}`,
+                fontFamily: "var(--font-inter), sans-serif", fontSize: "12.5px",
+                color: gBanner.kind === "ok" ? "var(--signal-green)" : "var(--signal-amber)",
+              }}>
+                {gBanner.kind === "ok" ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+                {gBanner.text}
+              </div>
+            )}
+
+            <div style={{
+              padding: "16px 18px", marginBottom: "20px",
+              background: "var(--card)", border: "1px solid var(--border)",
+              borderRadius: "10px",
+            }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "14px", flexWrap: "wrap" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "4px" }}>
+                    Google account
+                  </div>
+                  <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                    {gLoading
+                      ? "Checking…"
+                      : !gConfigured
+                      ? "Google sign-in isn't set up on this deployment yet."
+                      : gNeedsReauth
+                      ? "Access expired or was revoked — reconnect to resume reading your data."
+                      : gConnected
+                      ? <>Connected{gEmail ? <> as <strong style={{ color: "var(--text-primary)" }}>{gEmail}</strong></> : null}. Read-only access to your Analytics and Search Console.</>
+                      : "Sign in with Google to read your own Analytics and Search Console data. Read-only, and you can disconnect at any time."}
+                  </div>
+                </div>
+
+                {gConfigured && !gLoading && (
+                  gConnected && !gNeedsReauth ? (
+                    <button
+                      onClick={disconnectGoogle}
+                      style={{
+                        flexShrink: 0, padding: "9px 16px",
+                        fontFamily: "var(--font-inter), sans-serif", fontSize: "12.5px", fontWeight: 500,
+                        color: "var(--text-secondary)", background: "transparent",
+                        border: "1px solid var(--border)", borderRadius: "8px", cursor: "pointer",
+                      }}
+                    >
+                      Disconnect
+                    </button>
+                  ) : (
+                    <a
+                      href="/api/auth/google/start"
+                      style={{
+                        flexShrink: 0, display: "inline-flex", alignItems: "center", gap: "7px",
+                        padding: "9px 16px", textDecoration: "none",
+                        fontFamily: "var(--font-inter), sans-serif", fontSize: "12.5px", fontWeight: 600,
+                        color: "#fff", background: brandColor,
+                        border: "none", borderRadius: "8px",
+                      }}
+                    >
+                      {gNeedsReauth ? "Reconnect Google" : "Connect Google"}
+                    </a>
+                  )
+                )}
+              </div>
+            </div>
+
             <div className="grid-1-mobile" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
               <Field
                 label="Google Search Console site"
-                hint='e.g. "sc-domain:yourdomain.com" for a domain property, or "https://yourdomain.com/" for a URL-prefix property.'
+                hint={gSites.length
+                  ? "Pick the property you want this workspace to report on."
+                  : 'e.g. "sc-domain:yourdomain.com" for a domain property, or "https://yourdomain.com/" for a URL-prefix property.'}
               >
-                <TextInput
-                  value={gscSiteUrl}
-                  onChange={setGscSiteUrl}
-                  placeholder="sc-domain:yourdomain.com"
-                  disabled={analyticsLoading}
-                />
+                {/* Once connected we know exactly which sites the user can read,
+                    so offer them rather than asking for a hand-typed URL — the
+                    sc-domain vs https:// distinction was a frequent mistake. */}
+                {gSites.length > 0 ? (
+                  <select
+                    value={gscSiteUrl}
+                    onChange={e => setGscSiteUrl(e.target.value)}
+                    disabled={analyticsLoading}
+                    style={{
+                      width: "100%", padding: "9px 12px",
+                      fontFamily: "var(--font-inter), sans-serif", fontSize: "13px",
+                      color: "var(--text-primary)", background: "var(--card)",
+                      border: "1px solid var(--border)", borderRadius: "7px",
+                      outline: "none", boxSizing: "border-box" as const,
+                    }}
+                  >
+                    <option value="">Select a site…</option>
+                    {gSites.map(s => (
+                      <option key={s.siteUrl} value={s.siteUrl}>{s.siteUrl}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <TextInput
+                    value={gscSiteUrl}
+                    onChange={setGscSiteUrl}
+                    placeholder="sc-domain:yourdomain.com"
+                    disabled={analyticsLoading}
+                  />
+                )}
               </Field>
               <Field
-                label="GA4 property ID"
-                hint='The numeric ID of your GA4 property. Not the "G-XXXXXXX" measurement ID — see the steps below.'
+                label="GA4 property"
+                hint={gProps.length
+                  ? "Pick the property you want this workspace to report on."
+                  : 'The numeric ID of your GA4 property. Not the "G-XXXXXXX" measurement ID — see the steps below.'}
               >
-                <TextInput
-                  value={ga4PropertyId}
-                  onChange={setGa4PropertyId}
-                  placeholder="123456789"
-                  disabled={analyticsLoading}
-                />
+                {gProps.length > 0 ? (
+                  <select
+                    value={ga4PropertyId}
+                    onChange={e => setGa4PropertyId(e.target.value)}
+                    disabled={analyticsLoading}
+                    style={{
+                      width: "100%", padding: "9px 12px",
+                      fontFamily: "var(--font-inter), sans-serif", fontSize: "13px",
+                      color: "var(--text-primary)", background: "var(--card)",
+                      border: "1px solid var(--border)", borderRadius: "7px",
+                      outline: "none", boxSizing: "border-box" as const,
+                    }}
+                  >
+                    <option value="">Select a property…</option>
+                    {gProps.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}{p.account ? ` — ${p.account}` : ""} ({p.id})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <TextInput
+                    value={ga4PropertyId}
+                    onChange={setGa4PropertyId}
+                    placeholder="123456789"
+                    disabled={analyticsLoading}
+                  />
+                )}
               </Field>
             </div>
 

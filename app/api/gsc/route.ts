@@ -8,15 +8,11 @@
 // =============================================================================
 
 import { NextResponse } from "next/server";
-import { getGoogleAccessToken } from "@/lib/google-auth";
 import { getCallerOrNull } from "@/lib/supabase-server";
+import { resolveGoogleToken } from "@/lib/google-oauth";
 
 const GSC_API_BASE = "https://www.googleapis.com/webmasters/v3";
 const GSC_SCOPE    = "https://www.googleapis.com/auth/webmasters.readonly";
-
-async function getAccessToken(): Promise<string> {
-  return getGoogleAccessToken(GSC_SCOPE);
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Run a GSC search analytics query
@@ -103,7 +99,20 @@ export async function GET() {
       );
     }
 
-    const token = await getAccessToken();
+    // Prefer the caller's own OAuth connection; fall back to the legacy shared
+    // service account so existing setups keep working during the migration.
+    const tokenResult = await resolveGoogleToken(caller.user.id, GSC_SCOPE);
+    if (!tokenResult.ok) {
+      return NextResponse.json(
+        {
+          success: false,
+          reason:  tokenResult.reason === "reauth_required" ? "reauth_required" : "not_connected",
+          message: tokenResult.message,
+        },
+        { status: 200 },
+      );
+    }
+    const token = tokenResult.accessToken;
 
     const dateRange = {
       startDate: new Date(Date.now() - 28 * 24 * 60 * 60 * 1000)

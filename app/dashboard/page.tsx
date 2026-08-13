@@ -242,7 +242,9 @@ function ScoreBar({ value, max=10, color, label }: { value:number; max?:number; 
 //   "api_error"      → they stored one but Google rejected the call (usually
 //                      because the shared service account doesn't have Viewer
 //                      access on that property, or the URL is mis-formatted).
-type ConnReason = null | "not_configured" | "api_error";
+//   "not_connected"   → no Google account linked yet (the normal new-user state)
+//   "reauth_required" → they linked one, but the grant was revoked/expired
+type ConnReason = null | "not_configured" | "api_error" | "not_connected" | "reauth_required";
 function ConnectionBanner({
   ga4Connected, gscConnected,
   ga4Reason,    gscReason,
@@ -315,6 +317,7 @@ function ProjectionChart({ brandColor, ga4Trend, ga4Loading, ga4Reason, ga4Messa
   //                    correctly filled in — a dead end. Show the real error.
   if (!isReal && !ga4Loading) {
     const isApiError = ga4Reason === "api_error";
+    const needsAuth  = ga4Reason === "not_connected" || ga4Reason === "reauth_required";
     return (
       <motion.div ref={chartRef} variants={pv(0.2)} initial="hidden" animate="visible">
         <Panel style={{ padding:"32px 24px" }}>
@@ -323,7 +326,10 @@ function ProjectionChart({ brandColor, ga4Trend, ga4Loading, ga4Reason, ga4Messa
               Organic Traffic · 6-Month AI Projection
             </div>
             <div style={{ fontFamily:"var(--font-mono)", fontSize:"11px", color: isApiError ? "var(--signal-amber)" : "var(--text-tertiary)", letterSpacing:"0.08em" }}>
-              {isApiError ? "GA4 CONNECTION ERROR" : "AWAITING GA4 CONNECTION"}
+              {isApiError ? "GA4 CONNECTION ERROR"
+                : ga4Reason === "reauth_required" ? "GOOGLE ACCESS EXPIRED"
+                : needsAuth ? "GOOGLE NOT CONNECTED"
+                : "AWAITING GA4 CONNECTION"}
             </div>
           </div>
 
@@ -335,11 +341,18 @@ function ProjectionChart({ brandColor, ga4Trend, ga4Loading, ga4Reason, ga4Messa
           }}>
             <Activity size={18} color={isApiError ? "var(--signal-amber)" : "var(--text-tertiary)"} />
             <div style={{ fontFamily:"var(--font-body)", fontSize:"14px", fontWeight:500, color:"var(--text-primary)" }}>
-              {isApiError ? "GA4 rejected the request" : "No traffic data yet"}
+              {isApiError ? "GA4 rejected the request"
+                : ga4Reason === "reauth_required" ? "Google access expired"
+                : needsAuth ? "Connect your Google account"
+                : "No traffic data yet"}
             </div>
             <div style={{ fontFamily:"var(--font-body)", fontSize:"13px", color:"var(--text-secondary)", lineHeight:1.6, maxWidth:"460px" }}>
               {isApiError
                 ? "Your property ID is saved, but Google returned an error. The usual cause is the service account not having Viewer access on this GA4 property — add it under GA4 Admin → Property access management."
+                : ga4Reason === "reauth_required"
+                ? "Your Google authorisation was revoked or has expired. Reconnect to resume reading your Analytics data."
+                : needsAuth
+                ? "Sign in with Google to let AI Marketing Lab read your own Analytics data. Read-only, and you can disconnect at any time."
                 : "Connect Google Analytics 4 to see your actual sessions projected six months forward with honest confidence intervals."}
             </div>
             {isApiError && ga4Message && (
@@ -359,7 +372,7 @@ function ProjectionChart({ brandColor, ga4Trend, ga4Loading, ga4Reason, ga4Messa
               padding:"8px 18px", borderRadius:"100px", marginTop:"4px",
               transition:"opacity 0.16s",
             }}>
-              {isApiError ? "Review settings" : "Connect GA4"} <ArrowRight size={12}/>
+              {isApiError ? "Review settings" : needsAuth ? "Connect Google" : "Connect GA4"} <ArrowRight size={12}/>
             </a>
           </div>
         </Panel>

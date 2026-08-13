@@ -8,15 +8,11 @@
 // =============================================================================
 
 import { NextResponse } from "next/server";
-import { getGoogleAccessToken } from "@/lib/google-auth";
 import { getCallerOrNull } from "@/lib/supabase-server";
+import { resolveGoogleToken } from "@/lib/google-oauth";
 
 const GA4_API_BASE = "https://analyticsdata.googleapis.com/v1beta";
 const GA4_SCOPE    = "https://www.googleapis.com/auth/analytics.readonly";
-
-async function getAccessToken(): Promise<string> {
-  return getGoogleAccessToken(GA4_SCOPE);
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Run a GA4 Data API report
@@ -93,7 +89,23 @@ export async function GET() {
       );
     }
 
-    const token = await getAccessToken();
+    // Prefer the caller's own OAuth connection; fall back to the legacy shared
+    // service account so existing setups keep working during the migration.
+    const tokenResult = await resolveGoogleToken(caller.user.id, GA4_SCOPE);
+    if (!tokenResult.ok) {
+      return NextResponse.json(
+        {
+          success: false,
+          // "not_connected"/"reauth_required" are distinct from a bad property
+          // ID, so the dashboard can prompt "connect Google" rather than
+          // "check your property ID".
+          reason:  tokenResult.reason === "reauth_required" ? "reauth_required" : "not_connected",
+          message: tokenResult.message,
+        },
+        { status: 200 },
+      );
+    }
+    const token = tokenResult.accessToken;
 
     // Run all reports in parallel
     const [summaryData, trendData, pagesData, sourcesData] = await Promise.all([
