@@ -11,8 +11,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   User, Palette, Plug, CreditCard, Shield, Database,
   CheckCircle2, AlertCircle, Save, RefreshCw,
-  Globe2, BarChart3, Cpu, Trash2, Eye, EyeOff, Brain, PenLine, HelpCircle,
+  Globe2, BarChart3, Cpu, Trash2, Eye, EyeOff, Brain, PenLine, HelpCircle, Volume2,
 } from "lucide-react";
+import {
+  listVoices, pickDefaultVoice, speak, speechSupported, type SpeechVoice,
+} from "@/lib/speech";
 import { supabase } from "@/lib/supabase";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
@@ -233,7 +236,136 @@ function BrandingTab({ brandColor, onBrandChange }: { brandColor: string; onBran
           </div>
         </Panel>
       </motion.div>
+
+      <motion.div variants={pv(0.18)} initial="hidden" animate="visible">
+        <VoicePanel brandColor={brandColor} />
+      </motion.div>
     </div>
+  );
+}
+
+// ── Read-aloud voice ──────────────────────────────────────────────────────────
+// Voices come from the operating system, not from us, so this lists whatever
+// the current device actually has and lets the reader choose. That's why the
+// options differ between a Windows desktop and an iPhone — and why we show the
+// raw voice name rather than only "British male / female".
+function VoicePanel({ brandColor }: { brandColor: string }) {
+  const [voices,   setVoices]   = useState<SpeechVoice[]>([]);
+  const [selected, setSelected] = useState<string>("");
+  const [loading,  setLoading]  = useState(true);
+  const [saved,    setSaved]    = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const list = await listVoices();
+      if (cancelled) return;
+      setVoices(list);
+      const stored = localStorage.getItem("aiml-voice-name");
+      setSelected(stored || (await pickDefaultVoice()) || "");
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  function choose(name: string) {
+    setSelected(name);
+    localStorage.setItem("aiml-voice-name", name);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1800);
+  }
+
+  function preview() {
+    if (!selected) return;
+    speak(
+      "This is how articles will sound when read aloud on AI Marketing Lab.",
+      { voiceName: selected },
+    );
+  }
+
+  const british = voices.filter(v => v.british);
+  const others  = voices.filter(v => !v.british);
+
+  const label = (v: SpeechVoice) =>
+    `${v.name}${v.gender !== "unknown" ? ` — ${v.gender === "male" ? "male" : "female"}` : ""}`;
+
+  return (
+    <Panel>
+      <PH title="Read-aloud voice" subtitle="Used by the Listen button on blog posts. Saved to this browser." />
+      <div style={{ padding: "22px" }}>
+        {!speechSupported() ? (
+          <div style={{ fontFamily: "var(--font-body)", fontSize: "13px", color: "var(--text-secondary)" }}>
+            This browser doesn&rsquo;t support speech synthesis, so read-aloud is unavailable here.
+          </div>
+        ) : loading ? (
+          <div style={{ fontFamily: "var(--font-body)", fontSize: "13px", color: "var(--text-tertiary)" }}>
+            Loading voices…
+          </div>
+        ) : voices.length === 0 ? (
+          <div style={{ fontFamily: "var(--font-body)", fontSize: "13px", color: "var(--text-secondary)" }}>
+            No English voices are installed on this device.
+          </div>
+        ) : (
+          <>
+            <Field
+              label="Voice"
+              hint={british.length
+                ? "British voices are listed first. The choice is stored per browser, so set it again on other devices."
+                : "No British voices found on this device — the list below falls back to other English voices."}
+            >
+              <select
+                value={selected}
+                onChange={e => choose(e.target.value)}
+                style={{
+                  width: "100%", padding: "9px 12px",
+                  fontFamily: "var(--font-inter), sans-serif", fontSize: "13px",
+                  color: "var(--text-primary)", background: "var(--card)",
+                  border: "1px solid var(--border)", borderRadius: "7px",
+                  outline: "none", boxSizing: "border-box" as const,
+                }}
+              >
+                {british.length > 0 && (
+                  <optgroup label="British English">
+                    {british.map(v => <option key={v.name} value={v.name}>{label(v)}</option>)}
+                  </optgroup>
+                )}
+                {others.length > 0 && (
+                  <optgroup label="Other English">
+                    {others.map(v => <option key={v.name} value={v.name}>{label(v)} ({v.lang})</option>)}
+                  </optgroup>
+                )}
+              </select>
+            </Field>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              <button
+                onClick={preview}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: "7px",
+                  padding: "9px 16px",
+                  fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 500,
+                  color: "#fff", background: brandColor,
+                  border: "none", borderRadius: "8px", cursor: "pointer",
+                }}
+              >
+                <Volume2 size={13} /> Preview voice
+              </button>
+              {saved && (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontFamily: "var(--font-inter), sans-serif", fontSize: "12px", color: "var(--signal-green)" }}>
+                  <CheckCircle2 size={12} /> Saved
+                </span>
+              )}
+            </div>
+
+            <div style={{ marginTop: "14px", fontFamily: "var(--font-body)", fontSize: "11.5px", color: "var(--text-tertiary)", lineHeight: 1.6 }}>
+              Voices are provided by your operating system and browser, so the list
+              differs between devices. Nothing is sent to a server — the text is
+              spoken locally.
+            </div>
+          </>
+        )}
+      </div>
+    </Panel>
   );
 }
 

@@ -44,6 +44,7 @@ function FacebookIcon({ size = 13 }: { size?: number }) {
 }
 import { supabase } from "@/lib/supabase";
 import { sanitizeHtml, looksLikeHtml } from "@/lib/sanitize-html";
+import ReaderControls from "./reader-controls";
 
 const EASE_EXPO = [0.16, 1, 0.3, 1] as const;
 
@@ -414,6 +415,10 @@ export default function PostView() {
 
           {/* Article */}
           <motion.article className="aiml-article" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: EASE_EXPO, delay: 0.1 }}>
+            {/* Listen / AI summary. Sits above the article so it's the first
+                thing a reader sees when deciding how to consume the piece. */}
+            <ReaderControls slug={slug} content={post.content} />
+
             <PostBody content={post.content} />
 
             {/* Author bio */}
