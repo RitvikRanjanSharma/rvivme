@@ -28,6 +28,21 @@ export const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/userinfo.email",
 ];
 
+/**
+ * Google Business Profile. Requested separately and only on request — never
+ * added to GOOGLE_SCOPES.
+ *
+ * Two reasons. It's a restricted scope, so bundling it would drag every user
+ * through a heavier consent screen and subject the whole app to a stricter
+ * verification review, even for the majority who have no Business Profile.
+ * And asking for a permission before there's a reason to is how you train
+ * people to click through consent screens without reading them.
+ *
+ * Granted incrementally: include_granted_scopes preserves the existing grants,
+ * so authorising this adds to the connection rather than replacing it.
+ */
+export const GOOGLE_BUSINESS_SCOPE = "https://www.googleapis.com/auth/business.manage";
+
 const AUTH_ENDPOINT  = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke";
@@ -77,18 +92,28 @@ function adminSupabase() {
  * token, and their connection silently dies an hour later. Forcing the consent
  * screen every time costs one extra click and removes that entire failure mode.
  */
-export function buildConsentUrl(state: string): string {
+export function buildConsentUrl(state: string, extraScopes: string[] = []): string {
+  // Dedupe so re-requesting an already-granted scope doesn't produce a URL with
+  // it listed twice, which Google accepts but which makes logs harder to read.
+  const scopes = [...new Set([...GOOGLE_SCOPES, ...extraScopes])];
+
   const params = new URLSearchParams({
     client_id:              process.env.GOOGLE_OAUTH_CLIENT_ID ?? "",
     redirect_uri:           redirectUri(),
     response_type:          "code",
-    scope:                  GOOGLE_SCOPES.join(" "),
+    scope:                  scopes.join(" "),
     access_type:            "offline",
     prompt:                 "consent",
     include_granted_scopes: "true",
     state,
   });
   return `${AUTH_ENDPOINT}?${params.toString()}`;
+}
+
+/** True when the stored connection carries the given scope. */
+export function connectionHasScope(scopes: string | null | undefined, scope: string): boolean {
+  if (!scopes) return false;
+  return scopes.split(/\s+/).includes(scope);
 }
 
 // ─── token exchange + refresh ────────────────────────────────────────────────

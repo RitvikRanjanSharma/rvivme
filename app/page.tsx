@@ -82,6 +82,7 @@ const CAPABILITY_GRID = [
   { title: "Answer-engine visibility",    body: "See which AI crawlers your site allows, how readable your pages are to them, and which ones have actually visited." },
   { title: "Traffic forecasting",         body: "Six months projected forward from your real GA4 sessions, with confidence intervals that widen honestly." },
   { title: "Daily alerts",                body: "Email notifications when rankings drop, audit issues appear, or new keywords break into the top 100." },
+  { title: "Local search analysis",       body: "Finds the local demand hiding in your Search Console data, and tells you plainly when local isn't your channel." },
   { title: "UK-first",                    body: "Built around UK SERPs, GBP, and Search Console domain properties. No US-centric assumptions baked in." },
 ];
 

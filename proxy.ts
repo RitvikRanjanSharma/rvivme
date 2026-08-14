@@ -22,6 +22,8 @@ const PROTECTED_PREFIXES = [
   "/onboarding",
   // Alerts inbox + audit detail
   "/alerts", "/audit",
+  // Strategist surfaces
+  "/opportunities", "/geo", "/local",
 ];
 const AUTH_ROUTES        = ["/auth/login", "/auth/signup"];
 

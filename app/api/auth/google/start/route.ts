@@ -11,11 +11,11 @@
 
 import { NextResponse } from "next/server";
 import { getCallerOrNull } from "@/lib/supabase-server";
-import { buildConsentUrl, oauthConfigured } from "@/lib/google-oauth";
+import { buildConsentUrl, oauthConfigured, GOOGLE_BUSINESS_SCOPE } from "@/lib/google-oauth";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   const caller = await getCallerOrNull();
   if (!caller) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
@@ -32,8 +32,14 @@ export async function GET() {
     );
   }
 
+  // ?scope=business adds Google Business Profile to the request. Incremental
+  // by design: it's a restricted scope, so users who don't run a local business
+  // are never asked for it. See GOOGLE_BUSINESS_SCOPE for the full reasoning.
+  const wantsBusiness = new URL(request.url).searchParams.get("scope") === "business";
+  const extraScopes   = wantsBusiness ? [GOOGLE_BUSINESS_SCOPE] : [];
+
   const state = crypto.randomUUID();
-  const res   = NextResponse.redirect(buildConsentUrl(state));
+  const res   = NextResponse.redirect(buildConsentUrl(state, extraScopes));
 
   res.cookies.set("aiml_oauth_state", state, {
     httpOnly: true,

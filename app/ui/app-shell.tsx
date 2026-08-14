@@ -25,7 +25,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle, Bell, Bot, Brain, ChevronDown, FileText, Flag, Gauge, LayoutDashboard,
-  LogOut, Menu, Moon, Newspaper, Search, Settings, Sun, Target,
+  LogOut, MapPin, Menu, Moon, Newspaper, Search, Settings, Sun, Target,
   User, Users, X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -225,7 +225,7 @@ const isAppRoute  = (p: string) =>
   p.startsWith("/competitors") || p.startsWith("/settings")   ||
   p.startsWith("/strategies")  ||
   p.startsWith("/alerts")      || p.startsWith("/audit")      ||
-  p.startsWith("/opportunities") || p.startsWith("/geo") ||
+  p.startsWith("/opportunities") || p.startsWith("/geo") || p.startsWith("/local") ||
   p.startsWith("/onboarding");
 const isAuthRoute = (p: string) => p.startsWith("/auth");
 
@@ -240,6 +240,7 @@ const SIDEBAR_INTEL = [
   { href: "/dashboard",      label: "Dashboard",   icon: LayoutDashboard },
   { href: "/opportunities",  label: "Opportunities", icon: Target        },
   { href: "/geo",            label: "Answer engines", icon: Bot          },
+  { href: "/local",          label: "Local search", icon: MapPin         },
   { href: "/strategies",     label: "Strategies",  icon: Flag            },
   { href: "/keywords",       label: "Keywords",    icon: Search          },
   { href: "/competitors",    label: "Competitors", icon: Users           },
