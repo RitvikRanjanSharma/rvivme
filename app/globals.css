@@ -369,3 +369,23 @@ html, body { max-width: 100%; overflow-x: hidden; }
   .hide-tablet   { display: none !important; }
   .grid-2-tablet { grid-template-columns: repeat(2, 1fr) !important; }
 }
+
+/* ---------------------------------------------------------------------------
+   Screen-reader-only text.
+
+   The homepage headline is drawn into a <canvas>, which means it is not text:
+   no crawler, no answer engine and no screen reader can read it. This class
+   carries the same words as real markup — clipped rather than display:none,
+   so assistive technology still announces it.
+   --------------------------------------------------------------------------- */
+.aiml-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

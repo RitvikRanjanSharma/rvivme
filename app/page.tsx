@@ -12,6 +12,7 @@ import Link from "next/link";
 import { motion, AnimatePresence, useInView } from "framer-motion";
 import { ArrowUpRight, ArrowRight } from "lucide-react";
 import { useAuthState } from "@/app/ui/app-shell";
+import { SITE_URL, SITE_NAME, SITE_DESCRIPTION } from "@/lib/site";
 
 const EASE_EXPO = [0.16, 1, 0.3, 1] as const;
 const CAPABILITIES = [
@@ -709,6 +710,20 @@ export default function HomePage() {
     }
   }, [skipIntro]);
 
+  // The marketing sections are now always mounted (invisible until the intro
+  // finishes) so that crawlers can read them. That makes the document full
+  // height from the first paint, where it used to be a single screen — so
+  // without this, scrolling during the intro would reveal blank space where
+  // the content is waiting at opacity 0. Locking scroll for the ~2s intro
+  // restores exactly the previous feel.
+  useEffect(() => {
+    const introRunning = !skipIntro && phase !== "idle";
+    if (!introRunning) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previous; };
+  }, [skipIntro, phase]);
+
   useEffect(() => {
     function onScroll() {
       const heroEl = heroRef.current;
@@ -754,6 +769,44 @@ export default function HomePage() {
 
   return (
     <>
+      {/* Structured data.
+
+          Answer engines use this to establish what the site is and who
+          publishes it, which is what lets them attribute a citation to a named
+          organisation rather than a bare URL. Kept minimal and true — every
+          field here is verifiable, and inventing ratings or awards is how sites
+          get their structured data ignored entirely. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify({
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "Organization",
+              "@id": `${SITE_URL}/#organization`,
+              name: SITE_NAME,
+              url: SITE_URL,
+              description: SITE_DESCRIPTION,
+              foundingDate: "2026",
+              address: {
+                "@type": "PostalAddress",
+                addressLocality: "London",
+                addressCountry: "GB",
+              },
+            },
+            {
+              "@type": "WebSite",
+              "@id": `${SITE_URL}/#website`,
+              url: SITE_URL,
+              name: SITE_NAME,
+              description: SITE_DESCRIPTION,
+              publisher: { "@id": `${SITE_URL}/#organization` },
+              inLanguage: "en-GB",
+            },
+          ],
+        }) }}
+      />
+
       <CounterOverlay count={count} visible={counterVisible} />
 
       {showCanvas && (
@@ -780,17 +833,43 @@ export default function HomePage() {
           </AnimatePresence>
 
           <div style={{ position: "relative", zIndex: 2, maxWidth: "1200px" }}>
+            {/* The headline as real text.
+
+                The visible headline is painted into a <canvas> by the particle
+                system, which means it isn't text at all — crawlers, answer
+                engines and screen readers all saw a blank hero. This h1 carries
+                the identical words (see `hlines` in MasterCanvas) as markup.
+                Clipped rather than display:none so screen readers announce it.
+
+                Keep these two in sync: if the particle text changes, change
+                this too, or the page will claim something it doesn't show. */}
+            <h1 className="aiml-sr-only">
+              Rank faster with AI-driven SEO &amp; content strategy.
+            </h1>
+
             {/* Spacer — particles form the headline text here */}
             <div style={{
               height: "clamp(calc(3.5rem * 4 * 0.9), calc(10vw * 4 * 0.9), calc(9.5rem * 4 * 0.9))",
               marginBottom: "52px", pointerEvents: "none",
             }} />
 
-            <AnimatePresence>
-              {contentVisible && (
-                <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9, ease: EASE_EXPO, delay: 0.3 }}
-                  style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: "24px" }}
-                >
+            {/* Animated by opacity rather than by mounting.
+
+                These sections used to be wrapped in `{contentVisible && ...}`,
+                so they did not exist in the server-rendered HTML at all — and
+                since contentVisible only flips after the intro animation runs
+                in the browser, and crawlers don't run JavaScript, the entire
+                marketing page was invisible to search and answer engines.
+                Rendering it always and fading it in looks identical to a human
+                but leaves the text in the markup. */}
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              animate={contentVisible ? { opacity: 1, y: 0 } : { opacity: 0, y: 24 }}
+              transition={{ duration: 0.9, ease: EASE_EXPO, delay: 0.3 }}
+              style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: "24px",
+                       // Invisible content must not swallow clicks meant for the hero.
+                       pointerEvents: contentVisible ? "auto" : "none" }}
+            >
                   <p style={{ fontFamily: "var(--font-body)", fontSize: "clamp(14px,1.4vw,17px)", color: "var(--text-secondary)", lineHeight: 1.7, maxWidth: "420px", margin: 0 }}>
                     GA4, Search Console, and DataForSEO unified. AI forecasts on your real traffic. GEO tracking before anyone else notices.
                   </p>
@@ -804,9 +883,7 @@ export default function HomePage() {
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border-strong)"; (e.currentTarget as HTMLElement).style.background = "transparent"; }}
                     >Read intelligence</Link>
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            </motion.div>
           </div>
 
           <AnimatePresence>
@@ -823,9 +900,14 @@ export default function HomePage() {
           </AnimatePresence>
         </div>
 
-        <AnimatePresence>
-          {contentVisible && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8, ease: EASE_EXPO }}>
+        {/* The whole marketing page. Always rendered so it exists in the
+            served HTML; faded in on the same cue as before. */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: contentVisible ? 1 : 0 }}
+          transition={{ duration: 0.8, ease: EASE_EXPO }}
+          style={{ pointerEvents: contentVisible ? "auto" : "none" }}
+        >
               <Marquee />
               <section style={{ maxWidth: "1400px", margin: "0 auto" }}><StatRow /></section>
               <section style={{ maxWidth: "1400px", margin: "0 auto" }}>
@@ -948,9 +1030,7 @@ export default function HomePage() {
                   >{signedIn ? "Go to your dashboard" : "Start your free trial"} <ArrowUpRight size={15} /></Link>
                 </FadeUp>
               </section>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        </motion.div>
       </div>
     </>
   );
