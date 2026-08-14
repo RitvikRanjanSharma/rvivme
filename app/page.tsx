@@ -177,6 +177,9 @@ interface Particle {
   depth: number;
   burstDelay: number;
   convergeDelay: number;
+  /** Copper fleck. Decided once at build time, never per frame — rolling the
+   *  dice each frame would make the highlights strobe rather than sit. */
+  accent: boolean;
 }
 
 function MasterCanvas({
@@ -281,18 +284,39 @@ function MasterCanvas({
           depth,
           burstDelay:    (i / N) * 0.35,
           convergeDelay: Math.random() * 0.6,
+          // ~11%. Enough to read as a deliberate brand accent scattered through
+          // the text; low enough that the headline still reads as one colour.
+          accent: Math.random() < 0.11,
         });
       }
     }
 
-    function getParticleColor(depth: number, dark: boolean): string {
+    // Brand palette, as RGB triples because the caller composes them into
+    // rgba() with a per-particle alpha.
+    const COPPER      = "184,109,72";   // Luminous Copper #B86D48
+    const COPPER_DEEP = "150,84,55";    // recedes without going grey
+    const ALABASTER   = "245,240,233";  // Soft Alabaster #F5F0E9
+    const SLATE       = "45,54,66";     // Deep Slate #2D3642
+
+    /**
+     * Depth drives how present a particle looks; the accent flag decides which
+     * family it belongs to.
+     *
+     * Far particles are shifted toward the background rather than toward a
+     * different hue — that's what reads as depth instead of as a second colour.
+     * The previous version used blue for distance, which is why the headline
+     * looked two-tone rather than deep.
+     */
+    function getParticleColor(depth: number, dark: boolean, accent: boolean): string {
+      if (accent) return depth > 0.45 ? COPPER : COPPER_DEEP;
       if (dark) {
-        // Dark mode: white near, blue far
-        return depth > 0.6 ? "255,255,255" : depth > 0.3 ? "140,170,255" : "37,99,235";
-      } else {
-        // Light mode: dark near, blue far — visible on white background
-        return depth > 0.6 ? "10,10,20" : depth > 0.3 ? "37,99,235" : "100,130,220";
+        return depth > 0.6 ? ALABASTER
+             : depth > 0.3 ? "196,192,184"
+             : "138,140,138";
       }
+      return depth > 0.6 ? SLATE
+           : depth > 0.3 ? "92,100,110"
+           : "142,148,156";
     }
 
     function composite(elapsed: number) {
@@ -363,7 +387,7 @@ function MasterCanvas({
 
         if (a <= 0.01) continue;
         const sz   = p.size * (0.5 + p.depth * 0.5);
-        const c    = getParticleColor(p.depth, dark);
+        const c    = getParticleColor(p.depth, dark, p.accent);
         const tctx = p.depth < 0.4 ? fc : nc;
         tctx.globalAlpha = Math.max(0, Math.min(1, a));
         tctx.fillStyle   = `rgb(${c})`;
@@ -396,7 +420,7 @@ function MasterCanvas({
         ctx.save();
         ctx.globalAlpha = clamp(t * 1.5, 0, 1);
         // Wipe to correct bg color based on mode
-        ctx.fillStyle = dark ? "#080808" : "#f5f5f0";
+        ctx.fillStyle = dark ? "#0B232E" : "#EFE9E2";   // Midnight Teal / Pale Linen
         ctx.beginPath();
         ctx.arc(W / 2 + M, H / 2 + M, r, 0, Math.PI * 2);
         ctx.fill();
@@ -406,14 +430,10 @@ function MasterCanvas({
       } else if (ph === "converge") {
         // Background fades from wipe color to page bg
         const bgT  = clamp(elapsed / 1.8, 0, 1);
-        if (dark) {
-          const bg = Math.round(lerp(8, 8, bgT)); // stay dark
-          ctx.fillStyle = `rgb(${bg},${bg},${bg})`;
-        } else {
-          // Light: start from near-white, stay light
-          const bg = Math.round(lerp(245, 245, bgT));
-          ctx.fillStyle = `rgb(${bg},${bg},${Math.round(lerp(240, 240, bgT))})`;
-        }
+        // Hold the theme background while the particles converge onto it. The
+        // lerps here were always no-ops (same value both ends); kept as plain
+        // constants so nobody reads meaning into them that isn't there.
+        ctx.fillStyle = dark ? "#0B232E" : "#EFE9E2";
         ctx.fillRect(0, 0, CW, CH);
         composite(elapsed);
         if (elapsed > 0.6 + 1.4) { phaseTRef.current = now; onPhaseComplete("converge"); }
@@ -463,7 +483,7 @@ function CounterOverlay({ count, visible }: { count: number; visible: boolean })
           >
             AI Marketing Lab
           </motion.div>
-          <div style={{ position: "absolute", bottom: 0, left: 0, height: "2px", width: `${count}%`, background: "var(--brand)", transition: "width 0.06s linear" }} />
+          <div style={{ position: "absolute", bottom: 0, left: 0, height: "2px", width: `${count}%`, background: "var(--brand-strong)", transition: "width 0.06s linear" }} />
         </motion.div>
       )}
     </AnimatePresence>
@@ -672,7 +692,10 @@ export default function HomePage() {
   const [phase,           setPhase]           = useState<MasterPhase>("counter");
   const [contentVisible,  setContentVisible]  = useState(false);
   const [headlineVisible, setHeadlineVisible] = useState(false);
-  const [isDark,          setIsDark]          = useState(true);
+  // Light is the default theme now, so this must start false. Starting true
+  // painted the first frames of the particle intro in dark-mode colours on a
+  // linen background before the detector corrected it.
+  const [isDark,          setIsDark]          = useState(false);
   const scrollFrac = useRef(0);
   const heroRef    = useRef<HTMLDivElement>(null);
   // Drives the closing CTA — signed-in visitors get "Go to your dashboard"
@@ -696,7 +719,10 @@ export default function HomePage() {
   // Detect dark/light mode
   useEffect(() => {
     function detect() {
-      setIsDark(!document.documentElement.classList.contains("light"));
+      // Test for .dark directly rather than for the absence of .light. Before
+      // hydration the element carries neither class, and "not light" would
+      // wrongly report dark in exactly that window.
+      setIsDark(document.documentElement.classList.contains("dark"));
     }
     detect();
     const observer = new MutationObserver(detect);
@@ -819,7 +845,7 @@ export default function HomePage() {
              top:72px is no longer crowding the top of the particle headline.
              The spacer div below keeps the CTA/subheadline in rhythm. */}
         <div ref={heroRef} style={{ minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "flex-start", padding: "calc(28vh - 10px) 32px 64px", position: "relative" }}>
-          <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 70% 50% at 50% 0%, rgba(37,99,235,0.05) 0%, transparent 65%)", pointerEvents: "none" }} />
+          <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 70% 50% at 50% 0%, rgba(184,109,72,0.05) 0%, transparent 65%)", pointerEvents: "none" }} />
 
           <AnimatePresence>
             {headlineVisible && (
@@ -874,7 +900,7 @@ export default function HomePage() {
                     GA4 and Search Console unified. AI forecasts on your real traffic. Answer-engine visibility before anyone else notices.
                   </p>
                   <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-                    <Link href="/dashboard" style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: 500, color: "#fff", background: "var(--brand)", textDecoration: "none", padding: "13px 26px", borderRadius: "100px", transition: "opacity 0.16s" }}
+                    <Link href="/dashboard" style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: 500, color: "#fff", background: "var(--brand-strong)", textDecoration: "none", padding: "13px 26px", borderRadius: "100px", transition: "opacity 0.16s" }}
                       onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "0.85"}
                       onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
                     >Open platform <ArrowUpRight size={14} /></Link>
@@ -1007,7 +1033,7 @@ export default function HomePage() {
               </section>
 
               <section style={{ borderTop: "1px solid var(--border)", padding: "120px 32px", textAlign: "center", position: "relative", overflow: "hidden" }}>
-                <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 60% 80% at 50% 100%, rgba(37,99,235,0.07) 0%, transparent 60%)", pointerEvents: "none" }} />
+                <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 60% 80% at 50% 100%, rgba(184,109,72,0.07) 0%, transparent 60%)", pointerEvents: "none" }} />
                 <FadeUp>
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--text-tertiary)", display: "block", marginBottom: "32px" }}>Ready when you are</span>
                 </FadeUp>
@@ -1024,7 +1050,7 @@ export default function HomePage() {
                 <FadeUp delay={0.22}>
                   {/* Signed-in visitors shouldn't be pitched a free trial they
                       already have — send them straight to the dashboard. */}
-                  <Link href={signedIn ? "/dashboard" : "/auth/signup"} style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontFamily: "var(--font-body)", fontSize: "15px", fontWeight: 500, color: "#fff", background: "var(--brand)", textDecoration: "none", padding: "15px 36px", borderRadius: "100px", transition: "opacity 0.16s", position: "relative", zIndex: 1 }}
+                  <Link href={signedIn ? "/dashboard" : "/auth/signup"} style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontFamily: "var(--font-body)", fontSize: "15px", fontWeight: 500, color: "#fff", background: "var(--brand-strong)", textDecoration: "none", padding: "15px 36px", borderRadius: "100px", transition: "opacity 0.16s", position: "relative", zIndex: 1 }}
                     onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "0.85"}
                     onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
                   >{signedIn ? "Go to your dashboard" : "Join the closed beta"} <ArrowUpRight size={15} /></Link>

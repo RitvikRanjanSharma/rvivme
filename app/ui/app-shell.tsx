@@ -39,12 +39,50 @@ type ThemeCtx  = {
   setBrandColor: (v: string) => void;
   toggleMode:    () => void;
 };
+/** Luminous Copper. Exported so Settings' colour picker starts here too. */
+export const BRAND_DEFAULT = "#B86D48";
+
 const ThemeContext = createContext<ThemeCtx | null>(null);
 
 function hexToRgb(hex: string) {
   const c = hex.replace("#", "");
   return `${parseInt(c.slice(0,2),16)}, ${parseInt(c.slice(2,4),16)}, ${parseInt(c.slice(4,6),16)}`;
 }
+
+/**
+ * Shift a hex colour's lightness, keeping hue and saturation.
+ *
+ * Used to derive --brand-strong, the variant that carries white button text.
+ * The brand colour is user-overridable, so this can't be a hardcoded second
+ * hex: whatever colour someone picks, the button label still has to be legible
+ * on it. Deepening on light backgrounds and lifting on dark keeps the contrast
+ * moving in the useful direction in both themes.
+ */
+function shiftLightness(hex: string, delta: number): string {
+  const c = hex.replace("#", "");
+  const r = parseInt(c.slice(0,2),16)/255, g = parseInt(c.slice(2,4),16)/255, b = parseInt(c.slice(4,6),16)/255;
+  const max = Math.max(r,g,b), min = Math.min(r,g,b);
+  let h = 0, s = 0; const l = (max+min)/2;
+  if (max !== min) {
+    const d = max-min;
+    s = l > 0.5 ? d/(2-max-min) : d/(max+min);
+    h = max === r ? ((g-b)/d + (g<b ? 6 : 0)) : max === g ? ((b-r)/d + 2) : ((r-g)/d + 4);
+    h /= 6;
+  }
+  const nl = Math.min(1, Math.max(0, l + delta));
+  const hue = (p: number, q: number, t: number) => {
+    if (t < 0) t += 1; if (t > 1) t -= 1;
+    if (t < 1/6) return p + (q-p)*6*t;
+    if (t < 1/2) return q;
+    if (t < 2/3) return p + (q-p)*(2/3 - t)*6;
+    return p;
+  };
+  const q = nl < 0.5 ? nl*(1+s) : nl + s - nl*s;
+  const p = 2*nl - q;
+  const to = (v: number) => Math.round(v*255).toString(16).padStart(2,"0");
+  return `#${to(hue(p,q,h+1/3))}${to(hue(p,q,h))}${to(hue(p,q,h-1/3))}`;
+}
+
 function applyTheme(mode: ThemeMode, brand: string) {
   const r = document.documentElement;
   r.classList.toggle("light", mode === "light");
@@ -52,11 +90,16 @@ function applyTheme(mode: ThemeMode, brand: string) {
   r.style.setProperty("--brand",      brand);
   r.style.setProperty("--brand-rgb",  hexToRgb(brand));
   r.style.setProperty("--brand-glow", `rgba(${hexToRgb(brand)}, 0.20)`);
+  // On linen we deepen so white labels stay readable; on teal we lift, because
+  // deepening a mid-tone accent against a dark background does the opposite.
+  r.style.setProperty("--brand-strong", shiftLightness(brand, mode === "light" ? -0.04 : 0.05));
 }
 
 function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [mode,  setMode]  = useState<ThemeMode>("dark");
-  const [brand, setBrand] = useState("#2563eb");
+  // Light is the default. Must match both the :root CSS block and the
+  // pre-paint script in layout.tsx, or the first frame disagrees with itself.
+  const [mode,  setMode]  = useState<ThemeMode>("light");
+  const [brand, setBrand] = useState(BRAND_DEFAULT);
 
   useEffect(() => {
     const m = (localStorage.getItem("aiml-mode") || localStorage.getItem("rvivme-theme")) as ThemeMode | null;
@@ -555,7 +598,7 @@ function MarketingHeader() {
           /* Signed in — a single Dashboard button replaces both CTAs. */
           <Link href="/dashboard" className="aiml-marketing-cta" style={{
             fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 500,
-            color: "#fff", background: brandColor, textDecoration: "none",
+            color: "#fff", background: "var(--brand-strong)", textDecoration: "none",
             padding: "11px 22px", borderRadius: "100px", whiteSpace: "nowrap",
             boxShadow: "0 0 22px var(--brand-glow)",
             transition: "opacity var(--dur-fast)",
@@ -586,7 +629,7 @@ function MarketingHeader() {
             >Sign in</Link>
             <Link href="/dashboard" className="aiml-marketing-cta" style={{
               fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 500,
-              color: "#fff", background: brandColor, textDecoration: "none",
+              color: "#fff", background: "var(--brand-strong)", textDecoration: "none",
               padding: "11px 22px", borderRadius: "100px", whiteSpace: "nowrap",
               boxShadow: "0 0 22px var(--brand-glow)",
               transition: "opacity var(--dur-fast)",

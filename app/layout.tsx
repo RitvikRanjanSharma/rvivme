@@ -38,13 +38,38 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const canonical = absoluteUrl(pathname ?? "/");
 
   return (
-    <html lang="en-GB" className={`dark ${inter.variable} ${dmMono.variable}`} suppressHydrationWarning>
+    <html lang="en-GB" className={`${inter.variable} ${dmMono.variable}`} suppressHydrationWarning>
       <head>
         <title>AI Marketing Lab — SEO & GEO Intelligence Platform</title>
         <meta name="description" content="Unified SEO and GEO intelligence. Google Analytics 4, Search Console, and AI answer-engine tracking in one workspace."/>
-        <meta name="theme-color" content="#080808"/>
+        {/* Tints the mobile browser chrome to match. Two tags so the phone's
+            address bar follows the theme instead of being permanently the old
+            near-black, which now belongs to neither palette. */}
+        <meta name="theme-color" content="#EFE9E2" media="(prefers-color-scheme: light)"/>
+        <meta name="theme-color" content="#0B232E" media="(prefers-color-scheme: dark)"/>
         <link rel="canonical" href={canonical}/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
+        {/* Applies the stored theme BEFORE first paint.
+
+            Light is the default, defined on :root, so a first-time visitor
+            renders linen with no script involvement. But a returning visitor
+            who chose dark would otherwise get a full frame of light before
+            React hydrates and corrects it — a white flash on a dark theme is
+            the most jarring bug a theme toggle can have.
+
+            Deliberately inline and blocking: an async script would paint
+            first, which is the exact thing this exists to prevent. It is
+            small, wrapped in try/catch, and failure degrades to the default. */}
+        <script
+          dangerouslySetInnerHTML={{ __html: `
+            (function(){try{
+              var m = localStorage.getItem('aiml-mode') || localStorage.getItem('rvivme-theme');
+              if (m === 'dark') document.documentElement.classList.add('dark');
+              var b = localStorage.getItem('aiml-brand') || localStorage.getItem('rvivme-brand');
+              if (b) document.documentElement.style.setProperty('--brand', b);
+            }catch(e){}})();
+          ` }}
+        />
       </head>
       <body style={{ margin:0, padding:0 }}>
         <AppShell>{children}</AppShell>

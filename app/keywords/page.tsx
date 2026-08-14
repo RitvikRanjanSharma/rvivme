@@ -7,6 +7,7 @@
 // =============================================================================
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { BRAND_DEFAULT } from "@/app/ui/app-shell";
 import { motion, AnimatePresence, useInView } from "framer-motion";
 import {
   Search, TrendingUp, TrendingDown, Minus,
@@ -313,7 +314,7 @@ function KwTable<T extends { term: string }>({
 // ─── Page ──────────────────────────────────────────────────────────────────────
 export default function KeywordsPage() {
   const { domain, loading: domainLoading } = useDomain();
-  const [brandColor, setBrandColor] = useState("#2563eb");
+  const [brandColor, setBrandColor] = useState(BRAND_DEFAULT);
   const [activeTab,  setActiveTab]  = useState<"rankings"|"ideas"|"competitors">("rankings");
 
   // Rankings

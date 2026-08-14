@@ -324,7 +324,7 @@ export default function PostView() {
 
       {/* Header */}
       <div className="aiml-post-header" style={{ borderBottom: "1px solid var(--border)", padding: "48px 32px 40px", position: "relative", overflow: "hidden" }}>
-        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(37,99,235,0.05) 0%, transparent 70%)", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(184,109,72,0.05) 0%, transparent 70%)", pointerEvents: "none" }} />
         <div style={{ maxWidth: "860px", margin: "0 auto", position: "relative" }}>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: EASE_EXPO }}>
             <Link href="/blog" style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontFamily: "var(--font-body)", fontSize: "13px", color: "var(--text-tertiary)", textDecoration: "none", marginBottom: "28px", transition: "color 0.16s" }}
@@ -336,7 +336,7 @@ export default function PostView() {
 
             {/* Category + read time */}
             <div className="aiml-post-meta" style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--brand)", background: "rgba(37,99,235,0.08)", border: "1px solid rgba(37,99,235,0.20)", padding: "3px 10px", borderRadius: "100px" }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--brand)", background: "rgba(184,109,72,0.08)", border: "1px solid rgba(184,109,72,0.20)", padding: "3px 10px", borderRadius: "100px" }}>
                 {categoryLabel(post.category)}
               </span>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.08em", color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: "4px" }}>
@@ -360,7 +360,7 @@ export default function PostView() {
             {/* Author + share */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <div style={{ width: "34px", height: "34px", borderRadius: "50%", background: "var(--brand)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: "11px", fontWeight: 500, color: "#fff" }}>
+                <div style={{ width: "34px", height: "34px", borderRadius: "50%", background: "var(--brand-strong)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: "11px", fontWeight: 500, color: "#fff" }}>
                   {post.author_name.split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase()}
                 </div>
                 <span style={{ fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 500, color: "var(--text-primary)" }}>{post.author_name}</span>
@@ -425,7 +425,7 @@ export default function PostView() {
             {post.author_bio && (
               <div style={{ marginTop: "56px", paddingTop: "40px", borderTop: "1px solid var(--border)" }}>
                 <div style={{ display: "flex", alignItems: "flex-start", gap: "16px" }}>
-                  <div style={{ width: "44px", height: "44px", borderRadius: "50%", background: "var(--brand)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: "12px", fontWeight: 500, color: "#fff", flexShrink: 0 }}>
+                  <div style={{ width: "44px", height: "44px", borderRadius: "50%", background: "var(--brand-strong)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: "12px", fontWeight: 500, color: "#fff", flexShrink: 0 }}>
                     {post.author_name.split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase()}
                   </div>
                   <div>
@@ -443,7 +443,7 @@ export default function PostView() {
           >
             {/* Focus keyword */}
             {post.focus_keyword && (
-              <div style={{ padding: "14px 16px", background: "rgba(37,99,235,0.05)", border: "1px solid rgba(37,99,235,0.15)", borderRadius: "10px", marginBottom: "20px" }}>
+              <div style={{ padding: "14px 16px", background: "rgba(184,109,72,0.05)", border: "1px solid rgba(184,109,72,0.15)", borderRadius: "10px", marginBottom: "20px" }}>
                 <div style={{ fontFamily: "var(--font-mono)", fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--brand)", marginBottom: "5px" }}>Focus Keyword</div>
                 <div style={{ fontFamily: "var(--font-body)", fontSize: "13px", color: "var(--text-primary)", fontWeight: 500 }}>{post.focus_keyword}</div>
               </div>
@@ -559,7 +559,7 @@ export default function PostView() {
                     style={{
                       flexShrink: 0, padding: "9px 14px",
                       fontFamily: "var(--font-body)", fontSize: "12.5px", fontWeight: 500,
-                      color: "#fff", background: "var(--brand)",
+                      color: "#fff", background: "var(--brand-strong)",
                       border: "none", borderRadius: "8px", cursor: "pointer",
                       transition: "opacity 0.16s",
                     }}

@@ -15,6 +15,7 @@
 // =============================================================================
 
 import { useCallback, useEffect, useState } from "react";
+import { BRAND_DEFAULT } from "@/app/ui/app-shell";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -73,7 +74,7 @@ const STATUS_META = {
 } as const;
 
 export default function GeoPage() {
-  const [brandColor, setBrandColor] = useState("#2563eb");
+  const [brandColor, setBrandColor] = useState(BRAND_DEFAULT);
   const [audit,    setAudit]    = useState<Audit | null>(null);
   const [observed, setObserved] = useState<Observed | null>(null);
   const [loading,  setLoading]  = useState(true);

@@ -552,7 +552,7 @@ function btnPrimary(busy: boolean): React.CSSProperties {
   return {
     display: "inline-flex", alignItems: "center", gap: 8,
     padding: "10px 18px", borderRadius: "var(--radius-pill)",
-    background: "var(--brand)", color: "#fff", border: "none",
+    background: "var(--brand-strong)", color: "#fff", border: "none",
     fontSize: 14, fontWeight: 500, cursor: busy ? "wait" : "pointer",
     opacity: busy ? 0.7 : 1,
   };

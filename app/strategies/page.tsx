@@ -122,7 +122,7 @@ export default function StrategiesPage() {
           </div>
           <Link href="/dashboard" style={{
             display: "inline-flex", alignItems: "center", gap: 7,
-            background: "var(--brand)", color: "#fff", textDecoration: "none",
+            background: "var(--brand-strong)", color: "#fff", textDecoration: "none",
             padding: "11px 22px", borderRadius: 100, fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 500,
           }}>
             Go to dashboard <ArrowUpRight size={14}/>
@@ -283,7 +283,7 @@ function StrategyCard({
           <button onClick={() => onAction("activate")} disabled={busy} style={{
             display: "inline-flex", alignItems: "center", gap: 6,
             fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 500,
-            color: "#fff", background: "var(--brand)", border: "none",
+            color: "#fff", background: "var(--brand-strong)", border: "none",
             borderRadius: 7, padding: "6px 12px", cursor: busy ? "default" : "pointer",
             opacity: busy ? 0.6 : 1,
           }}>

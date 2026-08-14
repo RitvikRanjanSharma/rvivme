@@ -66,7 +66,7 @@ export default function SignOutPage() {
     }}>
       <div style={{
         width: "36px", height: "36px", borderRadius: "8px",
-        background: "var(--brand)",
+        background: "var(--brand-strong)",
         display: "flex", alignItems: "center", justifyContent: "center",
       }}>
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">

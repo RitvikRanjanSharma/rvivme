@@ -104,7 +104,7 @@ export default function SignupPage() {
     return (
       <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", padding: "40px" }}>
         <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: EASE }} style={{ maxWidth: "400px", textAlign: "center" }}>
-          <div style={{ width: "48px", height: "1px", background: "var(--brand)", margin: "0 auto 32px" }} />
+          <div style={{ width: "48px", height: "1px", background: "var(--brand-strong)", margin: "0 auto 32px" }} />
           <h2 style={{ fontFamily: "var(--font-display)", fontSize: "2.4rem", letterSpacing: "-0.04em", lineHeight: 1, fontWeight: 400, color: "var(--text-primary)", marginBottom: "16px" }}>
             Check your inbox.
           </h2>
@@ -129,10 +129,10 @@ export default function SignupPage() {
         style={{ flex: "0 0 40%", background: "var(--surface)", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", justifyContent: "space-between", padding: "40px", position: "relative", overflow: "hidden" }}
         className="hide-mobile"
       >
-        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 80% 60% at 80% 20%, rgba(37,99,235,0.08) 0%, transparent 60%)", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 80% 60% at 80% 20%, rgba(184,109,72,0.08) 0%, transparent 60%)", pointerEvents: "none" }} />
 
         <Link href="/" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: "10px" }}>
-          <div style={{ width: "30px", height: "30px", borderRadius: "8px", background: "var(--brand)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ width: "30px", height: "30px", borderRadius: "8px", background: "var(--brand-strong)", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2L14 12H2L8 2Z" fill="white" fillOpacity="0.9"/></svg>
           </div>
           <span style={{ fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>AI Marketing Lab</span>
@@ -145,7 +145,7 @@ export default function SignupPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
             {["Real GA4 traffic data", "Search Console integration", "AI 6-month forecast", "GEO citation tracking"].map(item => (
               <div key={item} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: "var(--brand)", flexShrink: 0 }} />
+                <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: "var(--brand-strong)", flexShrink: 0 }} />
                 <span style={{ fontFamily: "var(--font-body)", fontSize: "14px", color: "var(--text-secondary)" }}>{item}</span>
               </div>
             ))}

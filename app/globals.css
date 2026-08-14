@@ -7,34 +7,55 @@
    All legacy aliases included so dashboard/panels never break
 ============================================================================= */
 
-:root, .dark {
-  --brand:         #2563eb;
-  --brand-rgb:     37, 99, 235;
-  --brand-glow:    rgba(37, 99, 235, 0.20);
-  --bg:            #080808;
-  --surface:       #0e0e0e;
-  --surface-2:     #141414;
-  --surface-raised:#141414;
-  --card:          #111111;
-  --border:        rgba(255,255,255,0.08);
-  --border-strong: rgba(255,255,255,0.14);
-  --border-subtle: rgba(255,255,255,0.04);
-  --muted:         rgba(255,255,255,0.05);
-  --nav-bg:        rgba(8,8,8,0.88);
-  --text-primary:   #f8f8f5;
-  --text-secondary: rgba(248,248,245,0.50);
-  --text-tertiary:  rgba(248,248,245,0.28);
+/* -----------------------------------------------------------------------------
+   BRAND PALETTE
+
+   Luminous Copper  #B86D48   accent, highlights, particle flecks
+   Deep Slate       #2D3642   light-mode text
+   Pale Linen       #EFE9E2   light-mode background
+   Midnight Teal    #0B232E   dark-mode background
+   Soft Alabaster   #F5F0E9   dark-mode text
+
+   One deviation from the brief, and it's deliberate. White text on
+   #B86D48 measures 3.95:1 — below the 4.5:1 WCAG AA threshold for normal
+   text, so every primary button label would have been non-compliant.
+   --brand-strong (#AA6442) is the same hue and saturation darkened to 46%
+   lightness, which reaches 4.55:1. It reads as the same copper; it is just
+   deep enough to carry white text. #B86D48 stays exactly as specified for
+   accents, borders, particle highlights and large display type, where it
+   passes comfortably.
+----------------------------------------------------------------------------- */
+
+/* Dark theme — Midnight Teal. Not the default; see .light below. */
+.dark {
+  --brand:         #B86D48;
+  --brand-rgb:     184, 109, 72;
+  --brand-strong:  #C97B54;   /* on teal, lift rather than deepen for contrast */
+  --brand-glow:    rgba(184, 109, 72, 0.22);
+  --bg:            #0B232E;
+  --surface:       #0F2C39;
+  --surface-2:     #143544;
+  --surface-raised:#143544;
+  --card:          #10303E;
+  --border:        rgba(245,240,233,0.10);
+  --border-strong: rgba(245,240,233,0.18);
+  --border-subtle: rgba(245,240,233,0.05);
+  --muted:         rgba(245,240,233,0.06);
+  --nav-bg:        rgba(11,35,46,0.88);
+  --text-primary:   #F5F0E9;
+  --text-secondary: rgba(245,240,233,0.62);
+  --text-tertiary:  rgba(245,240,233,0.42);
   /* Long-form reading text. --text-secondary (50%) is fine for UI labels and
      short supporting copy, but it fails WCAG AA for body text and is genuinely
      tiring to read over an 8-minute article. Article prose uses this instead. */
-  --text-reading:   rgba(248,248,245,0.82);
+  --text-reading:   rgba(245,240,233,0.86);
   --signal-green: #00e676;
   --signal-amber: #ffab00;
   --signal-red:   #ff1744;
   --signal-blue:  #2979ff;
-  --chart-grid: rgba(255,255,255,0.04);
-  --chart-axis: rgba(255,255,255,0.08);
-  --chart-tick: rgba(255,255,255,0.28);
+  --chart-grid: rgba(245,240,233,0.06);
+  --chart-axis: rgba(245,240,233,0.12);
+  --chart-tick: rgba(245,240,233,0.42);
   --font-display: "Georgia", "Times New Roman", serif;
   --font-syne:    var(--font-inter, "Inter", system-ui, sans-serif);
   --font-inter:   var(--font-inter, "Inter", system-ui, sans-serif);
@@ -77,26 +98,62 @@
   --mono-track:   0.12em;
 }
 
-.light {
-  --bg:            #f5f5f0;
-  --surface:       #ffffff;
-  --surface-2:     #f0f0eb;
-  --surface-raised:#f8f8f5;
-  --card:          #f8f8f5;
-  --border:        rgba(0,0,0,0.08);
-  --border-strong: rgba(0,0,0,0.14);
-  --border-subtle: rgba(0,0,0,0.04);
-  --muted:         rgba(0,0,0,0.04);
-  --nav-bg:        rgba(245,245,240,0.90);
-  --text-primary:   #0a0a08;
-  --text-secondary: rgba(10,10,8,0.55);
-  --text-tertiary:  rgba(10,10,8,0.30);
-  --text-reading:   rgba(10,10,8,0.86);
-  --chart-grid: rgba(0,0,0,0.04);
-  --chart-axis: rgba(0,0,0,0.08);
-  --chart-tick: rgba(0,0,0,0.28);
-  --shadow-card:       0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04);
-  --shadow-card-hover: 0 8px 32px rgba(0,0,0,0.08);
+/* Light theme — Pale Linen. THE DEFAULT: it sits on :root, so a document with
+   no theme class renders light. That matters for the first paint before any
+   script has run, and for anything that renders without JS at all.
+
+   --text-secondary is 72% rather than the 55% used before. At 55% on linen the
+   measured contrast is 3.0:1, which fails AA — and unlike a dark background,
+   where low-opacity text stays legible, muted grey on a warm light background
+   goes muddy fast. 72% measures 4.66:1. */
+:root, .light {
+  --brand:         #B86D48;
+  --brand-rgb:     184, 109, 72;
+  --brand-strong:  #AA6442;   /* carries white text at 4.55:1 — see note above */
+  --brand-glow:    rgba(184, 109, 72, 0.18);
+  --bg:            #EFE9E2;
+  --surface:       #F7F3EE;
+  --surface-2:     #E8E1D8;
+  --surface-raised:#FBF8F4;
+  --card:          #F7F3EE;
+  --border:        rgba(45,54,66,0.12);
+  --border-strong: rgba(45,54,66,0.20);
+  --border-subtle: rgba(45,54,66,0.06);
+  --muted:         rgba(45,54,66,0.05);
+  --nav-bg:        rgba(239,233,226,0.90);
+  --text-primary:   #2D3642;
+  --text-secondary: rgba(45,54,66,0.72);
+  --text-tertiary:  rgba(45,54,66,0.60);
+  --text-reading:   rgba(45,54,66,0.88);
+  --chart-grid: rgba(45,54,66,0.07);
+  --chart-axis: rgba(45,54,66,0.14);
+  --chart-tick: rgba(45,54,66,0.60);
+  --shadow-card:       0 1px 3px rgba(45,54,66,0.07), 0 4px 12px rgba(45,54,66,0.05);
+  --shadow-card-hover: 0 8px 32px rgba(45,54,66,0.10);
+
+  /* Signal colours, re-derived for a light background.
+
+     The dark-theme values (#00e676, #ffab00) were chosen against near-black
+     and measure 1.39:1 and 1.57:1 on Pale Linen — invisible, not merely weak.
+     Every PASS badge, ALLOWED chip and green verdict in Opportunities, Answer
+     engines and Local uses these, so on light they would have been decorative
+     rather than legible.
+
+     Same hues, darkened until each clears 4.5:1 so they work as text and not
+     only as fills. */
+  --signal-green: #00763C;
+  --signal-amber: #8F6000;
+  --signal-red:   #D40029;
+  --signal-blue:  #1B4FA8;
+}
+
+/* Theme changes should feel like a dimmer, not a strobe. Scoped to the
+   properties that actually change so we don't animate layout or transforms. */
+body, .aiml-themed {
+  transition: background-color 0.35s ease, color 0.35s ease, border-color 0.35s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  body, .aiml-themed { transition: none; }
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }

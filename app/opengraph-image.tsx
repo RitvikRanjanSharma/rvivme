@@ -28,12 +28,12 @@ export default function OgImage() {
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
-          background: "#080808",
+          background: "#EFE9E2",   // Pale Linen — matches the default theme
           padding: "72px",
           // A hint of the brand gradient so the card is recognisable at
           // thumbnail size, where the text is unreadable anyway.
           backgroundImage:
-            "radial-gradient(ellipse 70% 60% at 15% 0%, rgba(37,99,235,0.28) 0%, transparent 60%)",
+            "radial-gradient(ellipse 70% 60% at 15% 0%, rgba(184,109,72,0.30) 0%, transparent 62%)",
         }}
       >
         <div
@@ -42,7 +42,7 @@ export default function OgImage() {
             fontSize: 26,
             letterSpacing: "0.18em",
             textTransform: "uppercase",
-            color: "#8a8a94",
+            color: "#6B7280",
           }}
         >
           {SITE_NAME}
@@ -54,7 +54,7 @@ export default function OgImage() {
             fontSize: 82,
             lineHeight: 1.05,
             letterSpacing: "-0.04em",
-            color: "#ffffff",
+            color: "#2D3642",   // Deep Slate
             maxWidth: "900px",
           }}
         >
@@ -66,7 +66,7 @@ export default function OgImage() {
             display: "flex",
             justifyContent: "space-between",
             fontSize: 24,
-            color: "#8a8a94",
+            color: "#6B7280",
           }}
         >
           <span>Search Console · GA4 · Answer engines</span>

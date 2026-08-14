@@ -125,12 +125,12 @@ function LoginForm() {
         <div style={{
           position:   "absolute",
           inset:      0,
-          background: "radial-gradient(ellipse 80% 60% at 20% 80%, rgba(37,99,235,0.08) 0%, transparent 60%)",
+          background: "radial-gradient(ellipse 80% 60% at 20% 80%, rgba(184,109,72,0.08) 0%, transparent 60%)",
           pointerEvents: "none",
         }} />
 
         <Link href="/" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: "10px" }}>
-          <div style={{ width: "30px", height: "30px", borderRadius: "8px", background: "var(--brand)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ width: "30px", height: "30px", borderRadius: "8px", background: "var(--brand-strong)", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
               <path d="M8 2L14 12H2L8 2Z" fill="white" fillOpacity="0.9"/>
             </svg>

@@ -35,7 +35,7 @@ export default function UpdatePasswordPage() {
         transition={{ duration: 0.8, ease: EASE_EXPO }}
         style={{ width: "100%", maxWidth: "380px" }}
       >
-        <div style={{ width: "48px", height: "1px", background: "var(--brand)", marginBottom: "32px" }} />
+        <div style={{ width: "48px", height: "1px", background: "var(--brand-strong)", marginBottom: "32px" }} />
         <h1 style={{ fontFamily: "var(--font-display)", fontSize: "2rem", letterSpacing: "-0.04em", lineHeight: 1, fontWeight: 400, color: "var(--text-primary)", marginBottom: "10px" }}>
           New password
         </h1>

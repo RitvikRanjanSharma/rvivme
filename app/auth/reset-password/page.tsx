@@ -65,7 +65,7 @@ export default function ResetPasswordPage() {
           </motion.div>
         ) : (
           <>
-            <div style={{ width: "48px", height: "1px", background: "var(--brand)", marginBottom: "32px" }} />
+            <div style={{ width: "48px", height: "1px", background: "var(--brand-strong)", marginBottom: "32px" }} />
             <h1 style={{ fontFamily: "var(--font-display)", fontSize: "2rem", letterSpacing: "-0.04em", lineHeight: 1, fontWeight: 400, color: "var(--text-primary)", marginBottom: "10px" }}>
               Reset password
             </h1>

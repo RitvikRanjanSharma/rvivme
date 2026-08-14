@@ -145,7 +145,7 @@ export default function HeroSection() {
                 fontSize:       "15px",
                 fontWeight:     500,
                 color:          "#fff",
-                background:     "var(--brand)",
+                background:     "var(--brand-strong)",
                 textDecoration: "none",
                 padding:        "14px 28px",
                 borderRadius:   "100px",

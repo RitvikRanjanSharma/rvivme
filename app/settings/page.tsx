@@ -7,6 +7,7 @@
 // =============================================================================
 
 import { useState, useEffect, useCallback } from "react";
+import { BRAND_DEFAULT } from "@/app/ui/app-shell";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   User, Palette, Plug, CreditCard, Shield, Database,
@@ -30,9 +31,12 @@ const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: "security",     label: "Security",          icon: Shield    },
 ];
 
+// Luminous Copper leads, since it's the default. The rest are picked to sit
+// on both Pale Linen and Midnight Teal — the old set was chosen against
+// near-black and several of them washed out on a warm light background.
 const BRAND_PRESETS = [
-  "#2563eb","#7c3aed","#db2777","#ea580c",
-  "#16a34a","#dc2626","#d97706","#0891b2",
+  "#B86D48","#8C5A3C","#A8442F","#7A6A52",
+  "#2F6F6B","#3D5A80","#6B4E71","#4A5D3A",
 ];
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -228,7 +232,7 @@ function BrandingTab({ brandColor, onBrandChange }: { brandColor: string; onBran
             <Field label="Custom Hex">
               <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                 <div style={{ width: "36px", height: "36px", borderRadius: "7px", background: hex, flexShrink: 0, border: "1px solid var(--border)" }} />
-                <TextInput value={hex} onChange={apply} placeholder="#2563eb" />
+                <TextInput value={hex} onChange={apply} placeholder="#B86D48" />
               </div>
             </Field>
 
@@ -936,7 +940,7 @@ function SettingsContent() {
   const searchParams   = useSearchParams();
   const defaultTab     = (searchParams.get("tab") as TabId) || "profile";
   const [activeTab, setActiveTab] = useState<TabId>(defaultTab);
-  const [brandColor, setBrandColor] = useState("#2563eb");
+  const [brandColor, setBrandColor] = useState(BRAND_DEFAULT);
 
   useEffect(() => {
     const b = localStorage.getItem("aiml-brand") || localStorage.getItem("rvivme-brand");

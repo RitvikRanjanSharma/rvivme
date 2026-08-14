@@ -13,6 +13,7 @@
 // =============================================================================
 
 import { useCallback, useEffect, useState } from "react";
+import { BRAND_DEFAULT } from "@/app/ui/app-shell";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -248,7 +249,7 @@ function OpportunityCard({ opp, index, brandColor }: {
 }
 
 export default function OpportunitiesPage() {
-  const [brandColor, setBrandColor] = useState("#2563eb");
+  const [brandColor, setBrandColor] = useState(BRAND_DEFAULT);
   const [report,  setReport]  = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter,  setFilter]  = useState<OpportunityKind | "all">("all");

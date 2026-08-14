@@ -212,7 +212,7 @@ function TopPages({ pages, loading }: { pages: GA4Page[]; loading: boolean }) {
                   {page.path}
                 </div>
                 <div style={{ height: "3px", background: "var(--border)", borderRadius: "2px", overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: `${Math.round((page.pageviews / max) * 100)}%`, background: "var(--brand)", borderRadius: "2px" }} />
+                  <div style={{ height: "100%", width: `${Math.round((page.pageviews / max) * 100)}%`, background: "var(--brand-strong)", borderRadius: "2px" }} />
                 </div>
               </div>
               <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-secondary)", flexShrink: 0 }}>

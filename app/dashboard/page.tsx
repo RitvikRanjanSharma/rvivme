@@ -7,6 +7,7 @@
 // =============================================================================
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { BRAND_DEFAULT } from "@/app/ui/app-shell";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -941,7 +942,7 @@ Each strategy must be specific to this domain's actual data. Impact and effort a
 // ── Page ───────────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const { domain, loading: domainLoading } = useDomain();
-  const [brandColor, setBrandColor] = useState("#2563eb");
+  const [brandColor, setBrandColor] = useState(BRAND_DEFAULT);
   const [ga4Trend,   setGa4Trend]   = useState<GA4TrendPoint[]>([]);
   const [ga4Loading, setGa4Loading] = useState(true);
   const [ga4Data,    setGa4Data]    = useState<any>(null);

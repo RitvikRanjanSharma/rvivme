@@ -13,6 +13,7 @@
 // =============================================================================
 
 import { useCallback, useEffect, useState } from "react";
+import { BRAND_DEFAULT } from "@/app/ui/app-shell";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -99,7 +100,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 export default function LocalPage() {
-  const [brandColor, setBrandColor] = useState("#2563eb");
+  const [brandColor, setBrandColor] = useState(BRAND_DEFAULT);
   const [report,   setReport]   = useState<LocalReport | null>(null);
   const [business, setBusiness] = useState<BusinessReport | null>(null);
   const [loading,  setLoading]  = useState(true);

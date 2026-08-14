@@ -438,7 +438,7 @@ export default function StrategyDetailPage() {
                     <button onClick={handleGeneratePlan} style={{
                       display: "inline-flex", alignItems: "center", gap: 7,
                       fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 500,
-                      color: "#fff", background: "var(--brand)", border: "none",
+                      color: "#fff", background: "var(--brand-strong)", border: "none",
                       borderRadius: 100, padding: "9px 20px", cursor: "pointer",
                     }}>
                       <Sparkles size={13}/> Generate plan

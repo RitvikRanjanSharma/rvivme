@@ -7,6 +7,7 @@
 // =============================================================================
 
 import { useState, useEffect, useCallback } from "react";
+import { BRAND_DEFAULT } from "@/app/ui/app-shell";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Globe2, TrendingUp, TrendingDown, Minus,
@@ -36,7 +37,7 @@ function threatColor(t: string) {
   return { critical: "var(--signal-red)", high: "var(--signal-amber)", medium: "var(--brand)", low: "var(--signal-green)" }[t] ?? "var(--text-tertiary)";
 }
 function threatBg(t: string) {
-  return { critical: "rgba(255,23,68,0.08)", high: "rgba(255,171,0,0.08)", medium: "rgba(37,99,235,0.08)", low: "rgba(0,230,118,0.08)" }[t] ?? "var(--muted)";
+  return { critical: "rgba(255,23,68,0.08)", high: "rgba(255,171,0,0.08)", medium: "rgba(184,109,72,0.08)", low: "rgba(0,230,118,0.08)" }[t] ?? "var(--muted)";
 }
 
 function KpiCard({ label, value, color }: { label: string; value: string | number; color: string }) {
@@ -56,7 +57,7 @@ function TrendIcon({ t }: { t: string }) {
 
 export default function CompetitorsPage() {
   const { domain, loading: domainLoading } = useDomain();
-  const [brandColor,  setBrandColor]  = useState("#2563eb");
+  const [brandColor,  setBrandColor]  = useState(BRAND_DEFAULT);
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [loading,     setLoading]     = useState(false);
   const [error,       setError]       = useState<string | null>(null);

@@ -217,7 +217,7 @@ function ToggleRow({
 const btnPrimary: React.CSSProperties = {
   padding: "9px 16px",
   borderRadius: "var(--radius-pill)",
-  background: "var(--brand)",
+  background: "var(--brand-strong)",
   color: "#fff",
   border: "none",
   fontSize: 13,
