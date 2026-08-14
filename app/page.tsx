@@ -103,7 +103,7 @@ const FAQ_ITEMS = [
     a: "No — and that's deliberate. There is no shortage of tools that will generate a blog post; there is a shortage of tools that tell you which post is worth writing and why. We identify the specific opportunity, show you the Search Console evidence behind it, and explain what would have to be true for it to pay off. The writing stays yours.",
   },
   {
-    q: "How does AI Overview citation tracking work?",
+    q: "How does answer-engine visibility work?",
     a: "We read your robots.txt and tell you, crawler by crawler, whether answer engines are permitted to fetch your pages — separating bots that build live cited answers from bots that only feed model training, because blocking those two things means very different things. We then score a page on how easily an answer engine can extract and quote it, and log AI crawlers that hit your site. Crawlers don't run JavaScript, so this is done server-side; anything measuring AI bots with a tracking tag is measuring nothing.",
   },
   {
@@ -935,12 +935,12 @@ export default function HomePage() {
                 </FadeUp>
                 <FadeUp delay={0.16}>
                   <p style={{ fontFamily: "var(--font-body)", fontSize: "clamp(16px,1.4vw,19px)", color: "var(--text-secondary)", lineHeight: 1.65, maxWidth: "760px", marginBottom: "24px" }}>
-                    Harness the power of advanced AI text generators and marketing intelligence tools to transform your campaigns and boost conversions.
+                    One workspace joining your Search Console rankings, your GA4 traffic, a technical audit of your site, and what AI answer engines can see &mdash; with a strategy that says which of it to act on first.
                   </p>
                 </FadeUp>
                 <FadeUp delay={0.22}>
                   <p style={{ fontFamily: "var(--font-body)", fontSize: "15px", color: "var(--text-secondary)", lineHeight: 1.8, maxWidth: "760px" }}>
-                    Welcome to Britain&rsquo;s most comprehensive AI marketing lab, where cutting-edge artificial intelligence meets strategic digital marketing. Whether you&rsquo;re running Google Ads, diving into affiliate marketing, or crafting compelling content, our suite of AI-powered tools gives you the competitive edge you&rsquo;ve been searching for.
+                    Built for UK small businesses who need to know what to do next, not another dashboard to interpret. Every recommendation shows the Search Console rows behind it, so you can check the reasoning and disagree with it.
                   </p>
                 </FadeUp>
               </section>
@@ -1018,7 +1018,7 @@ export default function HomePage() {
                 </FadeUp>
                 <FadeUp delay={0.16}>
                   <p style={{ fontFamily: "var(--font-body)", fontSize: "clamp(15px,1.3vw,17px)", color: "var(--text-secondary)", lineHeight: 1.7, maxWidth: "640px", margin: "0 auto 44px", position: "relative", zIndex: 1 }}>
-                    Ready to revolutionise your marketing strategy? Join hundreds of successful marketers who&rsquo;ve already discovered the power of our AI marketing lab. Start your free trial today and see the difference intelligent automation can make to your campaigns.
+                    We&rsquo;re running a closed beta with a small group of UK business owners through summer 2026. It&rsquo;s free, there&rsquo;s no card and no expiry, and the point is to find out whether this actually moves your numbers before anyone is asked to pay.
                   </p>
                 </FadeUp>
                 <FadeUp delay={0.22}>
@@ -1027,7 +1027,7 @@ export default function HomePage() {
                   <Link href={signedIn ? "/dashboard" : "/auth/signup"} style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontFamily: "var(--font-body)", fontSize: "15px", fontWeight: 500, color: "#fff", background: "var(--brand)", textDecoration: "none", padding: "15px 36px", borderRadius: "100px", transition: "opacity 0.16s", position: "relative", zIndex: 1 }}
                     onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "0.85"}
                     onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
-                  >{signedIn ? "Go to your dashboard" : "Start your free trial"} <ArrowUpRight size={15} /></Link>
+                  >{signedIn ? "Go to your dashboard" : "Join the closed beta"} <ArrowUpRight size={15} /></Link>
                 </FadeUp>
               </section>
         </motion.div>
