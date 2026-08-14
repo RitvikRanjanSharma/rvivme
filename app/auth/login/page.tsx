@@ -153,7 +153,7 @@ function LoginForm() {
             Your search intelligence workspace.
           </p>
           <p style={{ fontFamily: "var(--font-body)", fontSize: "14px", color: "var(--text-secondary)", lineHeight: 1.7 }}>
-            GA4, Search Console, DataForSEO and AI forecasting in one place.
+            GA4, Search Console and AI forecasting in one place.
           </p>
         </div>
 

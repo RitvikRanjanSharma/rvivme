@@ -17,6 +17,7 @@
 // =============================================================================
 
 import { NextResponse, type NextRequest } from "next/server";
+import { resolveBaseUrl } from "@/lib/site";
 import { verifyCron, getServiceSupabase } from "@/lib/cron";
 import { sendEmail, alertEmail } from "@/lib/email";
 
@@ -54,7 +55,9 @@ type KwPosRow     = { keyword: string; position: number };
 type AuditRow     = { id: string; errors_count: number | null; overall_score: number | null; started_at: string };
 type IdRow        = { id: string };
 
-const APP_URL = process.env.APP_URL ?? "https://aimarketinglab.co.uk";
+// Was defaulting to the apex, which serves a parking certificate — the
+// deep links in these emails/alerts landed on a TLS warning.
+const APP_URL = resolveBaseUrl();
 
 export async function GET(req: NextRequest) {
   const guard = verifyCron(req);

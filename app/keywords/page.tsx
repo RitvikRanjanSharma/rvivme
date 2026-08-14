@@ -731,7 +731,7 @@ export default function KeywordsPage() {
           <motion.div key="ideas" initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }} transition={{ duration:0.2 }}>
             <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:"12px", padding:"20px", marginBottom:"20px" }}>
               <div style={{ fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:600, color:"var(--text-primary)", marginBottom:"14px" }}>
-                Keyword Ideas — Google Ads data via DataForSEO
+                Keyword Ideas — Google Trends + Search Console
               </div>
               <div style={{ display:"flex", gap:"8px", marginBottom:"14px" }}>
                 {(["site","seed"] as const).map(m => (

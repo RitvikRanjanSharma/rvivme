@@ -392,18 +392,30 @@ export function scoreAnswerReadiness(html: string, url?: string): ReadinessRepor
   });
 
   // 9. Dates — recency is a strong ranking factor inside answer engines.
-  const hasDate =
-    /<time[^>]+datetime=/i.test(html) ||
-    /"datePublished"/i.test(html) ||
-    /<meta[^>]+property=["']article:published_time["']/i.test(html);
-  checks.push({
-    id: "dates",
-    label: "Publication date is machine-readable",
-    passed: hasDate,
-    why: "Answer engines strongly prefer content they can date, and will pass over undated pages in favour of something demonstrably current.",
-    detail: hasDate ? "Found a machine-readable date." : "No datePublished or <time> element.",
-    weight: 1,
-  });
+  //
+  // Only applied to pages that are dated things. A homepage, pricing page or
+  // contact page has no publication date and never should; marking it red for
+  // the absence would be scoring it against a rule that doesn't apply, and a
+  // permanently-red check is one people learn to ignore.
+  const looksLikeArticle =
+    /"@type"\s*:\s*"(Article|BlogPosting|NewsArticle|TechArticle)"/i.test(html) ||
+    /<article[\s>]/i.test(html) ||
+    /property=["']og:type["'][^>]*content=["']article["']/i.test(html);
+
+  if (looksLikeArticle) {
+    const hasDate =
+      /<time[^>]+datetime=/i.test(html) ||
+      /"datePublished"/i.test(html) ||
+      /<meta[^>]+property=["']article:published_time["']/i.test(html);
+    checks.push({
+      id: "dates",
+      label: "Publication date is machine-readable",
+      passed: hasDate,
+      why: "Answer engines strongly prefer content they can date, and will pass over undated pages in favour of something demonstrably current.",
+      detail: hasDate ? "Found a machine-readable date." : "No datePublished or <time> element.",
+      weight: 1,
+    });
+  }
 
   const earned   = checks.filter(c => c.passed).reduce((s, c) => s + c.weight, 0);
   const possible = checks.reduce((s, c) => s + c.weight, 0);

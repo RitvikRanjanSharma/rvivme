@@ -13,6 +13,7 @@
 // =============================================================================
 
 import type { Metadata } from "next";
+import { resolveBaseUrl } from "@/lib/site";
 import { createClient } from "@supabase/supabase-js";
 import PostView from "./post-view";
 
@@ -27,10 +28,10 @@ function publicSupabase() {
 
 /** Absolute base URL — OG tags must use absolute URLs, relative ones are ignored. */
 function baseUrl(): string {
-  const explicit = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL;
-  if (explicit) return explicit.replace(/\/$/, "");
-  const domain = process.env.NEXT_PUBLIC_SITE_DOMAIN || "aimarketinglab.co.uk";
-  return `https://${domain}`;
+  // Centralised: the apex used to be the fallback here, and it does not
+  // serve the site — every RSS link and shared Open Graph URL landed on a
+  // certificate warning. See lib/site.ts.
+  return resolveBaseUrl();
 }
 
 type PostMeta = {
@@ -91,7 +92,10 @@ export async function generateMetadata(
 
   const title       = post.meta_title       || post.title;
   const description = post.meta_description || post.excerpt || "";
-  const image       = firstImageFrom(post.content) ?? `${base}/og-default.png`;
+  // /og-default.png never existed, so posts without an inline image shared with
+  // a broken preview. app/opengraph-image.tsx generates this route at request
+  // time — there is no file to forget to commit.
+  const image       = firstImageFrom(post.content) ?? `${base}/opengraph-image`;
 
   return {
     title,

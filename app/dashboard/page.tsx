@@ -1021,7 +1021,7 @@ export default function DashboardPage() {
             <span style={{ fontFamily:"var(--font-mono)", fontSize:"11px", color:"var(--text-tertiary)", letterSpacing:"0.06em" }}>{dateStr.toUpperCase()}</span>
             <div style={{ display:"flex", alignItems:"center", gap:"5px" }}>
               <div style={{ width:"6px",height:"6px",borderRadius:"50%",background:brandColor,animation:"brand-pulse 2.5s ease-in-out infinite" }}/>
-              <span style={{ fontFamily:"var(--font-mono)", fontSize:"10px", color:brandColor, letterSpacing:"0.1em", textTransform:"uppercase" }}>Live · GA4 + GSC + DataForSEO</span>
+              <span style={{ fontFamily:"var(--font-mono)", fontSize:"10px", color:brandColor, letterSpacing:"0.1em", textTransform:"uppercase" }}>Live · GA4 + Search Console</span>
             </div>
           </div>
         </div>

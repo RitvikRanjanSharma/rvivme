@@ -13,9 +13,14 @@
 // that only allows INSERT/UPDATE/DELETE from admin emails; the client-side
 // gate is a nice UX layer on top so non-admins don't see a broken admin page.
 //
-// TODO (RLS): add a policy on `blog_posts` like:
-//   USING (auth.jwt() ->> 'email' IN ('fvzj7p9f6n@privaterelay.appleid.com'))
-// once we're ready to open the public URL to unauthenticated inbound traffic.
+// The RLS side is now in place — see supabase/migrations/011_blog_admin_rls.sql,
+// which requires public.is_blog_admin() on every write to blog_posts and tags.
+// Until that migration ran, this file was the ONLY thing standing between a
+// visitor who signed up and the public blog, and it runs in the browser.
+//
+// Adding an admin is an INSERT into public.blog_admins plus an entry in
+// NEXT_PUBLIC_ADMIN_EMAILS; the database is what enforces it, the env var only
+// decides who sees the editor.
 // =============================================================================
 
 /** Comma-separated admin emails from the environment, lowercased. */

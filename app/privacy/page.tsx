@@ -7,7 +7,7 @@
 // must be reviewed by counsel covering:
 //   * data controller identity (currently a sole trader)
 //   * lawful basis per processing purpose
-//   * international transfers (Anthropic, Google, Supabase, DataForSEO)
+//   * international transfers (Anthropic, Google, Supabase, Resend)
 //   * retention schedule
 //   * DPIA / record of processing activities (Art. 30)
 // The structure below covers the headings the ICO recommends, with content
@@ -109,8 +109,8 @@ export default function PrivacyPage() {
             to Anthropic. They do not train on your data under their commercial terms.</li>
         <li><strong>Google</strong> &mdash; Search Console and Analytics 4 APIs (only the
             properties you connect).</li>
-        <li><strong>DataForSEO</strong> &mdash; keyword and SERP data provider. We send
-            keywords and domains you query; we do not send personal data.</li>
+        <li><strong>Google Trends</strong> &mdash; keyword demand signals. We send the
+            keywords you query; we do not send personal data.</li>
         <li><strong>Resend</strong> &mdash; transactional email delivery.</li>
       </ul>
       <p>

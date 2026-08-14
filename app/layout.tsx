@@ -41,7 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en-GB" className={`dark ${inter.variable} ${dmMono.variable}`} suppressHydrationWarning>
       <head>
         <title>AI Marketing Lab — SEO & GEO Intelligence Platform</title>
-        <meta name="description" content="Unified SEO and GEO intelligence. GA4, Search Console, DataForSEO, and AI citation tracking in one workspace."/>
+        <meta name="description" content="Unified SEO and GEO intelligence. Google Analytics 4, Search Console, and AI answer-engine tracking in one workspace."/>
         <meta name="theme-color" content="#080808"/>
         <link rel="canonical" href={canonical}/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>

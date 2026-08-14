@@ -17,6 +17,8 @@
 // no-op so the rest of the pipeline still runs.
 // =============================================================================
 
+import { resolveBaseUrl } from "@/lib/site";
+
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
 export type EmailResult =
@@ -68,7 +70,9 @@ export async function sendEmail(opts: {
 // Apple Mail / Gmail webview all render the same thing. No external CSS.
 // ---------------------------------------------------------------------------
 
-const APP_URL = process.env.APP_URL ?? "https://aimarketinglab.co.uk";
+// Was defaulting to the apex, which serves a parking certificate — the
+// deep links in these emails landed on a TLS warning.
+const APP_URL = resolveBaseUrl();
 
 function shell(title: string, bodyHtml: string): string {
   return `<!doctype html>

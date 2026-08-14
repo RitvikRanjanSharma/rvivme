@@ -16,7 +16,7 @@ import { SITE_URL, SITE_NAME, SITE_DESCRIPTION } from "@/lib/site";
 
 const EASE_EXPO = [0.16, 1, 0.3, 1] as const;
 const CAPABILITIES = [
-  "SEO Intelligence","GEO Optimisation","Competitor Analysis","AI Overview Tracking",
+  "SEO Intelligence","GEO Optimisation","Competitor Analysis","Answer-Engine Visibility",
   "Search Console","Traffic Forecasting","Content Strategy","Keyword Research",
   "Site Audit","Rank Monitoring","GA4 Integration","6-Month Forecasting",
 ];
@@ -31,9 +31,9 @@ const STATS = [
   { value: "UK",   label: "Built for UK SMBs"    },
 ];
 const FEATURES = [
-  { index: "01", title: "Search intelligence in one workspace.", body: "Connect Google Analytics 4, Search Console, and DataForSEO once. See your rankings, traffic, audit findings, and competitor gaps in one place — without bouncing between twelve tabs.", href: "/dashboard", cta: "Open dashboard" },
+  { index: "01", title: "Search intelligence in one workspace.", body: "Connect Google Analytics 4 and Search Console once. See your rankings, traffic, audit findings, and competitor gaps in one place — without bouncing between twelve tabs.", href: "/dashboard", cta: "Open dashboard" },
   { index: "02", title: "Forecasts built on your real traffic.", body: "Not industry benchmarks. Not made-up averages. Your actual GA4 sessions projected six months forward with confidence intervals that widen honestly the further out you look.", href: "/dashboard", cta: "See the model" },
-  { index: "03", title: "GEO — the AI-search layer most tools miss.", body: "Track whether your domain shows up in Google's AI Overview for the keywords you care about, and see who's winning citation share you aren't.", href: "/blog", cta: "Read the intelligence" },
+  { index: "03", title: "GEO — the AI-search layer most tools miss.", body: "See which AI answer engines are allowed to read your site, how easily they can quote it, and which ones have actually crawled you. Measured from your own robots.txt and server logs.", href: "/blog", cta: "Read the intelligence" },
 ];
 
 // Long-form feature narratives below the platform rows. Rewritten to match
@@ -57,8 +57,8 @@ const COMMAND_CENTRE_FEATURES = [
   {
     index: "06",
     title: "Watch yourself appear (or not) in AI search.",
-    body: "AI Overviews and ChatGPT-style answer engines are quietly rerouting search traffic. Most SMB tools haven't caught up. We track whether your domain is being cited in Google's AI Overview for the keywords you care about, and surface where you're losing citation share to competitors.",
-    body2: "Live AI Overview tracking is available when DataForSEO SERP is enabled on your workspace. Without it we run a clearly-labelled simulation so you can still see directional signal — we never pass simulated data off as real measurement.",
+    body: "AI Overviews and ChatGPT-style answer engines are quietly rerouting search traffic, and most SMB tools haven't caught up. The first question isn't whether you're cited — it's whether those engines are permitted to read you at all, and whether your pages are shaped so they can quote you.",
+    body2: "We audit which answer-engine crawlers your robots.txt actually permits, score how readable your pages are to them, and log the AI bots that fetch your site. All of it measured from your own configuration and server — not modelled, and not simulated.",
   },
 ];
 
@@ -80,7 +80,7 @@ const CAPABILITY_GRID = [
   { title: "Competitor gap analysis",     body: "See keywords competitors rank for that you don't, sorted by likely-winnable opportunity." },
   { title: "AI strategy generator",       body: "Three to five concrete moves a week, scored on impact and effort, with a checklist to work through." },
   { title: "Content drafting",            body: "Generate blog and landing-page drafts that target the keywords your strategy says matter most." },
-  { title: "AI Overview tracking",        body: "Watch whether Google's AI Overview cites your domain for keywords you care about. Live mode requires DataForSEO." },
+  { title: "Answer-engine visibility",    body: "See which AI crawlers your site allows, how readable your pages are to them, and which ones have actually visited." },
   { title: "Traffic forecasting",         body: "Six months projected forward from your real GA4 sessions, with confidence intervals that widen honestly." },
   { title: "Daily alerts",                body: "Email notifications when rankings drop, audit issues appear, or new keywords break into the top 100." },
   { title: "UK-first",                    body: "Built around UK SERPs, GBP, and Search Console domain properties. No US-centric assumptions baked in." },
@@ -104,7 +104,7 @@ const FAQ_ITEMS = [
   },
   {
     q: "How does AI Overview citation tracking work?",
-    a: "When DataForSEO SERP is enabled on your workspace, we query Google's Live SERP for each tracked keyword and check whether your domain appears in the AI Overview's cited references. When it isn't enabled we run a Claude-powered simulation that's clearly labelled as such — you'll always know which mode produced a result.",
+    a: "We read your robots.txt and tell you, crawler by crawler, whether answer engines are permitted to fetch your pages — separating bots that build live cited answers from bots that only feed model training, because blocking those two things means very different things. We then score a page on how easily an answer engine can extract and quote it, and log AI crawlers that hit your site. Crawlers don't run JavaScript, so this is done server-side; anything measuring AI bots with a tracking tag is measuring nothing.",
   },
   {
     q: "Is my data safe? Where is it stored?",
@@ -871,7 +871,7 @@ export default function HomePage() {
                        pointerEvents: contentVisible ? "auto" : "none" }}
             >
                   <p style={{ fontFamily: "var(--font-body)", fontSize: "clamp(14px,1.4vw,17px)", color: "var(--text-secondary)", lineHeight: 1.7, maxWidth: "420px", margin: 0 }}>
-                    GA4, Search Console, and DataForSEO unified. AI forecasts on your real traffic. GEO tracking before anyone else notices.
+                    GA4 and Search Console unified. AI forecasts on your real traffic. Answer-engine visibility before anyone else notices.
                   </p>
                   <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
                     <Link href="/dashboard" style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: 500, color: "#fff", background: "var(--brand)", textDecoration: "none", padding: "13px 26px", borderRadius: "100px", transition: "opacity 0.16s" }}
