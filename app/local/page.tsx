@@ -517,9 +517,9 @@ function BusinessPanel({ business, brandColor }: { business: BusinessReport | nu
               : "Google hasn't approved this project for Business Profile API access yet."}
             <div style={{ marginTop: "8px", color: "var(--text-tertiary)", fontSize: "12.5px" }}>
               Unlike Analytics and Search Console, Google gates these APIs behind an
-              application they review by hand, and approval commonly takes a few weeks.
-              Nothing on your side is broken, and everything above this panel works
-              without it.
+              application they review by hand — their stated target is 14 days. You also
+              need a verified Business Profile that's been active for 60+ days. Nothing
+              on your side is broken, and everything above this panel works without it.
             </div>
           </div>
           <a
