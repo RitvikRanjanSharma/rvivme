@@ -59,8 +59,8 @@ export default function TermsPage() {
 
       <h2>5. AI-generated content</h2>
       <p>
-        Some features generate text using large language models (e.g. SEO strategies,
-        content drafts). AI output can be inaccurate, biased, or out of date. You are
+        Some features generate text using large language models (e.g. SEO strategies
+        and recommendations). AI output can be inaccurate, biased, or out of date. You are
         responsible for reviewing every AI output before using or publishing it. We
         do not warrant that AI content is fit for any particular purpose, free of
         infringement, or accurate.

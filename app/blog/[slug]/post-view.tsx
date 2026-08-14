@@ -100,7 +100,7 @@ function safeBold(line: string): string {
 
 // Renders a post body. Two formats land in blog_posts.content:
 //   • HTML     — from the TipTap editor in Blog Admin (editor.getHTML())
-//   • Markdown — from the AI draft generator (lib/content-gen.ts)
+//   • Markdown — legacy posts stored before the editor moved to HTML
 // The markdown renderer below HTML-escapes everything, so feeding it editor
 // HTML printed raw "<h1>…</h1>" tags on the page as literal text. Detect the
 // format and route accordingly, sanitising the HTML path.

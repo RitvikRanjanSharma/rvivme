@@ -79,7 +79,6 @@ const CAPABILITY_GRID = [
   { title: "Keyword research",            body: "Google Trends related-queries plus your own GSC top queries. Volume estimates where we have them." },
   { title: "Competitor gap analysis",     body: "See keywords competitors rank for that you don't, sorted by likely-winnable opportunity." },
   { title: "AI strategy generator",       body: "Three to five concrete moves a week, scored on impact and effort, with a checklist to work through." },
-  { title: "Content drafting",            body: "Generate blog and landing-page drafts that target the keywords your strategy says matter most." },
   { title: "Answer-engine visibility",    body: "See which AI crawlers your site allows, how readable your pages are to them, and which ones have actually visited." },
   { title: "Traffic forecasting",         body: "Six months projected forward from your real GA4 sessions, with confidence intervals that widen honestly." },
   { title: "Daily alerts",                body: "Email notifications when rankings drop, audit issues appear, or new keywords break into the top 100." },
@@ -100,7 +99,7 @@ const FAQ_ITEMS = [
   },
   {
     q: "Will the AI write content for me?",
-    a: "Yes — we generate blog and landing-page drafts targeted at keywords your strategy identifies as worth pursuing. Treat them as a starting point, not finished copy. You'll always want to add your own voice, examples, and judgement before publishing. The AI's job is to remove the blank page, not replace you.",
+    a: "No — and that's deliberate. There is no shortage of tools that will generate a blog post; there is a shortage of tools that tell you which post is worth writing and why. We identify the specific opportunity, show you the Search Console evidence behind it, and explain what would have to be true for it to pay off. The writing stays yours.",
   },
   {
     q: "How does AI Overview citation tracking work?",

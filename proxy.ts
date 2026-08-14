@@ -16,8 +16,8 @@ import { identifyCrawler } from "@/lib/ai-crawlers";
 
 const PROTECTED_PREFIXES = [
   "/dashboard", "/keywords", "/competitors", "/settings",
-  // Strategy authoring + content generation are dashboard-tier features.
-  "/strategies", "/content",
+  // Strategy authoring is a dashboard-tier feature.
+  "/strategies",
   // Onboarding — anonymous visitors should be sent to /auth/login first.
   "/onboarding",
   // Alerts inbox + audit detail

@@ -7,7 +7,6 @@
 //   - the AI-generated checklist they can tick off
 //   - the keywords attached to the strategy
 //   - live GSC delta vs. the baseline snapshotted at activation
-//   - one-click jump into /content to draft a post against this strategy
 //
 // This page is client-side by design: every fetch is gated by Supabase RLS and
 // /api/claude for AI work. Keeping it client-side matches the rest of the app
@@ -321,15 +320,6 @@ export default function StrategyDetailPage() {
 
             {/* Primary actions */}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 22 }}>
-              <Link href={`/content?strategy=${strategy.id}`} style={{
-                display: "inline-flex", alignItems: "center", gap: 7,
-                fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 500,
-                color: "#fff", background: "var(--brand)", textDecoration: "none",
-                borderRadius: 8, padding: "9px 16px",
-              }}>
-                <PenLine size={13}/> Draft content for this strategy
-              </Link>
-
               {!strategy.is_active && strategy.status === "active" && (
                 <button onClick={() => handleStrategyAction("activate")} disabled={busy !== null} style={{
                   display: "inline-flex", alignItems: "center", gap: 7,
@@ -461,8 +451,7 @@ export default function StrategyDetailPage() {
                     <AnimatePresence initial={false}>
                       {checklist.map((c, idx) => (
                         <ChecklistItem key={c.id} item={c} index={idx}
-                          onToggle={() => handleToggle(c.id, c.is_completed)}
-                          strategyId={strategy.id}/>
+                          onToggle={() => handleToggle(c.id, c.is_completed)}/>
                       ))}
                     </AnimatePresence>
                   </ul>
@@ -639,20 +628,13 @@ function SectionPanel({ label, right, children }: {
 }
 
 function ChecklistItem({
-  item, index, onToggle, strategyId,
+  item, index, onToggle,
 }: {
   item: StrategyChecklist;
   index: number;
   onToggle: () => void;
-  strategyId: string;
 }) {
   const Icon = item.action_type ? ACTION_ICON[item.action_type] : Sparkles;
-
-  // Actionable types get a CTA that preloads /content.
-  const canDraft = item.action_type && ["blog","article","landing","social","email"].includes(item.action_type);
-  const draftHref = canDraft
-    ? `/content?strategy=${strategyId}&checklist=${item.id}&type=${item.action_type}`
-    : null;
 
   return (
     <motion.li
@@ -708,21 +690,6 @@ function ChecklistItem({
           }}>{item.description}</p>
         )}
 
-        {draftHref && !item.is_completed && (
-          <div style={{ marginTop: 9 }}>
-            <Link href={draftHref} style={{
-              display: "inline-flex", alignItems: "center", gap: 6,
-              fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 500,
-              color: "var(--brand)",
-              background: "rgba(var(--brand-rgb),0.10)",
-              border: "1px solid rgba(var(--brand-rgb),0.25)",
-              textDecoration: "none",
-              borderRadius: 7, padding: "5px 10px",
-            }}>
-              <PenLine size={11}/> Draft this {item.action_type}
-            </Link>
-          </div>
-        )}
       </div>
     </motion.li>
   );

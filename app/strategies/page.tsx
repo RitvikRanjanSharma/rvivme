@@ -81,7 +81,7 @@ export default function StrategiesPage() {
         }}>Your playbook</h1>
         <p style={{ fontFamily: "var(--font-body)", fontSize: 14, color: "var(--text-secondary)", marginTop: 10, maxWidth: 680 }}>
           Strategies generated from your site's real performance, kept as a running playbook. One is active at a time — it
-          gets the AI's full attention for keyword recommendations and content drafts.
+          gets the AI's full attention for keyword and opportunity recommendations.
         </p>
       </motion.header>
 
@@ -289,17 +289,6 @@ function StrategyCard({
           }}>
             <Zap size={12}/> Make active
           </button>
-        )}
-
-        {isActive && (
-          <Link href={`/content?strategy=${s.id}`} style={{
-            display: "inline-flex", alignItems: "center", gap: 6,
-            fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 500,
-            color: "#fff", background: "var(--brand)", textDecoration: "none",
-            borderRadius: 7, padding: "6px 12px",
-          }}>
-            <PenLine size={12}/> Draft content
-          </Link>
         )}
 
         {s.status === "active" && !isActive && (

@@ -50,7 +50,7 @@ export default function PrivacyPage() {
         <li>
           <strong>Workspace settings.</strong> Google Search Console site URL and
           Google Analytics 4 property ID you connect to your account, list of
-          competitors you add, AI strategies you generate, content drafts you save.
+          competitors you add, and AI strategies you generate.
         </li>
         <li>
           <strong>Analytics data you authorise.</strong> When you connect Google
@@ -104,9 +104,10 @@ export default function PrivacyPage() {
       <ul>
         <li><strong>Supabase</strong> &mdash; database hosting and authentication (EU region).</li>
         <li><strong>Vercel</strong> &mdash; application hosting (global edge network).</li>
-        <li><strong>Anthropic</strong> &mdash; AI model used to generate strategies and
-            content drafts you request. Your prompts and the generated outputs are sent
-            to Anthropic. They do not train on your data under their commercial terms.</li>
+        <li><strong>Anthropic</strong> &mdash; AI model used to generate the strategies
+            and recommendations you request. Your prompts and the generated outputs are
+            sent to Anthropic. They do not train on your data under their commercial
+            terms.</li>
         <li><strong>Google</strong> &mdash; Search Console and Analytics 4 APIs (only the
             properties you connect).</li>
         <li><strong>Google Trends</strong> &mdash; keyword demand signals. We send the
@@ -123,7 +124,7 @@ export default function PrivacyPage() {
       <ul>
         <li>Account data: while your account is active, plus 30 days after deletion to allow restore.</li>
         <li>Server logs and quota counters: 90 days.</li>
-        <li>AI strategies and content drafts: until you delete them or close your account.</li>
+        <li>AI strategies: until you delete them or close your account.</li>
         <li>Email send logs: 12 months.</li>
       </ul>
 

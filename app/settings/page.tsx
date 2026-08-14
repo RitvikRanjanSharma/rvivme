@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   User, Palette, Plug, CreditCard, Shield, Database,
   CheckCircle2, AlertCircle, Save, RefreshCw,
-  Globe2, BarChart3, Cpu, Trash2, Eye, EyeOff, Brain, PenLine, HelpCircle, Volume2,
+  Globe2, BarChart3, Cpu, Trash2, Eye, EyeOff, Brain, HelpCircle, Volume2,
 } from "lucide-react";
 import {
   listVoices, pickDefaultVoice, speak, speechSupported, type SpeechVoice,
@@ -381,7 +381,6 @@ function IntegrationsTab({ brandColor }: { brandColor: string }) {
   const [gscSt,   setGscSt]   = useState<IntgStatus>("checking");
   const [dfsSt,   setDfsSt]   = useState<IntgStatus>("checking");
   const [antSt,   setAntSt]   = useState<IntgStatus>("checking");
-  const [pplxSt,  setPplxSt]  = useState<IntgStatus>("checking");
 
   // Per-user analytics config (stored on public.users). Empty string while we
   // load — TextInput treats that as an editable blank field.
@@ -508,7 +507,7 @@ function IntegrationsTab({ brandColor }: { brandColor: string }) {
     try {
       const r = await fetch("/api/integrations/status");
       if (!r.ok) {
-        setGa4St("error"); setGscSt("error"); setDfsSt("error"); setAntSt("error"); setPplxSt("error");
+        setGa4St("error"); setGscSt("error"); setDfsSt("error"); setAntSt("error");
         return;
       }
       const d = await r.json();
@@ -516,9 +515,8 @@ function IntegrationsTab({ brandColor }: { brandColor: string }) {
       setGscSt(d.gsc        === "connected" ? "connected" : "disconnected");
       setDfsSt(d.dataforseo === "connected" ? "connected" : "disconnected");
       setAntSt(d.anthropic  === "connected" ? "connected" : "disconnected");
-      setPplxSt(d.perplexity === "connected" ? "connected" : "disconnected");
     } catch {
-      setGa4St("error"); setGscSt("error"); setDfsSt("error"); setAntSt("error"); setPplxSt("error");
+      setGa4St("error"); setGscSt("error"); setDfsSt("error"); setAntSt("error");
     }
   }, []);
 
@@ -550,7 +548,6 @@ function IntegrationsTab({ brandColor }: { brandColor: string }) {
 
   const integrations = [
     { id: "anthropic",  name: "Anthropic (Claude)",      desc: "AI strategy generation, keyword matching",    icon: Brain,    status: antSt, note: "ANTHROPIC_API_KEY in server env" },
-    { id: "perplexity", name: "Perplexity",              desc: "Blog and landing-page content drafting",      icon: PenLine,  status: pplxSt, note: "PERPLEXITY_API_KEY in server env" },
     { id: "ga4",        name: "Google Analytics 4",      desc: "Traffic, sessions, and user behaviour data",  icon: BarChart3, status: ga4St, note: ga4PropertyId.trim() ? `property ${ga4PropertyId.trim()}` : "Not configured — add your property ID below" },
     { id: "gsc",        name: "Google Search Console",   desc: "Impressions, clicks, positions, CTR",         icon: Globe2,   status: gscSt, note: gscSiteUrl.trim() || `Not configured — add your site URL below` },
     { id: "dataforseo", name: "DataForSEO",              desc: "Retired — backlinks, competitor data, live SERP", icon: Cpu,  status: dfsSt, note: "Out of credits — keyword data now comes from Google Trends + Search Console" },
