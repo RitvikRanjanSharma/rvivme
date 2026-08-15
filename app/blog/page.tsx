@@ -76,6 +76,7 @@ function pv(delay = 0) {
 function NewsletterBanner() {
   const [email,     setEmail]     = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [error,     setError]     = useState<string | null>(null);
   const [loading,   setLoading]   = useState(false);
   // Was a hardcoded blue, so the newsletter block stayed blue through both
   // rebrands. Reads the live token instead, like every other surface.
@@ -86,7 +87,7 @@ function NewsletterBanner() {
     if (!email.includes("@")) return;
     setLoading(true);
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/newsletter_subscribers`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/newsletter_subscribers`, {
         method: "POST",
         headers: {
           apikey:         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
@@ -96,9 +97,21 @@ function NewsletterBanner() {
         },
         body: JSON.stringify({ email, source: "blog" }),
       });
-      setSubmitted(true);
+
+      // 409 is a duplicate — that address is already on the list, which from
+      // the subscriber's point of view is success, so it is reported as such.
+      if (res.ok || res.status === 409) {
+        setSubmitted(true);
+        setError(null);
+      } else {
+        // This previously said "Subscribed. Check your inbox for confirmation"
+        // no matter what happened, including on an outright failure. Someone
+        // would give us their address, be thanked for it, and never hear from
+        // us again — with no way to know it hadn't worked.
+        setError("That didn't save. Try again in a moment.");
+      }
     } catch {
-      setSubmitted(true); // still show success
+      setError("Couldn't reach the server. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
@@ -142,6 +155,15 @@ function NewsletterBanner() {
           </motion.form>
         )}
       </AnimatePresence>
+
+      {error && (
+        <p style={{
+          fontFamily: "var(--font-inter), sans-serif", fontSize: "12.5px",
+          color: "var(--signal-red)", marginTop: "10px",
+        }}>
+          {error}
+        </p>
+      )}
       <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "11px", color: "var(--text-tertiary)", marginTop: "14px" }}>No spam. Unsubscribe at any time. GDPR compliant.</p>
     </div>
   );

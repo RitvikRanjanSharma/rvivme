@@ -10,6 +10,7 @@
 // =============================================================================
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   AlertTriangle, CheckCircle2, Info, Loader2, Play, RefreshCw, Search,
@@ -50,6 +51,9 @@ export default function AuditPage() {
   const [findings, setFindings] = useState<Finding[]>([]);
   const [loading, setLoading]   = useState(true);
   const [running, setRunning]   = useState(false);
+  /** Why the last run refused, if it did. The API answers 200 with a reason
+   *  rather than an HTTP error, so this is the only place it can surface. */
+  const [problem, setProblem]   = useState<{ reason: string; message: string } | null>(null);
 
   async function refresh() {
     setLoading(true);
@@ -67,9 +71,30 @@ export default function AuditPage() {
 
   async function run() {
     setRunning(true);
+    setProblem(null);
     try {
-      await fetch("/api/site-audit", { method: "POST" });
+      // The response used to be thrown away entirely.
+      //
+      // The route deliberately answers 200 with { success:false, reason,
+      // message } so the UI can render a calm explanation instead of an error
+      // page — but nothing here read it. So "no website URL set", "daily limit
+      // reached" and "that domain is blocked" all looked identical: the button
+      // spun, the page returned to "No audits yet", and no reason was given
+      // anywhere. The most common cause is simply an unset website URL, which
+      // is one click to fix once you know.
+      const res = await fetch("/api/site-audit", { method: "POST" });
+      const json = await res.json().catch(() => null);
+
+      if (!json?.success) {
+        setProblem({
+          reason:  json?.reason ?? "api_error",
+          message: json?.message ?? "The audit couldn't run. Try again in a moment.",
+        });
+        return;
+      }
       await refresh();
+    } catch {
+      setProblem({ reason: "network", message: "Couldn't reach the server. Check your connection and try again." });
     } finally {
       setRunning(false);
     }
@@ -115,7 +140,38 @@ export default function AuditPage() {
         />
       )}
 
-      {!loading && !audit && (
+      {problem && (
+        <div style={{
+          display: "flex", alignItems: "flex-start", gap: 10,
+          padding: "16px 18px", borderRadius: 12, marginBottom: 20,
+          background: "rgba(255,171,0,0.07)", border: "1px solid rgba(255,171,0,0.25)",
+        }}>
+          <AlertTriangle size={15} color="var(--signal-amber)" style={{ flexShrink: 0, marginTop: 1 }} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>
+              {problem.reason === "no_domain"      ? "No website URL set"
+             : problem.reason === "quota_exceeded" ? "Daily limit reached"
+             : problem.reason === "blocked"        ? "That address can't be audited"
+             : "The audit didn't run"}
+            </div>
+            <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+              {problem.message}
+            </div>
+            {problem.reason === "no_domain" && (
+              <Link href="/settings?tab=profile" style={{
+                display: "inline-flex", alignItems: "center", gap: 6, marginTop: 12,
+                fontSize: 13, fontWeight: 500, color: "#fff",
+                background: "var(--brand-strong)", textDecoration: "none",
+                padding: "8px 16px", borderRadius: "var(--radius-pill)",
+              }}>
+                Add your website URL
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
+
+      {!loading && !audit && !problem && (
         <Empty
           icon={<Search size={28} />}
           title="No audits yet"
