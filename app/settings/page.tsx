@@ -970,7 +970,7 @@ function SettingsContent() {
             const Icon   = tab.icon;
             const active = activeTab === tab.id;
             return (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} data-active={active} style={{
                 width: "100%", display: "flex", alignItems: "center", gap: "10px",
                 padding: "12px 16px", fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 500,
                 color: active ? "var(--text-primary)" : "var(--text-secondary)",

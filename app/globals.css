@@ -498,8 +498,20 @@ html, body { max-width: 100%; overflow-x: hidden; }
    fills from the hero's top padding down to it. Desktop: 86vh foot, 28vh
    padding, 58vh gap. Phones: 42vh foot, 15vh padding, 27vh gap. */
 @media (max-width: 899px) {
-  .aiml-hero        { padding: 15vh 20px 48px !important; min-height: 100svh !important; }
-  .aiml-hero-spacer { height: 27vh !important; }
+  /* Hero padding 10vh + spacer 45vh = the 55vh foot used by buildParticles. */
+  .aiml-hero        { padding: 10vh 20px 48px !important; min-height: 100svh !important; }
+  .aiml-hero-spacer { height: 45vh !important; }
+  /* The eyebrow was pinned 72px below the hero's top edge, which after the
+     hero's own top padding landed it squarely inside the particle headline.
+     Pulled up against the header so the two never share space. */
+  .aiml-hero-eyebrow {
+    top: 12px !important;
+    left: 20px !important;
+    right: 20px !important;
+    gap: 10px;
+    font-size: 9px;
+  }
+  .aiml-hero-eyebrow > span { font-size: 9px !important; }
 }
 
 @media (max-width: 768px) {
@@ -521,13 +533,31 @@ html, body { max-width: 100%; overflow-x: hidden; }
   .aiml-settings-tabs {
     display: flex !important;
     flex-direction: row !important;
-    overflow-x: auto;
+    /* The nav carries an inline `overflow: hidden` for its rounded corners,
+       which clipped every tab after Profile — they were rendered, just
+       invisible and unreachable. Inline styles outrank a plain declaration,
+       so this needs !important to win. */
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     gap: 6px !important;
   }
   .aiml-settings-tabs::-webkit-scrollbar { display: none; }
-  .aiml-settings-tabs > * { flex: 0 0 auto; white-space: nowrap; }
+  /* Buttons are width:100% inline for the vertical rail; as a horizontal
+     strip they must size to their label instead, and the active marker moves
+     from the left edge to the bottom so it reads as a tab. */
+  .aiml-settings-tabs > button {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    white-space: nowrap;
+    border-left: none !important;
+    border-bottom: 2px solid transparent !important;
+    padding: 12px 14px !important;
+  }
+  .aiml-settings-tabs > button[data-active="true"] {
+    border-bottom-color: var(--brand) !important;
+  }
 
   /* Paired form fields stack — two columns on a phone is two unusable ones. */
   .aiml-field-pair { grid-template-columns: 1fr !important; gap: 0 !important; }

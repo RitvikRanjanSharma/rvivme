@@ -240,7 +240,7 @@ function MasterCanvas({
       // rule stranded a small headline at the very bottom of an otherwise
       // empty screen — the hero is 100vh tall but the text only occupied the
       // last 150px of it. Phones anchor much higher, just under the eyebrow.
-      const foot = dense ? 0.86 : 0.42;
+      const foot = dense ? 0.86 : 0.55;
 
       const csize = Math.min(W * 0.18, 160);
       const cPts  = sampleText(
@@ -283,7 +283,24 @@ function MasterCanvas({
       // grows upward from there. The top is clamped so it can never ride up
       // into the eyebrow row on a short window.
       const blockH   = hlh * hlines.length;
-      const hlStartY = Math.max(H * (dense ? 0.14 : 0.20), H * foot - blockH);
+      // The floor matters more than the anchor on phones, and it can't be a
+      // fixed fraction of viewport height: the header is a constant number of
+      // pixels, so on a short screen it eats a much larger share. A 0.26 floor
+      // cleared the eyebrow at 780px tall and still collided at 560px.
+      //
+      // So derive the floor from where the eyebrow actually is — header height
+      // (read from the same variable the header itself uses) plus the hero's
+      // top padding, the eyebrow's offset, its own height, and a gap.
+      let floorY = H * 0.14;
+      if (!dense) {
+        const headerPx = parseFloat(
+          getComputedStyle(document.documentElement)
+            .getPropertyValue("--marketing-header-h")
+        ) || 104;
+        const EYEBROW_TOP = 12, EYEBROW_H = 30, GAP = 24;
+        floorY = headerPx + H * 0.10 + EYEBROW_TOP + EYEBROW_H + GAP;
+      }
+      const hlStartY = Math.max(floorY, H * foot - blockH);
       // Flush-left against the same 32px gutter the rest of the hero uses, so
       // the headline lines up with the eyebrow and the subheadline below it.
       hlines.forEach((l, i) => hlCtx.fillText(l, 32, hlStartY + i * hlh));
@@ -907,6 +924,7 @@ export default function HomePage() {
           <AnimatePresence>
             {headlineVisible && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1, delay: 0.4 }}
+                className="aiml-hero-eyebrow"
                 style={{ position: "absolute", top: "72px", left: "32px", right: "32px", display: "flex", justifyContent: "space-between", zIndex: 2 }}
               >
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--text-tertiary)" }}>GEO Intelligence Platform</span>
