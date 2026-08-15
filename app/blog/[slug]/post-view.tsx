@@ -3,7 +3,7 @@
 // app/blog/[slug]/post-view.tsx
 // =============================================================================
 // AI Marketing Lab — Blog Post (client view)
-// Reads from Supabase · View count · Share buttons
+// Reads from Supabase · View count (one per session) · Share buttons
 //
 // Split out from page.tsx so that page.tsx can be a SERVER component and
 // export generateMetadata(). Open Graph / Twitter card tags have to be in the
@@ -239,13 +239,29 @@ export default function PostView() {
       setPost(post);
       setLoading(false);
 
-      // Increment view count. RLS on blog_posts blocks anon/non-author UPDATEs,
-      // so go through the SECURITY DEFINER RPC added in migration 003.
-      // `as never` bypasses the generated RPC type map, which doesn't know about
-      // our custom function yet.
-      await supabase.rpc("increment_post_view" as never, { p_post_id: post.id } as never);
-      // Log the view event (anon has public insert via RLS).
-      await supabase.from("post_view_events").insert({ post_id: post.id, referrer: document.referrer || null } as never);
+      // ── View counting ────────────────────────────────────────────────────
+      // This used to write the same fact twice: increment blog_posts.view_count
+      // AND append a row to post_view_events. Nothing in the app ever read the
+      // event log — it was write-only — so every page load did two round trips
+      // to record one view, and only one of them was ever looked at.
+      //
+      // It also counted every render. A refresh added a view, and React's
+      // StrictMode double-invokes effects in development, so local reads
+      // counted twice. The numbers in Blog Admin were inflated by an unknown
+      // amount rather than being wrong in a predictable direction.
+      //
+      // Now: one write, once per post per browser session.
+      const seenKey = `aiml-viewed-${post.id}`;
+      let alreadySeen = false;
+      try { alreadySeen = sessionStorage.getItem(seenKey) === "1"; } catch { /* private mode */ }
+
+      if (!alreadySeen) {
+        try { sessionStorage.setItem(seenKey, "1"); } catch { /* private mode */ }
+        // RLS on blog_posts blocks anon/non-author UPDATEs, so this goes
+        // through the SECURITY DEFINER RPC from migration 003. `as never`
+        // bypasses the generated RPC type map, which doesn't know our function.
+        await supabase.rpc("increment_post_view" as never, { p_post_id: post.id } as never);
+      }
     }
     load();
   }, [slug]);

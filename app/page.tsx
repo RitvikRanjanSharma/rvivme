@@ -259,16 +259,16 @@ function MasterCanvas({
       // silhouette is a different typeface from the rest of the site.
       hlCtx.font         = `500 ${hsize}px Poppins,system-ui,sans-serif`;
       hlCtx.textBaseline = "top";
-      // Centred rather than flush-left, so the mass of particles sits in the
-      // middle of the viewport instead of hugging the left edge.
-      hlCtx.textAlign    = "center";
+      hlCtx.textAlign    = "left";
       // Vertically centre the whole block rather than pinning it to a fraction
       // of the viewport height. Measuring the block and centring it means the
       // headline stays centred at any viewport size, instead of drifting down
       // on short screens and up on tall ones as a fixed 0.28 did.
       const blockH   = hlh * hlines.length;
       const hlStartY = Math.max(H * 0.16, (H - blockH) / 2 - hlh * 0.15);
-      hlines.forEach((l, i) => hlCtx.fillText(l, W / 2, hlStartY + i * hlh));
+      // Flush-left against the same 32px gutter the rest of the hero uses, so
+      // the headline lines up with the eyebrow and the subheadline below it.
+      hlines.forEach((l, i) => hlCtx.fillText(l, 32, hlStartY + i * hlh));
       const hlImgData = hlOff.getContext("2d")!.getImageData(0, 0, W, H).data;
       const hPtsRaw: Array<{x:number;y:number}> = [];
       const half = step / 2;

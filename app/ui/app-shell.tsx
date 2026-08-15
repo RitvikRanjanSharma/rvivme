@@ -348,55 +348,45 @@ const SIDEBAR_OPERATOR = [
 // Tracking is tightened to -0.04em to match the generated mark, where the
 // letters sit noticeably closer than Poppins' default.
 /**
- * The AIML lockup: wordmark plus the ascending double chevron.
+ * The AIML lockup, drawn as vector paths.
  *
- * Drawn rather than shipped as an image. The supplied artwork is a pair of
- * 1080px JPEGs with the background baked in as a solid square — fine as
- * reference, unusable in a header, where it would show a linen tile on a teal
- * page and blur on any display that isn't exactly 1:1.
+ * Traced from the supplied artwork rather than eyeballed: the JPEGs were
+ * measured pixel by pixel to find the letter boundaries, the stem widths and —
+ * the part the first attempt got wrong — where the chevrons actually sit. They
+ * are not appended after the word. They nest inside the L's crook, above the
+ * foot, which extends beneath them. Rendering them as a separate raised glyph
+ * after "AIML" read as a typo rather than a mark.
  *
- * Text plus inline SVG instead: crisp at every size, no network request, and
- * it recolours with the theme through --logo. Sampled from the artwork, that
- * is #2D3642 on light and #25b57e on dark — the two-tone treatment is
- * deliberate and matches the files exactly.
+ * Measured from AIML_Bright_Logo.jpg: mark bounds 654x189, letter gaps at
+ * x=407/471/715, L stem ending at x=795, foot 29 tall, chevrons spanning
+ * x=822-882 and y=500-580. Those numbers are this viewBox, offset to origin.
  *
- * The chevron uses currentColor so it can never drift from the letters.
+ * Vector rather than the supplied bitmaps because those are 1080px squares
+ * with the background baked in — the light lockup would show a linen tile on
+ * a teal page. currentColor means one file serves both themes.
  */
 function Wordmark({ size = 20 }: { size?: number }) {
+  // Height drives the scale; the 3.46:1 ratio comes from the artwork.
+  const h = size * 1.05;
   return (
-    <span
-      style={{
-        display:       "inline-flex",
-        alignItems:    "flex-end",
-        gap:           `${size * 0.08}px`,
-        color:         "var(--logo)",
-        whiteSpace:    "nowrap",
-        flexShrink:    0,
-        lineHeight:    1,
-      }}
-      aria-label="AIML"
+    <svg
+      height={h} width={h * (654 / 189)} viewBox="0 0 654 189"
+      fill="none" role="img" aria-label="AIML"
+      style={{ color: "var(--logo)", flexShrink: 0, display: "block" }}
     >
-      <span style={{
-        fontFamily:    "var(--font-body)",
-        fontSize:      `${size}px`,
-        fontWeight:    700,
-        letterSpacing: "-0.035em",
-        lineHeight:    1,
-      }}>
-        AIML
-      </span>
-      {/* Two stacked chevrons, sitting in the crook of the L as in the
-          artwork. Sized from the wordmark so the lockup holds together at
-          every scale. */}
-      <svg
-        width={size * 0.42} height={size * 0.62}
-        viewBox="0 0 21 31" fill="none" aria-hidden="true"
-        style={{ marginBottom: `${size * 0.06}px`, flexShrink: 0 }}
-      >
-        <path d="M10.5 0 21 8.4v6.2L10.5 6.2 0 14.6V8.4z" fill="currentColor" />
-        <path d="M10.5 14 21 22.4v6.2L10.5 20.2 0 28.6v-6.2z" fill="currentColor" />
-      </svg>
-    </span>
+      {/* A — diagonals with the counter left open, crossbar closes it */}
+      <path d="M0 189 71 0h37l71 189h-40L89.5 56 40 189Z" fill="currentColor" />
+      <rect x="46" y="120" width="87" height="33" fill="currentColor" />
+      {/* I */}
+      <rect x="205" y="0" width="38" height="189" fill="currentColor" />
+      {/* M */}
+      <path d="M281 189V0h40l63 120L447 0h40v189h-38V72l-49 93h-32l-49-93v117Z" fill="currentColor" />
+      {/* L — foot runs under the chevrons */}
+      <path d="M525 0h42v160h57v29H525Z" fill="currentColor" />
+      {/* Two ascending chevrons, seated in the crook of the L */}
+      <path d="M594 75 624 55l30 20v20l-30-20-30 20Z" fill="currentColor" />
+      <path d="M594 117 624 97l30 20v20l-30-20-30 20Z" fill="currentColor" />
+    </svg>
   );
 }
 
