@@ -613,6 +613,22 @@ html, body { max-width: 100%; overflow-x: hidden; }
 [style*="gridTemplateColumns"] > *,
 [style*="grid-template-columns"] > * { min-width: 0; }
 
+/* Page heading.
+   The single definition of an app page's <h1>. Three pages previously set no
+   font-weight at all and inherited the browser default — which is bold — while
+   the rest declared 400, so Strategies, Site audit and Alerts rendered heavier
+   than Dashboard for no reason anyone chose. Declaring it here means a page
+   that forgets still lands on the house style instead of the UA stylesheet. */
+.aiml-page-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.6rem, 3.2vw, 2.4rem);
+  font-weight: 400;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+  color: var(--text-primary);
+  margin: 0;
+}
+
 @media (min-width: 769px) { .hide-desktop { display: none !important; } }
 @media (max-width: 1024px) {
   .hide-tablet   { display: none !important; }

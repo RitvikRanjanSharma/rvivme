@@ -75,10 +75,7 @@ export default function StrategiesPage() {
           fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.14em",
           textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 8,
         }}>Marketing strategies</div>
-        <h1 style={{
-          fontFamily: "var(--font-display)", fontSize: "clamp(2rem, 3.4vw, 2.6rem)",
-          lineHeight: 1.05, letterSpacing: "-0.03em", margin: 0, color: "var(--text-primary)",
-        }}>Your playbook</h1>
+        <h1 className="aiml-page-title">Your playbook</h1>
         <p style={{ fontFamily: "var(--font-body)", fontSize: 14, color: "var(--text-secondary)", marginTop: 10, maxWidth: 680 }}>
           Strategies generated from your site's real performance, kept as a running playbook. One is active at a time — it
           gets the AI's full attention for keyword and opportunity recommendations.

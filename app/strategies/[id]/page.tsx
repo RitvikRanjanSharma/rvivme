@@ -264,10 +264,12 @@ export default function StrategyDetailPage() {
               )}
             </div>
 
-            <h1 style={{
-              fontFamily: "var(--font-display)", fontSize: "clamp(1.6rem, 3vw, 2.1rem)",
-              lineHeight: 1.1, letterSpacing: "-0.03em", margin: 0, color: "var(--text-primary)",
-            }}>{strategy.title}</h1>
+            {/* Strategy titles are full sentences, so they run smaller than a
+                page name — but the weight still comes from the shared rule
+                rather than the browser default. */}
+            <h1 className="aiml-page-title" style={{ fontSize: "clamp(1.5rem, 2.6vw, 1.95rem)", lineHeight: 1.15 }}>
+              {strategy.title}
+            </h1>
 
             <p style={{
               fontFamily: "var(--font-body)", fontSize: 14.5, color: "var(--text-secondary)",

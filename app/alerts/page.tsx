@@ -116,9 +116,7 @@ export default function AlertsPage() {
     <div className="aiml-page-pad" style={{ padding: "32px 24px 80px", maxWidth: 1100, margin: "0 auto", color: "var(--text-primary)" }}>
       <header className="stack-mobile" style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 28, gap: 16 }}>
         <div>
-          <h1 style={{ fontFamily: "var(--font-display)", fontSize: 36, margin: 0, lineHeight: 1.15 }}>
-            Alerts
-          </h1>
+          <h1 className="aiml-page-title">Alerts</h1>
           <p style={{ color: "var(--text-secondary)", margin: "6px 0 0", fontSize: 15 }}>
             What we noticed, and what we're watching for. Rule checks run nightly.
           </p>
