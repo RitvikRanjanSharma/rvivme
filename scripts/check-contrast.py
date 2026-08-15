@@ -1,5 +1,16 @@
-"""Parses globals.css and checks every text token against its own background.
-Reads the file rather than restating values, so it stays true as the CSS changes."""
+"""Design-token checks against globals.css.
+
+Two things, both learned from real bugs:
+
+  1. Contrast — every text token against its own background.
+  2. Parity   — a token defined for one theme must exist for the other.
+
+Parity exists because the fonts, radii and motion tokens once lived inside the
+same block as the dark palette. Splitting that block so light could be the
+default carried all seventeen of them into .dark, and light mode silently fell
+back to the browser default serif with no radii at all. Nothing errored; it
+just looked wrong on every page. Structural tokens now live on a shared :root,
+and this asserts the two palettes stay symmetrical."""
 import re, sys
 
 css = open("app/globals.css").read()
@@ -51,6 +62,23 @@ for name,theme in (("LIGHT (Pale Linen)",light),("DARK (Midnight Teal)",dark)):
     ok = r >= (4.5 if name.startswith("LIGHT") else 3.0)
     if not ok: fails.append(f"{name} white-on-brand-strong {r:.2f}")
     print(f"  {'PASS' if ok else 'FAIL'} {r:6.2f}          white text on --brand-strong")
+
+# ── Parity ───────────────────────────────────────────────────────────────────
+shared = block(":root")
+d_only = sorted(k for k in dark  if k not in light and k not in shared)
+l_only = sorted(k for k in light if k not in dark  and k not in shared)
+
+print("\nTOKEN PARITY")
+print(f"  shared :root defines {len(shared)} theme-independent tokens")
+if d_only: fails.append(f"defined only in dark: {d_only}")
+if l_only: fails.append(f"defined only in light: {l_only}")
+print(f"  dark-only:  {d_only or 'none'}")
+print(f"  light-only: {l_only or 'none'}")
+
+# A font must resolve in both themes, or the browser silently serves serif.
+for critical in ("font-body", "font-display", "font-mono", "radius-md"):
+    if critical not in shared and not (critical in light and critical in dark):
+        fails.append(f"--{critical} is not resolvable in both themes")
 
 print("\n" + ("ALL PASS" if not fails else "FAILURES:\n  " + "\n  ".join(fails)))
 sys.exit(1 if fails else 0)

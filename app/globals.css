@@ -35,6 +35,59 @@
    measured contrast is 3.0:1, which fails AA — and unlike a dark background,
    where low-opacity text stays legible, muted grey on a warm light background
    goes muddy fast. 72% measures 4.66:1. */
+/* -----------------------------------------------------------------------------
+   Theme-independent tokens: typography, radii, motion, metrics.
+
+   These live on :root alone and are NOT repeated per theme. They were
+   previously inside the block that also held the dark palette, and when that
+   block was split so light could become the default, all seventeen of them
+   went with it — leaving light mode with no --font-body at all. The browser
+   fell back to its default serif, and every radius resolved to nothing.
+
+   A font is not a property of a colour scheme. Anything that isn't a colour
+   belongs here, exactly once.
+----------------------------------------------------------------------------- */
+:root {
+  /* Poppins throughout, display included. The old Georgia serif no longer
+     belongs next to a geometric sans — the pairing read as two brands. */
+  --font-display: var(--font-inter, "Poppins", system-ui, sans-serif);
+  --font-syne:    var(--font-inter, "Poppins", system-ui, sans-serif);
+  --font-inter:   var(--font-inter, "Poppins", system-ui, sans-serif);
+  --font-dm-mono: var(--font-dm-mono, "DM Mono", "Consolas", monospace);
+  --font-body:    var(--font-inter, "Poppins", system-ui, sans-serif);
+  --font-mono:    var(--font-dm-mono, "DM Mono", "Consolas", monospace);
+  /* Radii — canonical values from the design-system spec */
+  --radius-sm:   6px;
+  --radius-md:   8px;
+  --radius-lg:   10px;
+  --radius-xl:   12px;
+  --radius-2xl:  16px;
+  --radius-pill: 100px;
+  /* Semantic type presets */
+  --h1-size:      clamp(2rem, 5vw, 3.5rem);
+  --h1-tracking: -0.04em;
+  --h1-line:      0.95;
+  --h2-size:      clamp(1.5rem, 3vw, 2.2rem);
+  --h2-tracking: -0.04em;
+  --h3-size:      1rem;
+  /* Shadows */
+  --shadow-card:       0 1px 3px rgba(0,0,0,0.7), 0 4px 12px rgba(0,0,0,0.5);
+  --shadow-card-hover: 0 8px 32px rgba(0,0,0,0.4);
+  --shadow-brand-sm:   0 0 10px var(--brand-glow);
+  --shadow-brand-md:   0 0 22px var(--brand-glow);
+  --shadow-brand-lg:   0 0 40px var(--brand-glow);
+  /* Motion — canonical easing + durations */
+  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast:  0.16s;
+  --dur-base:  0.25s;
+  --dur-slow:  0.45s;
+  --dur-hero:  0.85s;
+  --body-size:    15px;
+  --body-line:    1.7;
+  --mono-label:   10px;
+  --mono-track:   0.12em;
+}
+
 :root, .light {
   color-scheme: light;
   --brand:         #B86D48;
@@ -100,6 +153,10 @@
   --brand-rgb:     184, 109, 72;
   --brand-strong:  #C97B54;   /* on teal, lift rather than deepen for contrast */
   --logo:          #25b57e;
+  /* Dark surfaces separate with borders, not shadows — a drop shadow on
+     Midnight Teal is invisible. Declared so var() never resolves to empty. */
+  --shadow-card:       none;
+  --shadow-card-hover: none;
   --brand-glow:    rgba(184, 109, 72, 0.22);
   --bg:            #0B232E;
   --surface:       #0F2C39;
@@ -126,48 +183,6 @@
   --chart-grid: rgba(245,240,233,0.06);
   --chart-axis: rgba(245,240,233,0.12);
   --chart-tick: rgba(245,240,233,0.42);
-  /* Poppins throughout, display included. The old Georgia serif no longer
-     belongs next to a geometric sans — the pairing read as two brands. */
-  --font-display: var(--font-inter, "Poppins", system-ui, sans-serif);
-  --font-syne:    var(--font-inter, "Poppins", system-ui, sans-serif);
-  --font-inter:   var(--font-inter, "Poppins", system-ui, sans-serif);
-  --font-dm-mono: var(--font-dm-mono, "DM Mono", "Consolas", monospace);
-  --font-body:    var(--font-inter, "Poppins", system-ui, sans-serif);
-  --font-mono:    var(--font-dm-mono, "DM Mono", "Consolas", monospace);
-
-  /* Radii — canonical values from the design-system spec */
-  --radius-sm:   6px;
-  --radius-md:   8px;
-  --radius-lg:   10px;
-  --radius-xl:   12px;
-  --radius-2xl:  16px;
-  --radius-pill: 100px;
-
-  /* Shadows */
-  --shadow-card:       0 1px 3px rgba(0,0,0,0.7), 0 4px 12px rgba(0,0,0,0.5);
-  --shadow-card-hover: 0 8px 32px rgba(0,0,0,0.4);
-  --shadow-brand-sm:   0 0 10px var(--brand-glow);
-  --shadow-brand-md:   0 0 22px var(--brand-glow);
-  --shadow-brand-lg:   0 0 40px var(--brand-glow);
-
-  /* Motion — canonical easing + durations */
-  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  --dur-fast:  0.16s;
-  --dur-base:  0.25s;
-  --dur-slow:  0.45s;
-  --dur-hero:  0.85s;
-
-  /* Semantic type presets */
-  --h1-size:      clamp(2rem, 5vw, 3.5rem);
-  --h1-tracking: -0.04em;
-  --h1-line:      0.95;
-  --h2-size:      clamp(1.5rem, 3vw, 2.2rem);
-  --h2-tracking: -0.04em;
-  --h3-size:      1rem;
-  --body-size:    15px;
-  --body-line:    1.7;
-  --mono-label:   10px;
-  --mono-track:   0.12em;
 }
 
 /* Smooth theme switching.
