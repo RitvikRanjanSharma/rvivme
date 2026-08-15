@@ -590,7 +590,7 @@ function MarketingHeader() {
       className="aiml-marketing-header"
       style={{
         position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
-        height: "60px", display: "flex", alignItems: "center",
+        height: "var(--marketing-header-h, 60px)", display: "flex", alignItems: "center",
         justifyContent: "space-between", padding: "0 32px",
         background:      scrolled ? "var(--nav-bg)"                    : "transparent",
         backdropFilter:  scrolled ? "blur(20px) saturate(180%)"        : "none",
@@ -1085,7 +1085,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       ) : (
         <>
           <MarketingHeader />
-          <main style={{ paddingTop: "60px", minHeight: "100vh" }}>
+          <main style={{ paddingTop: "var(--marketing-header-h, 60px)", minHeight: "100vh" }}>
             {children}
           </main>
           <Footer />

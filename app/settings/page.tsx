@@ -148,7 +148,7 @@ function ProfileTab({ brandColor }: { brandColor: string }) {
           <PH title="Organisation Profile" subtitle="Used across all reports, exports, and API calls." />
           <div style={{ padding: "22px" }}>
             {error && <div style={{ padding: "10px 14px", background: "rgba(255,23,68,0.08)", border: "1px solid rgba(255,23,68,0.20)", borderRadius: "7px", marginBottom: "16px", fontFamily: "var(--font-body)", fontSize: "13px", color: "var(--signal-red)" }}>{error}</div>}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
+            <div className="aiml-field-pair" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
               <Field label="Company Name">
                 <TextInput value={company} onChange={setCompany} placeholder="AI Marketing Lab" disabled={loading} />
               </Field>
@@ -961,9 +961,9 @@ function SettingsContent() {
         <p style={{ fontFamily: "var(--font-body)", fontSize: "14px", color: "var(--text-secondary)" }}>Manage your account, integrations, and preferences.</p>
       </motion.div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: "24px", alignItems: "start" }}>
+      <div className="aiml-settings-grid" style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: "24px", alignItems: "start" }}>
         {/* Sidebar */}
-        <motion.nav variants={pv(0.06)} initial="hidden" animate="visible"
+        <motion.nav variants={pv(0.06)} initial="hidden" animate="visible" className="aiml-settings-tabs"
           style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden" }}
         >
           {TABS.map(tab => {

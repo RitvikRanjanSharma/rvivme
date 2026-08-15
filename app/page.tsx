@@ -234,6 +234,14 @@ function MasterCanvas({
       const step     = dense ? 2 : 3;
       const maxPts   = dense ? 9000 : 4200;
 
+      // Where the headline block sits vertically, as a fraction of viewport.
+      //
+      // On desktop it runs down to just above the fold. On a phone that same
+      // rule stranded a small headline at the very bottom of an otherwise
+      // empty screen — the hero is 100vh tall but the text only occupied the
+      // last 150px of it. Phones anchor much higher, just under the eyebrow.
+      const foot = dense ? 0.86 : 0.42;
+
       const csize = Math.min(W * 0.18, 160);
       const cPts  = sampleText(
         ["100", "AI MARKETING LAB"],
@@ -244,7 +252,14 @@ function MasterCanvas({
       // lines filled the viewport edge to edge and the last line collided with
       // the subheadline. 7.2vw capped at 108 leaves real margin around the
       // block, which is what makes it read as a headline rather than wallpaper.
-      const hsize  = Math.max(40, Math.min(W * 0.072, 108));
+      // 7.2vw suits a wide viewport. On a 390px phone that computes to 28px,
+      // which clamped up to a 40px floor — small enough that the particle
+      // glyphs stopped being readable as letters at all. Narrow screens get a
+      // much larger proportion of their width, which is what makes the four
+      // lines fill the measure instead of hiding in a corner.
+      const hsize  = dense
+        ? Math.max(40, Math.min(W * 0.072, 108))
+        : Math.max(30, Math.min(W * 0.115, 58));
       // Particle headline — mirrors the site's primary H1
       // ("Rank faster with AI-driven SEO & content strategy.") split across
       // four lines so each glyph gets room to assemble at display size.
@@ -268,8 +283,7 @@ function MasterCanvas({
       // grows upward from there. The top is clamped so it can never ride up
       // into the eyebrow row on a short window.
       const blockH   = hlh * hlines.length;
-      const HERO_FOOT = 0.86;                    // where the last line ends
-      const hlStartY = Math.max(H * 0.14, H * HERO_FOOT - blockH);
+      const hlStartY = Math.max(H * (dense ? 0.14 : 0.20), H * foot - blockH);
       // Flush-left against the same 32px gutter the rest of the hero uses, so
       // the headline lines up with the eyebrow and the subheadline below it.
       hlines.forEach((l, i) => hlCtx.fillText(l, 32, hlStartY + i * hlh));
@@ -570,7 +584,7 @@ function StatCell({ stat, i }: { stat: { value: string; label: string }; i: numb
 
 function StatRow() {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", borderTop: "1px solid var(--border)" }}>
+    <div className="aiml-kpi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", borderTop: "1px solid var(--border)" }}>
       {STATS.map((stat, i) => <StatCell key={stat.label} stat={stat} i={i} />)}
     </div>
   );
@@ -583,6 +597,7 @@ function FeatureRow({ feature }: { feature: typeof FEATURES[0] }) {
   return (
     <motion.div ref={ref} initial={{ opacity: 0 }} animate={inView ? { opacity: 1 } : {}} transition={{ duration: 0.5 }}
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      className="aiml-feature-row"
       style={{ display: "grid", gridTemplateColumns: "180px 1fr auto", padding: "52px 32px", borderTop: "1px solid var(--border)", alignItems: "start", background: hov ? "var(--muted)" : "transparent", transition: "background 0.3s" }}
     >
       <motion.div initial={{ opacity: 0, x: -16 }} animate={inView ? { opacity: 1, x: 0 } : {}} transition={{ duration: 0.7, ease: EASE_EXPO, delay: 0.05 }}
@@ -596,7 +611,7 @@ function FeatureRow({ feature }: { feature: typeof FEATURES[0] }) {
           style={{ fontFamily: "var(--font-body)", fontSize: "15px", color: "var(--text-secondary)", lineHeight: 1.8, maxWidth: "520px" }}
         >{feature.body}</motion.p>
       </div>
-      <motion.div initial={{ opacity: 0 }} animate={inView ? { opacity: 1 } : {}} transition={{ duration: 0.5, delay: 0.3 }} style={{ paddingTop: "6px" }}>
+      <motion.div className="aiml-feature-cta" initial={{ opacity: 0 }} animate={inView ? { opacity: 1 } : {}} transition={{ duration: 0.5, delay: 0.3 }} style={{ paddingTop: "6px" }}>
         <Link href={feature.href} style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 500, color: hov ? "var(--brand)" : "var(--text-secondary)", textDecoration: "none", transition: "color 0.2s", whiteSpace: "nowrap" }}>
           {feature.cta}
           <motion.span animate={{ x: hov ? 4 : 0 }} transition={{ duration: 0.2 }}><ArrowRight size={13} /></motion.span>
@@ -615,6 +630,7 @@ function NarrativeRow({ feature }: { feature: typeof COMMAND_CENTRE_FEATURES[0] 
   const inView = useInView(ref, { once: true, margin: "-80px" });
   return (
     <motion.div ref={ref} initial={{ opacity: 0 }} animate={inView ? { opacity: 1 } : {}} transition={{ duration: 0.5 }}
+      className="aiml-feature-row"
       style={{ display: "grid", gridTemplateColumns: "180px 1fr", padding: "56px 32px", borderTop: "1px solid var(--border)", alignItems: "start" }}
     >
       <motion.div initial={{ opacity: 0, x: -16 }} animate={inView ? { opacity: 1, x: 0 } : {}} transition={{ duration: 0.7, ease: EASE_EXPO, delay: 0.05 }}
@@ -694,7 +710,7 @@ function FAQRow({ item }: { item: typeof FAQ_ITEMS[0] }) {
         onClick={() => setOpen(o => !o)}
         style={{
           all: "unset", cursor: "pointer", width: "100%", boxSizing: "border-box",
-          display: "grid", gridTemplateColumns: "1fr auto", gap: "24px",
+          display: "grid", gridTemplateColumns: "1fr auto", gap: "16px",
           padding: "28px 32px", alignItems: "center",
         }}
       >
@@ -885,7 +901,7 @@ export default function HomePage() {
         {/* Hero — padding-top pushed from 18vh → 28vh so the eyebrow row at
              top:72px is no longer crowding the top of the particle headline.
              The spacer div below keeps the CTA/subheadline in rhythm. */}
-        <div ref={heroRef} style={{ minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "flex-start", padding: "calc(28vh - 10px) 32px 64px", position: "relative" }}>
+        <div ref={heroRef} className="aiml-hero" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "flex-start", padding: "calc(28vh - 10px) 32px 64px", position: "relative" }}>
           <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 70% 50% at 50% 0%, rgba(184,109,72,0.05) 0%, transparent 65%)", pointerEvents: "none" }} />
 
           <AnimatePresence>
@@ -915,7 +931,7 @@ export default function HomePage() {
             </h1>
 
             {/* Spacer — particles form the headline text here */}
-            <div style={{
+            <div className="aiml-hero-spacer" style={{
               // Reserves the flow space the particle headline occupies.
               //
               // The canvas is an absolutely positioned overlay drawing in

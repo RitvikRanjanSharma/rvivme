@@ -203,7 +203,7 @@ export default function SignupPage() {
           </div>
 
           <form onSubmit={handleSignup}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 14px" }}>
+            <div className="aiml-field-pair" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 14px" }}>
               <Field label="Company">
                 <TextInput value={company} onChange={setCompany} placeholder="Acme Ltd" />
               </Field>

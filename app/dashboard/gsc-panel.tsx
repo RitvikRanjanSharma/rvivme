@@ -201,7 +201,7 @@ function TopQueries({ queries, loading }: { queries: GSCQuery[]; loading: boolea
           No query data yet.<br />GSC typically shows data within 2–4 days of launch.
         </div>
       ) : (
-        <>
+        <div className="aiml-data-scroll">
           {/* Header */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 48px 64px 48px 52px", gap: "0 8px", marginBottom: "6px" }}>
             {["Query", "Clicks", "Impr.", "CTR", "Pos."].map(h => (
@@ -219,7 +219,7 @@ function TopQueries({ queries, loading }: { queries: GSCQuery[]; loading: boolea
               </div>
             ))}
           </div>
-        </>
+        </div>
       )}
     </Panel>
   );

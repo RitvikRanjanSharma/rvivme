@@ -142,7 +142,7 @@ function BlogKpis({ posts, brandColor }: { posts: BlogPost[]; brandColor: string
     { label: "Total Views",    value: totalViews,       color: brandColor              },
   ];
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginBottom: "24px" }}>
+    <div className="aiml-kpi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginBottom: "24px" }}>
       {kpis.map((k, i) => (
         <motion.div key={k.label} variants={pv(0.08 + i * 0.06)} initial="hidden" animate="visible">
           <Panel style={{ padding: "16px 18px" }}>
@@ -468,7 +468,7 @@ function PostEditor({ post, onClose, onSaved, brandColor }: {
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", minHeight: "600px" }}>
+        <div className="aiml-split-grid" style={{ display: "grid", gridTemplateColumns: "1fr 280px", minHeight: "600px" }}>
           {/* Main content area */}
           <div style={{ padding: "24px", borderRight: "1px solid var(--border)" }}>
             {error && (

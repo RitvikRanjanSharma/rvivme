@@ -362,7 +362,7 @@ export default function StrategyDetailPage() {
           </motion.header>
 
           {/* Two-column content grid on wide screens */}
-          <div style={{
+          <div className="aiml-split-grid" style={{
             display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 22, alignItems: "start",
           }}>
             {/* Left column: Plan + GSC delta */}

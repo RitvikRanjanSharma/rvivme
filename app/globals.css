@@ -63,6 +63,10 @@
   --radius-xl:   12px;
   --radius-2xl:  16px;
   --radius-pill: 100px;
+  /* Height of the fixed marketing header. The header and the <main> offset
+     both read this, so they cannot drift apart when it wraps on small
+     phones — a mismatch hides the top of every page behind the bar. */
+  --marketing-header-h: 60px;
   /* Semantic type presets */
   --h1-size:      clamp(2rem, 5vw, 3.5rem);
   --h1-tracking: -0.04em;
@@ -487,6 +491,98 @@ html, body { max-width: 100%; overflow-x: hidden; }
     white-space: nowrap;
   }
 }
+/* ── Marketing home on phones ─────────────────────────────────────────────── */
+/* The canvas draws in viewport coordinates and the flow spacer reserves the
+   room it occupies, so the two constants have to agree in both directions:
+   `foot` in buildParticles decides where the headline ends, and the spacer
+   fills from the hero's top padding down to it. Desktop: 86vh foot, 28vh
+   padding, 58vh gap. Phones: 42vh foot, 15vh padding, 27vh gap. */
+@media (max-width: 899px) {
+  .aiml-hero        { padding: 15vh 20px 48px !important; min-height: 100svh !important; }
+  .aiml-hero-spacer { height: 27vh !important; }
+}
+
+@media (max-width: 768px) {
+  /* Feature rows: "180px 1fr auto" gave the body copy about 200px on a 390px
+     screen and pushed the CTA clean off the right edge. Stacked, the index
+     becomes a label above the heading and the CTA sits under the text where
+     it can be reached. */
+  .aiml-feature-row {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+    padding: 34px 20px !important;
+  }
+  .aiml-feature-row > * { max-width: 100% !important; }
+  .aiml-feature-cta { justify-self: start !important; }
+
+  /* Settings: a 200px rail beside the panel left inputs a few characters
+     wide. The rail becomes a horizontal strip above the content. */
+  .aiml-settings-grid { grid-template-columns: 1fr !important; gap: 16px !important; }
+  .aiml-settings-tabs {
+    display: flex !important;
+    flex-direction: row !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 6px !important;
+  }
+  .aiml-settings-tabs::-webkit-scrollbar { display: none; }
+  .aiml-settings-tabs > * { flex: 0 0 auto; white-space: nowrap; }
+
+  /* Paired form fields stack — two columns on a phone is two unusable ones. */
+  .aiml-field-pair { grid-template-columns: 1fr !important; gap: 0 !important; }
+
+  /* Section padding: 32px of side padding costs ~16% of a 390px screen. */
+  .aiml-section-pad { padding-left: 20px !important; padding-right: 20px !important; }
+}
+
+/* ── Narrow phones: the header wraps rather than clipping ─────────────────── */
+/* At 390px the wordmark, three links, the theme toggle and the CTA total
+   roughly 430px. Shrinking type further makes the links unreadable, and
+   hiding them made Blog and Portfolio unreachable the last time it was
+   tried. So the row wraps: brand and actions stay on top, the links sit
+   underneath. --marketing-header-h grows to match so the page content
+   isn't pushed under the bar. */
+@media (max-width: 520px) {
+  :root { --marketing-header-h: 104px; }
+
+  .aiml-marketing-header {
+    flex-wrap: wrap !important;
+    align-content: center;
+    padding: 8px 14px !important;
+    row-gap: 4px;
+  }
+  .aiml-marketing-header > a:first-child { order: 1; }
+  .aiml-marketing-header > div:last-child { order: 2; margin-left: auto; }
+  .aiml-marketing-nav {
+    order: 3;
+    width: 100%;
+    justify-content: center !important;
+    gap: 2px !important;
+  }
+  .aiml-marketing-nav a { padding: 6px 10px !important; font-size: 13px !important; }
+  .aiml-marketing-cta   { padding: 8px 16px !important; }
+}
+
+/* Data rows built as grids (GSC query tables, audit rows) can't stack — a row
+   of numbers stops meaning anything once it wraps. They scroll sideways inside
+   their panel instead, with a floor width so the columns stay aligned. */
+@media (max-width: 768px) {
+  .aiml-data-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+  .aiml-data-scroll > * { min-width: 420px; }
+}
+
+/* Grid children default to min-width:auto, which means a long unbroken string
+   — a URL, a query, an error message — makes its track wider than the screen
+   and forces the whole page to scroll sideways. Every grid track that is meant
+   to flex needs this, so it is applied globally rather than per component. */
+[style*="gridTemplateColumns"] > *,
+[style*="grid-template-columns"] > * { min-width: 0; }
+
 @media (min-width: 769px) { .hide-desktop { display: none !important; } }
 @media (max-width: 1024px) {
   .hide-tablet   { display: none !important; }
