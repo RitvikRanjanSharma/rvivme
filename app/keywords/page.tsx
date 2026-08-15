@@ -923,8 +923,8 @@ export default function KeywordsPage() {
                   <div style={{
                     display:"flex", alignItems:"center", gap:"8px",
                     padding:"10px 14px", marginBottom:"14px",
-                    background: saveState === "error" ? "rgba(255,23,68,0.08)" : "rgba(0,230,118,0.08)",
-                    border: `1px solid ${saveState === "error" ? "rgba(255,23,68,0.25)" : "rgba(0,230,118,0.25)"}`,
+                    background: saveState === "error" ? "rgba(255,23,68,0.08)" : "rgba(37,181,126,0.08)",
+                    border: `1px solid ${saveState === "error" ? "rgba(255,23,68,0.25)" : "rgba(37,181,126,0.25)"}`,
                     borderRadius:"8px",
                     fontFamily:"var(--font-body)", fontSize:"12px",
                     color: saveState === "error" ? "var(--signal-red)" : "var(--signal-green)",

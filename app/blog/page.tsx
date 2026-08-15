@@ -7,6 +7,7 @@
 // =============================================================================
 
 import { useState, useEffect } from "react";
+import { BRAND_DEFAULT } from "@/app/ui/app-shell";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -76,7 +77,9 @@ function NewsletterBanner() {
   const [email,     setEmail]     = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [loading,   setLoading]   = useState(false);
-  const brandColor = "#3b82f6";
+  // Was a hardcoded blue, so the newsletter block stayed blue through both
+  // rebrands. Reads the live token instead, like every other surface.
+  const brandColor = "var(--brand-strong)";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -108,7 +111,7 @@ function NewsletterBanner() {
         <Rss size={16} color={brandColor} />
         <span style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "11px", fontWeight: 700, color: brandColor, letterSpacing: "0.14em", textTransform: "uppercase" }}>Intelligence Dispatch</span>
       </div>
-      <h3 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "clamp(1.4rem,3vw,1.9rem)", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.025em", marginBottom: "10px" }}>
+      <h3 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "clamp(1.4rem,3vw,1.9rem)", fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.025em", marginBottom: "10px" }}>
         Weekly SEO & GEO Intelligence.<br /><span style={{ color: brandColor }}>Delivered to your inbox.</span>
       </h3>
       <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "14px", color: "var(--text-secondary)", lineHeight: 1.7, maxWidth: "480px", margin: "0 auto 28px" }}>
@@ -117,7 +120,7 @@ function NewsletterBanner() {
       <AnimatePresence mode="wait">
         {submitted ? (
           <motion.div key="success" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
-            style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "12px 24px", background: "rgba(0,230,118,0.10)", border: "1px solid rgba(0,230,118,0.25)", borderRadius: "8px" }}
+            style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "12px 24px", background: "rgba(37,181,126,0.10)", border: "1px solid rgba(37,181,126,0.25)", borderRadius: "8px" }}
           >
             <CheckCircle2 size={15} color="var(--signal-green)" />
             <span style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 600, color: "var(--signal-green)" }}>Subscribed. Check your inbox for confirmation.</span>
@@ -160,7 +163,7 @@ function FeaturedPost({ post, brandColor }: { post: Post; brandColor: string }) 
           <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "9px", fontWeight: 500, color: brandColor, background: `rgba(var(--brand-rgb),0.10)`, border: `1px solid rgba(var(--brand-rgb),0.25)`, padding: "3px 10px", borderRadius: "100px", letterSpacing: "0.1em", textTransform: "uppercase" }}>Featured</span>
           <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "9px", color: "var(--text-tertiary)", background: "var(--card)", border: "1px solid var(--border)", padding: "3px 10px", borderRadius: "100px", letterSpacing: "0.08em", textTransform: "uppercase" }}>{categoryLabel(post.category)}</span>
         </div>
-        <h2 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "clamp(1.4rem,3vw,2rem)", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.03em", lineHeight: 1.15, marginBottom: "14px", maxWidth: "760px" }}>{post.title}</h2>
+        <h2 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "clamp(1.4rem,3vw,2rem)", fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.03em", lineHeight: 1.15, marginBottom: "14px", maxWidth: "760px" }}>{post.title}</h2>
         <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "15px", color: "var(--text-secondary)", lineHeight: 1.75, maxWidth: "720px", marginBottom: "24px" }}>{post.excerpt}</p>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
@@ -253,7 +256,7 @@ export default function BlogIndexPage() {
   const [activeCategory, setActiveCategory] = useState("all");
   const [search,         setSearch]         = useState("");
   const [searchOpen,     setSearchOpen]     = useState(false);
-  const [brandColor,     setBrandColor]     = useState("#3b82f6");
+  const [brandColor,     setBrandColor]     = useState(BRAND_DEFAULT);
 
   useEffect(() => {
     const stored = localStorage.getItem("aiml-brand") || localStorage.getItem("rvivme-brand");
@@ -303,7 +306,7 @@ export default function BlogIndexPage() {
             </div>
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: "16px" }}>
               <div>
-                <h1 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "clamp(2rem,5vw,3.5rem)", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.04em", lineHeight: 0.95, marginBottom: "12px" }}>
+                <h1 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "clamp(2rem,5vw,3.5rem)", fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.04em", lineHeight: 0.95, marginBottom: "12px" }}>
                   SEO & GEO<br /><span style={{ color: brandColor }}>Intelligence.</span>
                 </h1>
                 <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: "15px", color: "var(--text-secondary)", maxWidth: "520px", lineHeight: 1.7 }}>

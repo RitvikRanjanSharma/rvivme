@@ -230,7 +230,9 @@ function TopPages({ pages, loading }: { pages: GA4Page[]; loading: boolean }) {
 // Traffic sources
 // ─────────────────────────────────────────────────────────────────────────────
 function TrafficSources({ sources, brandColor, loading }: { sources: GA4Source[]; brandColor: string; loading: boolean }) {
-  const COLORS = [brandColor, "var(--signal-green)", "var(--signal-amber)", "var(--signal-red)", "#8b5cf6", "#06b6d4"];
+  // Series colours. The last two were a stray violet and cyan from the old
+  // palette; replaced with tones that sit with copper on both backgrounds.
+  const COLORS = [brandColor, "var(--signal-green)", "var(--signal-amber)", "var(--signal-red)", "#7A6A52", "#2F6F6B"];
   return (
     <Panel style={{ padding: "20px 22px" }}>
       <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "14px" }}>
@@ -306,7 +308,7 @@ export function GA4Panel({ brandColor }: { brandColor: string }) {
           <span style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "11px", fontWeight: 700, color: "var(--text-tertiary)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
             Google Analytics 4 · Live
           </span>
-          <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: loading ? "var(--signal-amber)" : "var(--signal-green)", boxShadow: `0 0 6px ${loading ? "rgba(255,171,0,0.5)" : "rgba(0,230,118,0.5)"}` }} />
+          <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: loading ? "var(--signal-amber)" : "var(--signal-green)", boxShadow: `0 0 6px ${loading ? "rgba(255,171,0,0.5)" : "rgba(37,181,126,0.5)"}` }} />
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>

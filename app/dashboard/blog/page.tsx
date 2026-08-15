@@ -7,6 +7,7 @@
 // =============================================================================
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { BRAND_DEFAULT } from "@/app/ui/app-shell";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -86,7 +87,7 @@ function categoryLabel(id: string): string {
 
 function statusConfig(s: PostStatus) {
   return {
-    published: { label: "Published", color: "var(--signal-green)", bg: "rgba(0,230,118,0.10)",  border: "rgba(0,230,118,0.25)",  icon: Globe2    },
+    published: { label: "Published", color: "var(--signal-green)", bg: "rgba(37,181,126,0.10)",  border: "rgba(37,181,126,0.25)",  icon: Globe2    },
     scheduled: { label: "Scheduled", color: "var(--signal-amber)", bg: "rgba(255,171,0,0.10)", border: "rgba(255,171,0,0.25)", icon: Calendar  },
     draft:     { label: "Draft",     color: "var(--text-tertiary)", bg: "var(--card)",          border: "var(--border)",        icon: Lock      },
     archived:  { label: "Archived",  color: "var(--text-tertiary)", bg: "var(--card)",          border: "var(--border)",        icon: Archive   },
@@ -251,7 +252,7 @@ function PostsTable({ posts, brandColor, onEdit, onDelete, onStatusChange }: {
                           )}
 
                           {post.status === "draft" && (
-                            <button onClick={() => onStatusChange(post.id, "published")} title="Publish" style={{ display: "flex", alignItems: "center", gap: "4px", fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--signal-green)", background: "rgba(0,230,118,0.08)", border: "1px solid rgba(0,230,118,0.25)", borderRadius: "6px", padding: "4px 8px", cursor: "pointer", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>
+                            <button onClick={() => onStatusChange(post.id, "published")} title="Publish" style={{ display: "flex", alignItems: "center", gap: "4px", fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--signal-green)", background: "rgba(37,181,126,0.08)", border: "1px solid rgba(37,181,126,0.25)", borderRadius: "6px", padding: "4px 8px", cursor: "pointer", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>
                               <Globe2 size={10} /> PUBLISH
                             </button>
                           )}
@@ -449,7 +450,7 @@ function PostEditor({ post, onClose, onSaved, brandColor }: {
         {/* Modal header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 24px", borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
           <div>
-            <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "16px", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.02em" }}>
+            <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "16px", fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.02em" }}>
               {isNew ? "New Post" : "Edit Post"}
             </div>
             <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.06em", marginTop: "2px" }}>
@@ -516,7 +517,7 @@ function PostEditor({ post, onClose, onSaved, brandColor }: {
               <button
                 onClick={() => handleSave("published")}
                 disabled={saving || !title || !slug}
-                style={{ width: "100%", padding: "10px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 700, color: "#fff", background: (saving || !title || !slug) ? "var(--muted)" : `linear-gradient(135deg, var(--signal-green), #00b060)`, border: "none", borderRadius: "8px", cursor: (saving || !title || !slug) ? "not-allowed" : "pointer", transition: "all 0.2s" }}
+                style={{ width: "100%", padding: "10px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontFamily: "var(--font-inter), sans-serif", fontSize: "13px", fontWeight: 700, color: "#fff", background: (saving || !title || !slug) ? "var(--muted)" : `linear-gradient(135deg, var(--signal-green), var(--signal-green))`, border: "none", borderRadius: "8px", cursor: (saving || !title || !slug) ? "not-allowed" : "pointer", transition: "all 0.2s" }}
               >
                 {saving ? <div style={{ width: "12px", height: "12px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} /> : saved ? <CheckCircle2 size={13} /> : <Globe2 size={13} />}
                 {saved ? "Published!" : "Publish"}
@@ -612,7 +613,7 @@ function PostEditor({ post, onClose, onSaved, brandColor }: {
                 <div>
                   <div
                     id="aiml-close-draft-title"
-                    style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "15px", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.01em", marginBottom: "4px" }}
+                    style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "15px", fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.01em", marginBottom: "4px" }}
                   >
                     You have unsaved changes
                   </div>
@@ -684,7 +685,7 @@ function PostEditor({ post, onClose, onSaved, brandColor }: {
 // Page
 // ─────────────────────────────────────────────────────────────────────────────
 export default function BlogAdminPage() {
-  const [brandColor, setBrandColor] = useState("#3b82f6");
+  const [brandColor, setBrandColor] = useState(BRAND_DEFAULT);
   const [posts,      setPosts]      = useState<BlogPost[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [editPost,   setEditPost]   = useState<BlogPost | null | "new">(null);
@@ -797,7 +798,7 @@ export default function BlogAdminPage() {
       {/* Header */}
       <motion.div variants={pv(0)} initial="hidden" animate="visible" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
         <div>
-          <h1 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "clamp(1.5rem,3vw,2rem)", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.03em", lineHeight: 1, marginBottom: "6px" }}>Blog Admin</h1>
+          <h1 style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "clamp(1.5rem,3vw,2rem)", fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.03em", lineHeight: 1, marginBottom: "6px" }}>Blog Admin</h1>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "11px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>
               {posts.filter(p => p.status === "published").length} PUBLISHED · {posts.filter(p => p.status === "draft").length} DRAFTS

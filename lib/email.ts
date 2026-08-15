@@ -129,12 +129,12 @@ export function alertEmail(opts: {
   linkText?: string;
 }): { subject: string; html: string } {
   const subject = `[AI Marketing Lab] ${opts.title}`;
-  // Re-derived for a light card. The previous values were chosen against a
-  // near-black background; #52c87a on linen is 1.9:1, which for an 11px
-  // uppercase label is decoration rather than information.
+  // Re-derived for a light card. The dark-theme values were chosen against a
+  // near-black background and are unreadable here — an 11px uppercase label
+  // needs real contrast to be information rather than decoration.
   const tone = {
     info:    "#1B4FA8",
-    success: "#00763C",
+    success: "#187552",   // light-card variant of #25b57e — see globals.css
     warning: "#8F6000",
     error:   "#D40029",
   }[opts.severity];
@@ -173,7 +173,7 @@ export function weeklyDigestEmail(opts: {
         <tr>
           <td style="${cell}">${escapeHtml(w.keyword)}</td>
           <td style="${cell}color:#5A6472;">${w.from} → ${w.to}</td>
-          <td style="${cell}color:#52c87a;text-align:right;">${arrow(w.from - w.to)} ${Math.abs(w.from - w.to)}</td>
+          <td style="${cell}color:#25b57e;text-align:right;">${arrow(w.from - w.to)} ${Math.abs(w.from - w.to)}</td>
         </tr>`).join("");
   const lossesRows = opts.rankLosses.length === 0
     ? `<tr><td style="${cell}color:#6B7480;" colspan="3">No drops worth flagging — nice.</td></tr>`
@@ -186,7 +186,7 @@ export function weeklyDigestEmail(opts: {
 
   const trafficLine = opts.trafficChange == null
     ? `<span style="color:#6B7480;">No GSC data this week.</span>`
-    : `Traffic ${opts.trafficChange >= 0 ? "up" : "down"} <strong style="color:${opts.trafficChange >= 0 ? "#52c87a" : "#ef6b6b"};">${Math.abs(opts.trafficChange)}%</strong> vs the prior 7 days.`;
+    : `Traffic ${opts.trafficChange >= 0 ? "up" : "down"} <strong style="color:${opts.trafficChange >= 0 ? "#25b57e" : "#ef6b6b"};">${Math.abs(opts.trafficChange)}%</strong> vs the prior 7 days.`;
 
   const auditLine = opts.auditScore == null
     ? `No audit run this week — <a href="${APP_URL}/audit" style="color:#5A6472;">run one now</a>.`

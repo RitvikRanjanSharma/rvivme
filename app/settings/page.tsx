@@ -88,7 +88,7 @@ function SaveBtn({ brandColor, onClick, loading, saved, label="Save changes" }: 
       display: "inline-flex", alignItems: "center", gap: "7px",
       fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 500,
       color: "#fff",
-      background: saved ? "#16a34a" : loading ? "var(--muted)" : brandColor,
+      background: saved ? "#25b57e" : loading ? "var(--muted)" : brandColor,
       border: "none", borderRadius: "8px", padding: "10px 20px",
       cursor: loading ? "not-allowed" : "pointer", transition: "opacity 0.16s, background 0.3s",
     }}
@@ -558,7 +558,7 @@ function IntegrationsTab({ brandColor }: { brandColor: string }) {
   ] as const;
 
   const statusCfg: Record<IntgStatus, { label: string; color: string; bg: string }> = {
-    connected:    { label: "Connected",    color: "var(--signal-green)", bg: "rgba(0,230,118,0.08)"  },
+    connected:    { label: "Connected",    color: "var(--signal-green)", bg: "rgba(37,181,126,0.08)"  },
     disconnected: { label: "Disconnected", color: "var(--text-tertiary)", bg: "var(--card)"          },
     error:        { label: "Error",        color: "var(--signal-red)",   bg: "rgba(255,23,68,0.08)" },
     checking:     { label: "Checking…",    color: "var(--text-tertiary)", bg: "var(--card)"          },
@@ -612,8 +612,8 @@ function IntegrationsTab({ brandColor }: { brandColor: string }) {
               <div style={{
                 display: "flex", alignItems: "center", gap: "8px",
                 padding: "10px 14px", marginBottom: "16px", borderRadius: "9px",
-                background: gBanner.kind === "ok" ? "rgba(0,230,118,0.08)" : "rgba(255,171,0,0.08)",
-                border: `1px solid ${gBanner.kind === "ok" ? "rgba(0,230,118,0.25)" : "rgba(255,171,0,0.25)"}`,
+                background: gBanner.kind === "ok" ? "rgba(37,181,126,0.08)" : "rgba(255,171,0,0.08)",
+                border: `1px solid ${gBanner.kind === "ok" ? "rgba(37,181,126,0.25)" : "rgba(255,171,0,0.25)"}`,
                 fontFamily: "var(--font-inter), sans-serif", fontSize: "12.5px",
                 color: gBanner.kind === "ok" ? "var(--signal-green)" : "var(--signal-amber)",
               }}>

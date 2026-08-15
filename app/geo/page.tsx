@@ -113,7 +113,7 @@ export default function GeoPage() {
   const VERDICT_TONE = {
     unknown: { bg: "rgba(255,171,0,0.07)", border: "rgba(255,171,0,0.25)", color: "var(--signal-amber)" },
     blocked: { bg: "rgba(255,23,68,0.06)", border: "rgba(255,23,68,0.22)", color: "var(--signal-red)"   },
-    clear:   { bg: "rgba(0,230,118,0.05)", border: "rgba(0,230,118,0.22)", color: "var(--signal-green)" },
+    clear:   { bg: "rgba(37,181,126,0.05)", border: "rgba(37,181,126,0.22)", color: "var(--signal-green)" },
   }[verdict];
 
   return (

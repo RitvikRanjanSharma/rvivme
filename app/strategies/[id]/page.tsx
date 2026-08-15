@@ -338,7 +338,7 @@ export default function StrategyDetailPage() {
                   display: "inline-flex", alignItems: "center", gap: 7,
                   fontFamily: "var(--font-body)", fontSize: 13,
                   color: "var(--signal-green)", background: "transparent",
-                  border: "1px solid rgba(0,230,118,0.30)",
+                  border: "1px solid rgba(37,181,126,0.30)",
                   borderRadius: 8, padding: "9px 14px", cursor: busy ? "default" : "pointer",
                   opacity: busy ? 0.6 : 1,
                 }}>
@@ -643,8 +643,8 @@ function ChecklistItem({
       style={{
         display: "flex", alignItems: "flex-start", gap: 12,
         padding: "12px 14px",
-        background: item.is_completed ? "rgba(0,230,118,0.04)" : "var(--card)",
-        border: `1px solid ${item.is_completed ? "rgba(0,230,118,0.22)" : "var(--border)"}`,
+        background: item.is_completed ? "rgba(37,181,126,0.04)" : "var(--card)",
+        border: `1px solid ${item.is_completed ? "rgba(37,181,126,0.22)" : "var(--border)"}`,
         borderRadius: 11,
       }}
     >

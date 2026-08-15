@@ -308,7 +308,7 @@ function StrategyCard({
             display: "inline-flex", alignItems: "center", gap: 6,
             fontFamily: "var(--font-body)", fontSize: 12,
             color: "var(--signal-green)", background: "transparent",
-            border: "1px solid rgba(0,230,118,0.25)", borderRadius: 7, padding: "6px 12px",
+            border: "1px solid rgba(37,181,126,0.25)", borderRadius: 7, padding: "6px 12px",
             cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1,
           }}>
             <Check size={12}/> Mark done

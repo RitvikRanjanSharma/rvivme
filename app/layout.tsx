@@ -15,15 +15,22 @@ import "./globals.css";
 
 // Poppins across the whole interface. Geometric sans with a wide aperture,
 // which is what keeps it readable at the small mono-ish label sizes this UI
-// leans on. 600 is the heaviest weight loaded — 700 in a geometric face at
-// display size reads as shouty rather than confident.
+// leans on.
 //
 // The CSS variable is still called --font-inter because roughly forty style
 // objects reference it. Renaming it would be a large diff for no behavioural
 // change; --font-body and --font-display are the names anything new should use.
 const poppins = Poppins({
   subsets:  ["latin"],
-  weight:   ["300","400","500","600"],
+  // 700 is loaded because the app actually uses it in 19 places. It wasn't,
+  // and that is the cause of the dark/light text mismatch: with the real face
+  // missing, the browser SYNTHESISES bold by smearing the 600 weight sideways,
+  // which widens every glyph and opens up the tracking. The distortion is far
+  // more visible as light-on-dark, because the smeared pixels bloom against a
+  // dark background — so the same heading looked heavier and wider in dark
+  // mode on almost every page. Nothing theme-specific in the CSS; a missing
+  // font file.
+  weight:   ["300","400","500","600","700"],
   variable: "--font-inter",
   display:  "swap",
 });

@@ -62,8 +62,8 @@ type BusinessReport = {
 };
 
 const RELEVANCE_TONE = {
-  primary:   { bg: "rgba(0,230,118,0.05)", border: "rgba(0,230,118,0.22)", color: "var(--signal-green)" },
-  secondary: { bg: "rgba(0,230,118,0.05)", border: "rgba(0,230,118,0.22)", color: "var(--signal-green)" },
+  primary:   { bg: "rgba(37,181,126,0.05)", border: "rgba(37,181,126,0.22)", color: "var(--signal-green)" },
+  secondary: { bg: "rgba(37,181,126,0.05)", border: "rgba(37,181,126,0.22)", color: "var(--signal-green)" },
   unclear:   { bg: "rgba(255,171,0,0.07)", border: "rgba(255,171,0,0.25)", color: "var(--signal-amber)" },
   not_local: { bg: "var(--surface)",       border: "var(--border)",        color: "var(--text-tertiary)" },
 } as const;

@@ -344,7 +344,7 @@ function ProjectionChart({ brandColor, ga4Trend, ga4Loading, ga4Reason, ga4Messa
           <div style={{
             display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
             padding:"44px 24px", background:"var(--card)",
-            border:`1px dashed ${isApiError ? "rgba(255,171,0,0.35)" : connectedNoData ? "rgba(0,230,118,0.30)" : "var(--border)"}`,
+            border:`1px dashed ${isApiError ? "rgba(255,171,0,0.35)" : connectedNoData ? "rgba(37,181,126,0.30)" : "var(--border)"}`,
             borderRadius:"10px", textAlign:"center", gap:"10px",
           }}>
             <Activity size={18} color={isApiError ? "var(--signal-amber)" : connectedNoData ? "var(--signal-green)" : "var(--text-tertiary)"} />
@@ -629,14 +629,14 @@ function GeoCitationPanel({ brandColor, domain }: { brandColor:string; domain:st
         {results.length > 0 && (
           <div style={{ padding:"16px 20px", display:"flex", flexDirection:"column", gap:"12px" }}>
             {results.map((r,i) => (
-              <div key={i} style={{ padding:"14px 16px", background:"var(--card)", border:`1px solid ${r.cited?"rgba(0,230,118,0.25)":"var(--border)"}`, borderRadius:"10px" }}>
+              <div key={i} style={{ padding:"14px 16px", background:"var(--card)", border:`1px solid ${r.cited?"rgba(37,181,126,0.25)":"var(--border)"}`, borderRadius:"10px" }}>
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"8px", flexWrap:"wrap", gap:"8px" }}>
                   <span style={{ fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:500, color:"var(--text-primary)" }}>{r.keyword}</span>
                   <span style={{
                     fontFamily:"var(--font-mono)", fontSize:"9px", letterSpacing:"0.1em",
                     color: r.cited?"var(--signal-green)":"var(--text-tertiary)",
-                    background: r.cited?"rgba(0,230,118,0.08)":"var(--muted)",
-                    border: `1px solid ${r.cited?"rgba(0,230,118,0.25)":"var(--border)"}`,
+                    background: r.cited?"rgba(37,181,126,0.08)":"var(--muted)",
+                    border: `1px solid ${r.cited?"rgba(37,181,126,0.25)":"var(--border)"}`,
                     padding:"2px 8px", borderRadius:"100px",
                   }}>
                     {r.cited?"✓ CITED":"NOT CITED"}

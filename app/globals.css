@@ -40,6 +40,9 @@
   --brand:         #B86D48;
   --brand-rgb:     184, 109, 72;
   --brand-strong:  #AA6442;   /* carries white text at 4.55:1 — see note above */
+  /* Wordmark. Sampled from the supplied artwork: #2e3740 on the light lockup
+     and #25b67f on the dark one — both already within a hair of the palette. */
+  --logo:          #2D3642;
   --brand-glow:    rgba(184, 109, 72, 0.18);
   --bg:            #EFE9E2;
   --surface:       #F7F3EE;
@@ -63,7 +66,7 @@
 
   /* Signal colours, re-derived for a light background.
 
-     The dark-theme values (#00e676, #ffab00) were chosen against near-black
+     The dark-theme values (#25b57e, #ffab00) were chosen against near-black
      and measure 1.39:1 and 1.57:1 on Pale Linen — invisible, not merely weak.
      Every PASS badge, ALLOWED chip and green verdict in Opportunities, Answer
      engines and Local uses these, so on light they would have been decorative
@@ -71,7 +74,11 @@
 
      Same hues, darkened until each clears 4.5:1 so they work as text and not
      only as fills. */
-  --signal-green: #00763C;
+  /* #25b57e verbatim measures 2.18:1 on Pale Linen — below the 3:1 floor for
+     an icon or a small uppercase label, so a PASS chip would be decoration.
+     Same hue (157deg) and saturation, deepened to 4.70:1. On dark it is used
+     exactly as specified. */
+  --signal-green: #187552;
   --signal-amber: #8F6000;
   --signal-red:   #D40029;
   --signal-blue:  #1B4FA8;
@@ -92,6 +99,7 @@
   --brand:         #B86D48;
   --brand-rgb:     184, 109, 72;
   --brand-strong:  #C97B54;   /* on teal, lift rather than deepen for contrast */
+  --logo:          #25b57e;
   --brand-glow:    rgba(184, 109, 72, 0.22);
   --bg:            #0B232E;
   --surface:       #0F2C39;
@@ -110,7 +118,8 @@
      short supporting copy, but it fails WCAG AA for body text and is genuinely
      tiring to read over an 8-minute article. Article prose uses this instead. */
   --text-reading:   rgba(245,240,233,0.86);
-  --signal-green: #00e676;
+  /* Exactly as specified — on Midnight Teal it measures 6.17:1. */
+  --signal-green: #25b57e;
   --signal-amber: #ffab00;
   --signal-red:   #ff1744;
   --signal-blue:  #2979ff;
@@ -197,9 +206,15 @@ html { font-size: 16px; scroll-behavior: smooth; }
 body {
   background: var(--bg);
   color: var(--text-primary);
-  font-family: var(--font-inter, "Inter", system-ui, sans-serif);
+  font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Never fake a weight. If a face isn't loaded the browser will smear a
+     lighter one into position, which widens glyphs and opens the tracking —
+     and it does it invisibly, so it reads as a mysterious rendering
+     difference rather than a missing font. With synthesis off, a missing
+     weight simply renders at the nearest real one. */
+  font-synthesis-weight: none;
   overflow-x: hidden;
   line-height: 1.6;
 }

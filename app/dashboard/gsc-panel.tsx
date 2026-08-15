@@ -317,7 +317,7 @@ export function GSCPanel({ brandColor }: { brandColor: string }) {
           <span style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "11px", fontWeight: 700, color: "var(--text-tertiary)", letterSpacing: "0.14em", textTransform: "uppercase" }}>
             Google Search Console · Live
           </span>
-          <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: loading ? "var(--signal-amber)" : error ? "var(--signal-red)" : "var(--signal-green)", boxShadow: `0 0 6px ${loading ? "rgba(255,171,0,0.5)" : error ? "rgba(255,23,68,0.5)" : "rgba(0,230,118,0.5)"}` }} />
+          <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: loading ? "var(--signal-amber)" : error ? "var(--signal-red)" : "var(--signal-green)", boxShadow: `0 0 6px ${loading ? "rgba(255,171,0,0.5)" : error ? "rgba(255,23,68,0.5)" : "rgba(37,181,126,0.5)"}` }} />
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>

@@ -347,21 +347,55 @@ const SIDEBAR_OPERATOR = [
 //     readers without needing alt text
 // Tracking is tightened to -0.04em to match the generated mark, where the
 // letters sit noticeably closer than Poppins' default.
+/**
+ * The AIML lockup: wordmark plus the ascending double chevron.
+ *
+ * Drawn rather than shipped as an image. The supplied artwork is a pair of
+ * 1080px JPEGs with the background baked in as a solid square — fine as
+ * reference, unusable in a header, where it would show a linen tile on a teal
+ * page and blur on any display that isn't exactly 1:1.
+ *
+ * Text plus inline SVG instead: crisp at every size, no network request, and
+ * it recolours with the theme through --logo. Sampled from the artwork, that
+ * is #2D3642 on light and #25b57e on dark — the two-tone treatment is
+ * deliberate and matches the files exactly.
+ *
+ * The chevron uses currentColor so it can never drift from the letters.
+ */
 function Wordmark({ size = 20 }: { size?: number }) {
   return (
     <span
       style={{
-        fontFamily:    "var(--font-inter), Inter, system-ui, sans-serif",
-        fontSize:      `${size}px`,
-        fontWeight:    600,
-        letterSpacing: "-0.04em",
-        lineHeight:    1,
-        color:         "var(--text-primary)",
+        display:       "inline-flex",
+        alignItems:    "flex-end",
+        gap:           `${size * 0.08}px`,
+        color:         "var(--logo)",
         whiteSpace:    "nowrap",
         flexShrink:    0,
+        lineHeight:    1,
       }}
+      aria-label="AIML"
     >
-      AIML
+      <span style={{
+        fontFamily:    "var(--font-body)",
+        fontSize:      `${size}px`,
+        fontWeight:    700,
+        letterSpacing: "-0.035em",
+        lineHeight:    1,
+      }}>
+        AIML
+      </span>
+      {/* Two stacked chevrons, sitting in the crook of the L as in the
+          artwork. Sized from the wordmark so the lockup holds together at
+          every scale. */}
+      <svg
+        width={size * 0.42} height={size * 0.62}
+        viewBox="0 0 21 31" fill="none" aria-hidden="true"
+        style={{ marginBottom: `${size * 0.06}px`, flexShrink: 0 }}
+      >
+        <path d="M10.5 0 21 8.4v6.2L10.5 6.2 0 14.6V8.4z" fill="currentColor" />
+        <path d="M10.5 14 21 22.4v6.2L10.5 20.2 0 28.6v-6.2z" fill="currentColor" />
+      </svg>
     </span>
   );
 }
@@ -438,10 +472,10 @@ function NotificationBell() {
         <span aria-label={`${unread} unread notifications`} style={{
           position: "absolute", top: -2, right: -2,
           minWidth: 16, height: 16, padding: "0 4px",
-          borderRadius: 999, background: "var(--signal-red, #ef6b6b)",
+          borderRadius: 999, background: "var(--signal-red)",
           color: "#fff", fontSize: 9, fontWeight: 700,
           display: "flex", alignItems: "center", justifyContent: "center",
-          border: "2px solid var(--nav-bg, #0b0b0c)",
+          border: "2px solid var(--nav-bg)",
           fontFamily: "var(--font-mono)",
         }}>
           {unread > 9 ? "9+" : unread}
@@ -623,7 +657,7 @@ function MarketingHeader() {
               exit={{    opacity: 0, rotate: 20 }}
               transition={{ duration: 0.15 }}
             >
-              {mode === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+              {mode === "dark" ? <Moon size={14} /> : <Sun size={14} />}
             </motion.div>
           </AnimatePresence>
         </IconButton>
@@ -750,7 +784,7 @@ function AppHeader({
               exit={{    opacity: 0, rotate: 20 }}
               transition={{ duration: 0.15 }}
             >
-              {mode === "dark" ? <Sun size={13} /> : <Moon size={13} />}
+              {mode === "dark" ? <Moon size={13} /> : <Sun size={13} />}
             </motion.div>
           </AnimatePresence>
         </IconButton>

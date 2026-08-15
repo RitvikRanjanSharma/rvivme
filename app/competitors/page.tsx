@@ -37,7 +37,7 @@ function threatColor(t: string) {
   return { critical: "var(--signal-red)", high: "var(--signal-amber)", medium: "var(--brand)", low: "var(--signal-green)" }[t] ?? "var(--text-tertiary)";
 }
 function threatBg(t: string) {
-  return { critical: "rgba(255,23,68,0.08)", high: "rgba(255,171,0,0.08)", medium: "rgba(184,109,72,0.08)", low: "rgba(0,230,118,0.08)" }[t] ?? "var(--muted)";
+  return { critical: "rgba(255,23,68,0.08)", high: "rgba(255,171,0,0.08)", medium: "rgba(184,109,72,0.08)", low: "rgba(37,181,126,0.08)" }[t] ?? "var(--muted)";
 }
 
 function KpiCard({ label, value, color }: { label: string; value: string | number; color: string }) {

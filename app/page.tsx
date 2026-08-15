@@ -240,7 +240,11 @@ function MasterCanvas({
         `400 ${csize}px "DM Mono",monospace`,
         W, H, step, maxPts, "center"
       );
-      const hsize  = Math.max(56, Math.min(W * 0.10, 152));
+      // Smaller than before (was 10vw capped at 152). At the old size the four
+      // lines filled the viewport edge to edge and the last line collided with
+      // the subheadline. 7.2vw capped at 108 leaves real margin around the
+      // block, which is what makes it read as a headline rather than wallpaper.
+      const hsize  = Math.max(40, Math.min(W * 0.072, 108));
       // Particle headline — mirrors the site's primary H1
       // ("Rank faster with AI-driven SEO & content strategy.") split across
       // four lines so each glyph gets room to assemble at display size.
@@ -255,12 +259,16 @@ function MasterCanvas({
       // silhouette is a different typeface from the rest of the site.
       hlCtx.font         = `500 ${hsize}px Poppins,system-ui,sans-serif`;
       hlCtx.textBaseline = "top";
-      hlCtx.textAlign    = "left";
-      // Start the headline lower so there's real breathing room between the
-      // "GEO INTELLIGENCE PLATFORM" eyebrow (positioned at top: 72px) and
-      // the top of the "R" glyphs. 0.28 gives ~200px on a 720px viewport.
-      const hlStartY = H * 0.28;
-      hlines.forEach((l, i) => hlCtx.fillText(l, 32, hlStartY + i * hlh));
+      // Centred rather than flush-left, so the mass of particles sits in the
+      // middle of the viewport instead of hugging the left edge.
+      hlCtx.textAlign    = "center";
+      // Vertically centre the whole block rather than pinning it to a fraction
+      // of the viewport height. Measuring the block and centring it means the
+      // headline stays centred at any viewport size, instead of drifting down
+      // on short screens and up on tall ones as a fixed 0.28 did.
+      const blockH   = hlh * hlines.length;
+      const hlStartY = Math.max(H * 0.16, (H - blockH) / 2 - hlh * 0.15);
+      hlines.forEach((l, i) => hlCtx.fillText(l, W / 2, hlStartY + i * hlh));
       const hlImgData = hlOff.getContext("2d")!.getImageData(0, 0, W, H).data;
       const hPtsRaw: Array<{x:number;y:number}> = [];
       const half = step / 2;
@@ -396,9 +404,16 @@ function MasterCanvas({
           p.y   = p.ty + dy + Math.cos(p.dp * 0.7) * 0.6 * drift;
           px    = p.x; py = p.y;
           // Fade to a 0.5 floor (not 0.02) so the particles never fully vanish
-          // — past full dispersal they persist at half opacity as background
-          // texture, the way the original design read.
-          a     = clamp(1 - sf2 * 0.5, 0.5, 1);
+          // — past full dispersal they persist as background texture, the way
+          // the original design read.
+          //
+          // IDLE_ALPHA halves the whole range once the headline has assembled.
+          // At full strength the field competed with the subheadline and CTAs
+          // sitting over it; the text is still perfectly legible at half, and
+          // the hierarchy is right — headline first, then the words you can
+          // actually act on.
+          const IDLE_ALPHA = 0.5;
+          a     = clamp(1 - sf2 * 0.5, 0.5, 1) * IDLE_ALPHA;
         }
 
         if (a <= 0.01) continue;
@@ -891,7 +906,8 @@ export default function HomePage() {
 
             {/* Spacer — particles form the headline text here */}
             <div style={{
-              height: "clamp(calc(3.5rem * 4 * 0.9), calc(10vw * 4 * 0.9), calc(9.5rem * 4 * 0.9))",
+              // Mirrors hsize above (7.2vw, 40-108px) x 4 lines x 0.9 line height.
+              height: "clamp(calc(2.5rem * 4 * 0.9), calc(7.2vw * 4 * 0.9), calc(6.75rem * 4 * 0.9))",
               marginBottom: "52px", pointerEvents: "none",
             }} />
 
