@@ -26,77 +26,6 @@
    passes comfortably.
 ----------------------------------------------------------------------------- */
 
-/* Dark theme — Midnight Teal. Not the default; see .light below. */
-.dark {
-  --brand:         #B86D48;
-  --brand-rgb:     184, 109, 72;
-  --brand-strong:  #C97B54;   /* on teal, lift rather than deepen for contrast */
-  --brand-glow:    rgba(184, 109, 72, 0.22);
-  --bg:            #0B232E;
-  --surface:       #0F2C39;
-  --surface-2:     #143544;
-  --surface-raised:#143544;
-  --card:          #10303E;
-  --border:        rgba(245,240,233,0.10);
-  --border-strong: rgba(245,240,233,0.18);
-  --border-subtle: rgba(245,240,233,0.05);
-  --muted:         rgba(245,240,233,0.06);
-  --nav-bg:        rgba(11,35,46,0.88);
-  --text-primary:   #F5F0E9;
-  --text-secondary: rgba(245,240,233,0.62);
-  --text-tertiary:  rgba(245,240,233,0.42);
-  /* Long-form reading text. --text-secondary (50%) is fine for UI labels and
-     short supporting copy, but it fails WCAG AA for body text and is genuinely
-     tiring to read over an 8-minute article. Article prose uses this instead. */
-  --text-reading:   rgba(245,240,233,0.86);
-  --signal-green: #00e676;
-  --signal-amber: #ffab00;
-  --signal-red:   #ff1744;
-  --signal-blue:  #2979ff;
-  --chart-grid: rgba(245,240,233,0.06);
-  --chart-axis: rgba(245,240,233,0.12);
-  --chart-tick: rgba(245,240,233,0.42);
-  --font-display: "Georgia", "Times New Roman", serif;
-  --font-syne:    var(--font-inter, "Inter", system-ui, sans-serif);
-  --font-inter:   var(--font-inter, "Inter", system-ui, sans-serif);
-  --font-dm-mono: var(--font-dm-mono, "DM Mono", "Consolas", monospace);
-  --font-body:    var(--font-inter, "Inter", system-ui, sans-serif);
-  --font-mono:    var(--font-dm-mono, "DM Mono", "Consolas", monospace);
-
-  /* Radii — canonical values from the design-system spec */
-  --radius-sm:   6px;
-  --radius-md:   8px;
-  --radius-lg:   10px;
-  --radius-xl:   12px;
-  --radius-2xl:  16px;
-  --radius-pill: 100px;
-
-  /* Shadows */
-  --shadow-card:       0 1px 3px rgba(0,0,0,0.7), 0 4px 12px rgba(0,0,0,0.5);
-  --shadow-card-hover: 0 8px 32px rgba(0,0,0,0.4);
-  --shadow-brand-sm:   0 0 10px var(--brand-glow);
-  --shadow-brand-md:   0 0 22px var(--brand-glow);
-  --shadow-brand-lg:   0 0 40px var(--brand-glow);
-
-  /* Motion — canonical easing + durations */
-  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  --dur-fast:  0.16s;
-  --dur-base:  0.25s;
-  --dur-slow:  0.45s;
-  --dur-hero:  0.85s;
-
-  /* Semantic type presets */
-  --h1-size:      clamp(2rem, 5vw, 3.5rem);
-  --h1-tracking: -0.04em;
-  --h1-line:      0.95;
-  --h2-size:      clamp(1.5rem, 3vw, 2.2rem);
-  --h2-tracking: -0.04em;
-  --h3-size:      1rem;
-  --body-size:    15px;
-  --body-line:    1.7;
-  --mono-label:   10px;
-  --mono-track:   0.12em;
-}
 
 /* Light theme — Pale Linen. THE DEFAULT: it sits on :root, so a document with
    no theme class renders light. That matters for the first paint before any
@@ -107,6 +36,7 @@
    where low-opacity text stays legible, muted grey on a warm light background
    goes muddy fast. 72% measures 4.66:1. */
 :root, .light {
+  color-scheme: light;
   --brand:         #B86D48;
   --brand-rgb:     184, 109, 72;
   --brand-strong:  #AA6442;   /* carries white text at 4.55:1 — see note above */
@@ -147,13 +77,119 @@
   --signal-blue:  #1B4FA8;
 }
 
-/* Theme changes should feel like a dimmer, not a strobe. Scoped to the
-   properties that actually change so we don't animate layout or transforms. */
-body, .aiml-themed {
-  transition: background-color 0.35s ease, color 0.35s ease, border-color 0.35s ease;
+/* Dark theme — Midnight Teal.
+
+   MUST come after :root/.light. Both selectors have identical specificity
+   (0,1,0), so the cascade falls through to source order — and while this block
+   sat above the light one, .light overrode every single property and dark mode
+   silently did nothing at all. The toggle flipped the class, the icon changed,
+   and the page stayed linen.
+
+   Anything added below this point that also sets these variables will beat it
+   for the same reason. */
+.dark {
+  color-scheme: dark;
+  --brand:         #B86D48;
+  --brand-rgb:     184, 109, 72;
+  --brand-strong:  #C97B54;   /* on teal, lift rather than deepen for contrast */
+  --brand-glow:    rgba(184, 109, 72, 0.22);
+  --bg:            #0B232E;
+  --surface:       #0F2C39;
+  --surface-2:     #143544;
+  --surface-raised:#143544;
+  --card:          #10303E;
+  --border:        rgba(245,240,233,0.10);
+  --border-strong: rgba(245,240,233,0.18);
+  --border-subtle: rgba(245,240,233,0.05);
+  --muted:         rgba(245,240,233,0.06);
+  --nav-bg:        rgba(11,35,46,0.88);
+  --text-primary:   #F5F0E9;
+  --text-secondary: rgba(245,240,233,0.62);
+  --text-tertiary:  rgba(245,240,233,0.42);
+  /* Long-form reading text. --text-secondary (50%) is fine for UI labels and
+     short supporting copy, but it fails WCAG AA for body text and is genuinely
+     tiring to read over an 8-minute article. Article prose uses this instead. */
+  --text-reading:   rgba(245,240,233,0.86);
+  --signal-green: #00e676;
+  --signal-amber: #ffab00;
+  --signal-red:   #ff1744;
+  --signal-blue:  #2979ff;
+  --chart-grid: rgba(245,240,233,0.06);
+  --chart-axis: rgba(245,240,233,0.12);
+  --chart-tick: rgba(245,240,233,0.42);
+  /* Poppins throughout, display included. The old Georgia serif no longer
+     belongs next to a geometric sans — the pairing read as two brands. */
+  --font-display: var(--font-inter, "Poppins", system-ui, sans-serif);
+  --font-syne:    var(--font-inter, "Poppins", system-ui, sans-serif);
+  --font-inter:   var(--font-inter, "Poppins", system-ui, sans-serif);
+  --font-dm-mono: var(--font-dm-mono, "DM Mono", "Consolas", monospace);
+  --font-body:    var(--font-inter, "Poppins", system-ui, sans-serif);
+  --font-mono:    var(--font-dm-mono, "DM Mono", "Consolas", monospace);
+
+  /* Radii — canonical values from the design-system spec */
+  --radius-sm:   6px;
+  --radius-md:   8px;
+  --radius-lg:   10px;
+  --radius-xl:   12px;
+  --radius-2xl:  16px;
+  --radius-pill: 100px;
+
+  /* Shadows */
+  --shadow-card:       0 1px 3px rgba(0,0,0,0.7), 0 4px 12px rgba(0,0,0,0.5);
+  --shadow-card-hover: 0 8px 32px rgba(0,0,0,0.4);
+  --shadow-brand-sm:   0 0 10px var(--brand-glow);
+  --shadow-brand-md:   0 0 22px var(--brand-glow);
+  --shadow-brand-lg:   0 0 40px var(--brand-glow);
+
+  /* Motion — canonical easing + durations */
+  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast:  0.16s;
+  --dur-base:  0.25s;
+  --dur-slow:  0.45s;
+  --dur-hero:  0.85s;
+
+  /* Semantic type presets */
+  --h1-size:      clamp(2rem, 5vw, 3.5rem);
+  --h1-tracking: -0.04em;
+  --h1-line:      0.95;
+  --h2-size:      clamp(1.5rem, 3vw, 2.2rem);
+  --h2-tracking: -0.04em;
+  --h3-size:      1rem;
+  --body-size:    15px;
+  --body-line:    1.7;
+  --mono-label:   10px;
+  --mono-track:   0.12em;
+}
+
+/* Smooth theme switching.
+
+   Almost every surface in this app is styled inline, so a transition on <body>
+   alone changed the page background while a few hundred cards, borders and
+   labels snapped instantly — which read as a flicker rather than a fade.
+
+   A permanent universal transition is the usual fix and a bad one: it makes
+   every unrelated hover and state change sluggish, and it forces the compositor
+   to watch properties on every node forever. Instead the class below is added
+   to <html> only for the length of the toggle, then removed.
+
+   !important is warranted here specifically because it has to beat the inline
+   transition declarations those same components set on themselves. */
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition: background-color 0.32s ease,
+              background       0.32s ease,
+              color            0.32s ease,
+              border-color     0.32s ease,
+              fill             0.32s ease,
+              stroke           0.32s ease !important;
 }
 @media (prefers-reduced-motion: reduce) {
-  body, .aiml-themed { transition: none; }
+  html.theme-transition,
+  html.theme-transition *,
+  html.theme-transition *::before,
+  html.theme-transition *::after { transition: none !important; }
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }

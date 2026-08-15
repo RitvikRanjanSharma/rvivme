@@ -223,16 +223,27 @@ function MasterCanvas({
 
     function buildParticles() {
       initDone.current = true;
+
+      // Density. Sampling every 2px instead of 3 yields ~2.25x the points, so
+      // the glyphs read as letterforms rather than as a haze around them.
+      //
+      // Phones get the coarser grid and a lower cap: the per-frame cost is
+      // linear in particle count, and a headline that stutters is worse than
+      // one that's slightly sparser. Desktop carries the full density.
+      const dense    = W >= 900;
+      const step     = dense ? 2 : 3;
+      const maxPts   = dense ? 9000 : 4200;
+
       const csize = Math.min(W * 0.18, 160);
       const cPts  = sampleText(
         ["100", "AI MARKETING LAB"],
         `400 ${csize}px "DM Mono",monospace`,
-        W, H, 3, 5000, "center"
+        W, H, step, maxPts, "center"
       );
       const hsize  = Math.max(56, Math.min(W * 0.10, 152));
       // Particle headline — mirrors the site's primary H1
       // ("Rank faster with AI-driven SEO & content strategy.") split across
-      // four lines so each glyph gets room to assemble at 150px Georgia.
+      // four lines so each glyph gets room to assemble at display size.
       // The ampersand lives on line 3 so it can't end up alone at a line end.
       const hlines = ["Rank faster", "with AI-driven", "SEO & content", "strategy."];
       const hlh    = hsize * 0.9;
@@ -240,7 +251,9 @@ function MasterCanvas({
       hlOff.width  = W; hlOff.height = H;
       const hlCtx  = hlOff.getContext("2d")!;
       hlCtx.fillStyle    = "#fff";
-      hlCtx.font         = `400 ${hsize}px Georgia,serif`;
+      // Mask font must match the rendered brand face, or the particle
+      // silhouette is a different typeface from the rest of the site.
+      hlCtx.font         = `500 ${hsize}px Poppins,system-ui,sans-serif`;
       hlCtx.textBaseline = "top";
       hlCtx.textAlign    = "left";
       // Start the headline lower so there's real breathing room between the
@@ -250,17 +263,18 @@ function MasterCanvas({
       hlines.forEach((l, i) => hlCtx.fillText(l, 32, hlStartY + i * hlh));
       const hlImgData = hlOff.getContext("2d")!.getImageData(0, 0, W, H).data;
       const hPtsRaw: Array<{x:number;y:number}> = [];
-      for (let py2 = 0; py2 < H; py2 += 3)
-        for (let px2 = 0; px2 < W; px2 += 3)
+      const half = step / 2;
+      for (let py2 = 0; py2 < H; py2 += step)
+        for (let px2 = 0; px2 < W; px2 += step)
           if (hlImgData[(py2 * W + px2) * 4 + 3] > 30)
-            hPtsRaw.push({ x: px2 + 1.5, y: py2 + 1.5 });
+            hPtsRaw.push({ x: px2 + half, y: py2 + half });
       for (let i = hPtsRaw.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [hPtsRaw[i], hPtsRaw[j]] = [hPtsRaw[j], hPtsRaw[i]];
       }
-      if (hPtsRaw.length > 5000) hPtsRaw.length = 5000;
+      if (hPtsRaw.length > maxPts) hPtsRaw.length = maxPts;
       const hPts = hPtsRaw;
-      const N = Math.min(cPts.length, hPts.length, 5000);
+      const N = Math.min(cPts.length, hPts.length, maxPts);
       particles.current = [];
       for (let i = 0; i < N; i++) {
         const cp = cPts[i % cPts.length];
@@ -280,7 +294,9 @@ function MasterCanvas({
           dvy: -(0.1 + Math.random() * 0.2),
           dp:  Math.random() * Math.PI * 2,
           dps: 0.006 + Math.random() * 0.01,
-          size: 1.5 + Math.random() * 1.0,
+          // Smaller than before: at 2px spacing the old 1.5-2.5px dots
+          // overlapped into solid strokes and lost the "data points" read.
+          size: (dense ? 1.15 : 1.4) + Math.random() * 0.85,
           depth,
           burstDelay:    (i / N) * 0.35,
           convergeDelay: Math.random() * 0.6,

@@ -6,14 +6,22 @@
 // lives in ./ui/app-shell so it can be versioned and iterated on independently.
 // ============================================================================
 
-import { Inter, DM_Mono } from "next/font/google";
+import { Poppins, DM_Mono } from "next/font/google";
 import { usePathname } from "next/navigation";
 import { AppShell } from "./ui/app-shell";
 import { CookieBanner } from "./ui/cookie-banner";
 import { absoluteUrl } from "@/lib/site";
 import "./globals.css";
 
-const inter = Inter({
+// Poppins across the whole interface. Geometric sans with a wide aperture,
+// which is what keeps it readable at the small mono-ish label sizes this UI
+// leans on. 600 is the heaviest weight loaded — 700 in a geometric face at
+// display size reads as shouty rather than confident.
+//
+// The CSS variable is still called --font-inter because roughly forty style
+// objects reference it. Renaming it would be a large diff for no behavioural
+// change; --font-body and --font-display are the names anything new should use.
+const poppins = Poppins({
   subsets:  ["latin"],
   weight:   ["300","400","500","600"],
   variable: "--font-inter",
@@ -38,7 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const canonical = absoluteUrl(pathname ?? "/");
 
   return (
-    <html lang="en-GB" className={`${inter.variable} ${dmMono.variable}`} suppressHydrationWarning>
+    <html lang="en-GB" className={`${poppins.variable} ${dmMono.variable}`} suppressHydrationWarning>
       <head>
         <title>AI Marketing Lab — SEO & GEO Intelligence Platform</title>
         <meta name="description" content="Unified SEO and GEO intelligence. Google Analytics 4, Search Console, and AI answer-engine tracking in one workspace."/>
@@ -65,8 +73,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             (function(){try{
               var m = localStorage.getItem('aiml-mode') || localStorage.getItem('rvivme-theme');
               if (m === 'dark') document.documentElement.classList.add('dark');
-              var b = localStorage.getItem('aiml-brand') || localStorage.getItem('rvivme-brand');
-              if (b) document.documentElement.style.setProperty('--brand', b);
+              // Same revision check the provider runs, repeated here because
+              // this executes first — otherwise the old colour paints once
+              // before React clears it.
+              if (localStorage.getItem('aiml-brand-rev') !== '2') {
+                localStorage.removeItem('aiml-brand');
+                localStorage.removeItem('rvivme-brand');
+                localStorage.setItem('aiml-brand-rev', '2');
+              } else {
+                var b = localStorage.getItem('aiml-brand') || localStorage.getItem('rvivme-brand');
+                if (b) document.documentElement.style.setProperty('--brand', b);
+              }
             }catch(e){}})();
           ` }}
         />

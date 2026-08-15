@@ -42,6 +42,21 @@ type ThemeCtx  = {
 /** Luminous Copper. Exported so Settings' colour picker starts here too. */
 export const BRAND_DEFAULT = "#B86D48";
 
+/**
+ * Bump when the default brand colour changes.
+ *
+ * The brand colour is persisted per browser and written as an inline style on
+ * <html>, which outranks the stylesheet. So after the copper rebrand, every
+ * returning visitor still had #2563eb in localStorage and kept seeing blue
+ * buttons on a linen page — the CSS was correct and completely powerless.
+ *
+ * On a mismatch we discard the stored colour once and adopt the new default.
+ * A deliberately chosen custom colour is lost, which is the right trade: a
+ * stale default that silently defeats a rebrand is much worse than one reset.
+ */
+const BRAND_REVISION = "2";
+const BRAND_REV_KEY  = "aiml-brand-rev";
+
 const ThemeContext = createContext<ThemeCtx | null>(null);
 
 function hexToRgb(hex: string) {
@@ -103,9 +118,18 @@ function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const m = (localStorage.getItem("aiml-mode") || localStorage.getItem("rvivme-theme")) as ThemeMode | null;
-    const b = localStorage.getItem("aiml-brand") || localStorage.getItem("rvivme-brand");
     if (m === "light" || m === "dark") setMode(m);
-    if (b) setBrand(b);
+
+    // Discard a brand colour saved under an older palette revision.
+    if (localStorage.getItem(BRAND_REV_KEY) !== BRAND_REVISION) {
+      localStorage.removeItem("aiml-brand");
+      localStorage.removeItem("rvivme-brand");
+      localStorage.setItem(BRAND_REV_KEY, BRAND_REVISION);
+      setBrand(BRAND_DEFAULT);
+    } else {
+      const b = localStorage.getItem("aiml-brand") || localStorage.getItem("rvivme-brand");
+      if (b) setBrand(b);
+    }
 
     // Cross-tab / external-writer sync: Settings page writes localStorage
     // directly, so we listen for storage events to keep the shell in sync.
@@ -133,7 +157,16 @@ function ThemeProvider({ children }: { children: React.ReactNode }) {
     brandColor:    brand,
     mode,
     setBrandColor: setBrand,
-    toggleMode:    () => setMode(m => m === "dark" ? "light" : "dark"),
+    toggleMode:    () => {
+      // Turn on the cross-fade for the duration of the switch only — see the
+      // .theme-transition rule in globals.css for why it isn't permanent.
+      if (typeof document !== "undefined") {
+        const root = document.documentElement;
+        root.classList.add("theme-transition");
+        window.setTimeout(() => root.classList.remove("theme-transition"), 380);
+      }
+      setMode(m => m === "dark" ? "light" : "dark");
+    },
   }), [brand, mode]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
@@ -307,13 +340,13 @@ const SIDEBAR_OPERATOR = [
 // ─── Shared visual primitives ─────────────────────────────────────────────────
 // Wordmark — replaces the old blue-tile-plus-triangle lockup. Rendered as real
 // text rather than an SVG or image so it:
-//   * uses the site's actual Inter face (no approximation, no extra request)
+//   * uses the site's actual Poppins face (no approximation, no extra request)
 //   * inherits the theme via currentColor, so it stays legible in light mode
 //     where a baked-in off-white would vanish
 //   * stays crisp at any zoom / DPI and is selectable + readable by screen
 //     readers without needing alt text
 // Tracking is tightened to -0.04em to match the generated mark, where the
-// letters sit noticeably closer than Inter's default.
+// letters sit noticeably closer than Poppins' default.
 function Wordmark({ size = 20 }: { size?: number }) {
   return (
     <span
