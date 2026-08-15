@@ -260,12 +260,16 @@ function MasterCanvas({
       hlCtx.font         = `500 ${hsize}px Poppins,system-ui,sans-serif`;
       hlCtx.textBaseline = "top";
       hlCtx.textAlign    = "left";
-      // Vertically centre the whole block rather than pinning it to a fraction
-      // of the viewport height. Measuring the block and centring it means the
-      // headline stays centred at any viewport size, instead of drifting down
-      // on short screens and up on tall ones as a fixed 0.28 did.
+      // Anchor the BOTTOM of the block rather than centring it.
+      //
+      // Centring left a gap under the last line that grew on tall screens. The
+      // headline is meant to run down to just above the fold, so the baseline
+      // of "strategy." lands at a fixed fraction of the viewport and the block
+      // grows upward from there. The top is clamped so it can never ride up
+      // into the eyebrow row on a short window.
       const blockH   = hlh * hlines.length;
-      const hlStartY = Math.max(H * 0.16, (H - blockH) / 2 - hlh * 0.15);
+      const HERO_FOOT = 0.86;                    // where the last line ends
+      const hlStartY = Math.max(H * 0.14, H * HERO_FOOT - blockH);
       // Flush-left against the same 32px gutter the rest of the hero uses, so
       // the headline lines up with the eyebrow and the subheadline below it.
       hlines.forEach((l, i) => hlCtx.fillText(l, 32, hlStartY + i * hlh));
@@ -407,13 +411,19 @@ function MasterCanvas({
           // — past full dispersal they persist as background texture, the way
           // the original design read.
           //
-          // IDLE_ALPHA halves the whole range once the headline has assembled.
-          // At full strength the field competed with the subheadline and CTAs
-          // sitting over it; the text is still perfectly legible at half, and
-          // the hierarchy is right — headline first, then the words you can
-          // actually act on.
-          const IDLE_ALPHA = 0.5;
-          a     = clamp(1 - sf2 * 0.5, 0.5, 1) * IDLE_ALPHA;
+          // Opacity is tied to dispersal, not to being idle.
+          //
+          // While the headline is still assembled — the whole HOLD zone, before
+          // any scroll has pulled it apart — it renders at full strength,
+          // because that is the moment it is the message. Once it starts
+          // breaking up it is background texture behind the copy, so it falls
+          // to 30% and stays there.
+          //
+          // Previously a flat 0.5 applied the instant the intro finished, which
+          // dimmed the headline while it was still the only thing on screen.
+          const FORMED_ALPHA    = 1.0;
+          const DISPERSED_ALPHA = 0.3;
+          a = FORMED_ALPHA - (FORMED_ALPHA - DISPERSED_ALPHA) * disperseT;
         }
 
         if (a <= 0.01) continue;
@@ -906,8 +916,15 @@ export default function HomePage() {
 
             {/* Spacer — particles form the headline text here */}
             <div style={{
-              // Mirrors hsize above (7.2vw, 40-108px) x 4 lines x 0.9 line height.
-              height: "clamp(calc(2.5rem * 4 * 0.9), calc(7.2vw * 4 * 0.9), calc(6.75rem * 4 * 0.9))",
+              // Reserves the flow space the particle headline occupies.
+              //
+              // The canvas is an absolutely positioned overlay drawing in
+              // viewport coordinates, so this spacer is the only thing keeping
+              // the subheadline from sliding underneath it. The headline now
+              // ends at 86vh (HERO_FOOT in buildParticles) and this section
+              // starts after the hero's 28vh top padding, so the gap between
+              // them is exactly 58vh. Change HERO_FOOT and change this.
+              height: "calc(58vh + 10px)",
               marginBottom: "52px", pointerEvents: "none",
             }} />
 

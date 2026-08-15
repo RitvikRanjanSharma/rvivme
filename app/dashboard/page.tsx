@@ -405,7 +405,7 @@ function ProjectionChart({ brandColor, ga4Trend, ga4Loading, ga4Reason, ga4Messa
               Organic Traffic · 6-Month AI Projection
             </div>
             <div style={{ fontFamily:"var(--font-mono)", fontSize:"11px", color:isReal?"var(--signal-green)":"var(--text-tertiary)", letterSpacing:"0.08em" }}>
-              {ga4Loading?"LOADING GA4 DATA…":`LIVE GA4 · AI FORECAST v1.0 · ${confidence}% CONFIDENCE`}
+              {ga4Loading ? "LOADING…" : `LIVE · AI FORECAST v1.0 · ${confidence}% CONFIDENCE`}
             </div>
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:"16px" }}>
@@ -1020,10 +1020,35 @@ export default function DashboardPage() {
           </h1>
           <div className="aiml-page-meta" style={{ display:"flex", alignItems:"center", gap:"12px", flexWrap:"wrap" }}>
             <span style={{ fontFamily:"var(--font-mono)", fontSize:"11px", color:"var(--text-tertiary)", letterSpacing:"0.06em" }}>{dateStr.toUpperCase()}</span>
-            <div style={{ display:"flex", alignItems:"center", gap:"5px" }}>
-              <div style={{ width:"6px",height:"6px",borderRadius:"50%",background:brandColor,animation:"brand-pulse 2.5s ease-in-out infinite" }}/>
-              <span style={{ fontFamily:"var(--font-mono)", fontSize:"10px", color:brandColor, letterSpacing:"0.1em", textTransform:"uppercase" }}>Live · GA4 + Search Console</span>
-            </div>
+            {/* Connection status.
+                Naming the sources while everything works is noise — the reader
+                already knows what's plugged in, and it made a healthy state
+                look like a status report. So: "Live" alone when both are
+                connected, and a red "Broken" naming only what has actually
+                failed when one hasn't. The name appears exactly when it is
+                the actionable part. */}
+            {(() => {
+              const broken = [
+                !ga4Connected ? "GA4" : null,
+                !gscConnected ? "Search Console" : null,
+              ].filter(Boolean) as string[];
+              const healthy = broken.length === 0;
+              const tone = healthy ? "var(--signal-green)" : "var(--signal-red)";
+              return (
+                <div style={{ display:"flex", alignItems:"center", gap:"5px" }}>
+                  <div style={{
+                    width:"6px", height:"6px", borderRadius:"50%", background: tone,
+                    animation: healthy ? "brand-pulse 2.5s ease-in-out infinite" : "none",
+                  }}/>
+                  <span style={{
+                    fontFamily:"var(--font-mono)", fontSize:"10px", color: tone,
+                    letterSpacing:"0.1em", textTransform:"uppercase",
+                  }}>
+                    {healthy ? "Live" : `Broken · ${broken.join(" + ")}`}
+                  </span>
+                </div>
+              );
+            })()}
           </div>
         </div>
         {!domainLoading && domain && (
