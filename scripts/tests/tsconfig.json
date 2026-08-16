@@ -1,0 +1,17 @@
+{
+  "//": "Compiles the unit tests to runnable CommonJS. The root tsconfig is noEmit and targets the bundler, neither of which works for running on plain Node. baseUrl+paths are repeated here so the '@/lib/...' aliases used by the rest of the codebase type-check correctly; the runner rewrites them in the emitted JS, because path aliases are compile-time only and Node cannot resolve them.",
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2022",
+    "lib": ["ES2022", "dom"],
+    "types": ["node"],
+    "isolatedModules": false,
+    "incremental": false,
+    "baseUrl": "../..",
+    "paths": { "@/*": ["./*"] }
+  },
+  "include": ["./crawler-view.test.ts", "../../lib/ai-crawler-view.ts", "../../lib/site-fetch.ts"]
+}

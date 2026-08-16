@@ -470,10 +470,251 @@ export default function GeoPage() {
         </div>
       )}
 
+      {/* Reachability is upstream of everything above: a page the engine never
+          receives cannot be scored on how quotable it is. It sits last because
+          it is the only section that asks the user to choose a URL. */}
+      <CrawlerView brandColor={brandColor} />
+
       <style>{`
         @keyframes spin    { to { transform: rotate(360deg); } }
         @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
       `}</style>
+    </div>
+  );
+}
+
+// ─── What the engine actually receives ───────────────────────────────────────
+// The other sections here infer. This one shows: the literal words the crawler
+// got back, next to what a browser got. When a page is a JavaScript shell,
+// nothing communicates it faster than an empty column.
+
+type ViewFinding = { rule: string; severity: "error" | "warning" | "notice" | "ok"; message: string; why: string; fix: string };
+type ViewSide    = { ok: boolean; status: number | null; error: string | null; wordCount: number; title: string | null; h1: string | null; text: string; truncated: boolean };
+type ViewResult  = {
+  success: boolean; reason?: string; message?: string;
+  url?: string; agent?: string; agentLabel?: string; agentNote?: string | null;
+  verdict?: "invisible" | "degraded" | "ok"; parity?: number;
+  findings?: ViewFinding[]; crawler?: ViewSide; browser?: ViewSide;
+  agents?: { key: string; label: string; note: string }[];
+};
+
+const VIEW_TONE = {
+  invisible: { color: "var(--signal-red)",   bg: "rgba(255,23,68,0.06)",  border: "rgba(255,23,68,0.22)",  label: "Not readable" },
+  degraded:  { color: "var(--signal-amber)", bg: "rgba(255,171,0,0.07)",  border: "rgba(255,171,0,0.25)",  label: "Degraded"     },
+  ok:        { color: "var(--signal-green)", bg: "rgba(37,181,126,0.05)", border: "rgba(37,181,126,0.22)", label: "Readable"     },
+} as const;
+
+function CrawlerView({ brandColor }: { brandColor: string }) {
+  const [url,     setUrl]     = useState("");
+  const [agent,   setAgent]   = useState("OAI-SearchBot");
+  const [result,  setResult]  = useState<ViewResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [ran,     setRan]     = useState(false);
+
+  const run = useCallback(async () => {
+    setLoading(true); setRan(true);
+    try {
+      const qs = new URLSearchParams({ agent });
+      if (url.trim()) qs.set("url", url.trim());
+      const r = await fetch(`/api/geo/crawler-view?${qs}`).then(r => r.json()).catch(() => null);
+      setResult(r);
+    } finally {
+      setLoading(false);
+    }
+  }, [url, agent]);
+
+  const tone = result?.verdict ? VIEW_TONE[result.verdict] : null;
+
+  return (
+    <div style={{ marginTop: "40px" }}>
+      <SectionLabel>What the engine actually receives</SectionLabel>
+
+      <div style={{
+        background: "var(--card)", border: "1px solid var(--border)",
+        borderRadius: "14px", padding: "20px",
+      }}>
+        <p style={{
+          fontFamily: "var(--font-body)", fontSize: "13px",
+          color: "var(--text-reading)", lineHeight: 1.65, margin: "0 0 16px",
+        }}>
+          We fetch one of your pages twice — once identifying as an answer-engine
+          crawler, once as an ordinary browser — and compare what comes back.
+          A page can look complete to you and arrive nearly empty to the engine,
+          either because the content is assembled by JavaScript or because a bot
+          rule turned the crawler away.
+        </p>
+
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "14px" }}>
+          <input
+            value={url}
+            onChange={e => setUrl(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && !loading) run(); }}
+            placeholder="Your homepage, or paste a page URL"
+            aria-label="Page URL to check"
+            style={{
+              flex: "1 1 240px", minWidth: 0,
+              fontFamily: "var(--font-body)", fontSize: "13px",
+              color: "var(--text-primary)", background: "var(--surface)",
+              border: "1px solid var(--border)", borderRadius: "8px",
+              padding: "10px 12px",
+            }}
+          />
+          <select
+            value={agent}
+            onChange={e => setAgent(e.target.value)}
+            aria-label="Which crawler to imitate"
+            style={{
+              fontFamily: "var(--font-body)", fontSize: "12.5px",
+              color: "var(--text-primary)", background: "var(--surface)",
+              border: "1px solid var(--border)", borderRadius: "8px",
+              padding: "10px 12px", cursor: "pointer",
+            }}
+          >
+            {(result?.agents ?? [
+              { key: "OAI-SearchBot", label: "ChatGPT (search)" },
+              { key: "GPTBot",        label: "GPTBot (training)" },
+              { key: "PerplexityBot", label: "Perplexity" },
+              { key: "ClaudeBot",     label: "Claude" },
+              { key: "Google-Extended", label: "Gemini (training)" },
+            ]).map(a => <option key={a.key} value={a.key}>{a.label}</option>)}
+          </select>
+          <button
+            onClick={run} disabled={loading} className="aiml-touch-target"
+            style={{
+              fontFamily: "var(--font-mono)", fontSize: "11px", letterSpacing: "0.06em",
+              color: "#fff", background: loading ? "var(--text-tertiary)" : "var(--brand-strong)",
+              border: "none", borderRadius: "8px", padding: "10px 18px",
+              cursor: loading ? "default" : "pointer", whiteSpace: "nowrap",
+            }}
+          >
+            {loading ? "CHECKING…" : "CHECK"}
+          </button>
+        </div>
+
+        {result?.agentNote && (
+          <p style={{
+            fontFamily: "var(--font-body)", fontSize: "12px",
+            color: "var(--text-tertiary)", lineHeight: 1.6, margin: "0 0 14px",
+          }}>
+            {result.agentNote}
+          </p>
+        )}
+
+        {ran && !loading && result && !result.success && (
+          <div style={{
+            fontFamily: "var(--font-body)", fontSize: "12.5px",
+            color: "var(--signal-amber)", lineHeight: 1.6,
+          }}>
+            {result.message ?? "That check couldn't run."}
+          </div>
+        )}
+
+        {result?.success && tone && (
+          <>
+            <div style={{
+              display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap",
+              background: tone.bg, border: `1px solid ${tone.border}`,
+              borderRadius: "10px", padding: "12px 14px", marginBottom: "16px",
+            }}>
+              <span style={{
+                fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.12em",
+                textTransform: "uppercase", color: tone.color, fontWeight: 600,
+              }}>
+                {tone.label}
+              </span>
+              <span style={{ fontFamily: "var(--font-body)", fontSize: "12.5px", color: "var(--text-reading)" }}>
+                {result.agentLabel} receives {result.crawler?.wordCount ?? 0} words
+                {result.browser?.ok && result.browser.wordCount > 0 && (
+                  <> · {result.parity}% of what a browser gets</>
+                )}
+              </span>
+            </div>
+
+            {/* The side-by-side. This is the part that makes the problem
+                self-evident — an empty left column next to a full right one
+                needs no explanation. */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: "12px", marginBottom: "16px" }}>
+              <TextPane
+                heading={result.agentLabel ?? "Crawler"}
+                side={result.crawler}
+                accent={tone.color}
+              />
+              <TextPane heading="A browser" side={result.browser} accent="var(--text-tertiary)" />
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {(result.findings ?? []).map(f => (
+                <div key={f.rule} style={{
+                  borderLeft: `2px solid ${
+                    f.severity === "error" ? "var(--signal-red)"
+                    : f.severity === "warning" ? "var(--signal-amber)"
+                    : f.severity === "ok" ? "var(--signal-green)"
+                    : "var(--border-strong)"}`,
+                  paddingLeft: "12px",
+                }}>
+                  <div style={{
+                    fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 500,
+                    color: "var(--text-primary)", lineHeight: 1.5,
+                  }}>
+                    {f.message}
+                  </div>
+                  <div style={{
+                    fontFamily: "var(--font-body)", fontSize: "12.5px",
+                    color: "var(--text-reading)", lineHeight: 1.65, marginTop: "4px",
+                  }}>
+                    {f.why}
+                  </div>
+                  {f.severity !== "ok" && (
+                    <div style={{
+                      fontFamily: "var(--font-body)", fontSize: "12.5px",
+                      color: "var(--text-secondary)", lineHeight: 1.65, marginTop: "4px",
+                    }}>
+                      <strong style={{ color: brandColor }}>Fix:</strong> {f.fix}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TextPane({ heading, side, accent }: { heading: string; side?: ViewSide; accent: string }) {
+  const empty = !side?.ok || side.wordCount === 0;
+  return (
+    <div style={{
+      background: "var(--surface)", border: "1px solid var(--border)",
+      borderRadius: "10px", padding: "12px", minWidth: 0,
+    }}>
+      <div style={{
+        display: "flex", justifyContent: "space-between", alignItems: "baseline",
+        gap: "8px", marginBottom: "8px",
+      }}>
+        <span style={{
+          fontFamily: "var(--font-mono)", fontSize: "10px", letterSpacing: "0.1em",
+          textTransform: "uppercase", color: accent,
+        }}>
+          {heading}
+        </span>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-tertiary)" }}>
+          {side?.status ?? "—"} · {side?.wordCount ?? 0}w
+        </span>
+      </div>
+      <div style={{
+        fontFamily: "var(--font-body)", fontSize: "12px",
+        color: empty ? "var(--text-tertiary)" : "var(--text-reading)",
+        lineHeight: 1.6, maxHeight: "190px", overflowY: "auto",
+        fontStyle: empty ? "italic" : "normal", wordBreak: "break-word",
+      }}>
+        {side?.ok
+          ? (side.wordCount === 0
+              ? "Nothing. The response contained no readable text."
+              : <>{side.text}{side.truncated && <span style={{ color: "var(--text-tertiary)" }}> …</span>}</>)
+          : (side?.error ?? `The server returned ${side?.status ?? "no response"}.`)}
+      </div>
     </div>
   );
 }

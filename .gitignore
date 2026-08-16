@@ -35,3 +35,5 @@ pnpm-debug.log*
 
 # Sibling scratch project — kept locally, never committed to the main repo
 geo-app/
+# tsc --incremental artefacts from ad-hoc typechecks
+*.tsbuildinfo
