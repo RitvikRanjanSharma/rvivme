@@ -1,49 +1,52 @@
 // app/page.tsx — AI Marketing Lab (server shell)
 // ============================================================================
-// Exists to emit the homepage's own metadata. `metadata` is only supported in
-// Server Components, and the homepage UI needs hooks (canvas, scroll, auth),
-// so the interactive half lives in ./home-view.tsx. Same pattern as
-// blog/[slug]/page.tsx.
+// Exists to emit the homepage's own metadata and to load the editable copy.
+// `metadata` is only supported in Server Components, and the homepage UI needs
+// hooks (canvas, scroll, auth), so the interactive half lives in ./home-view.
+// Same pattern as blog/[slug]/page.tsx.
 //
-// The homepage is the most-shared URL on the site, so the Open Graph title and
-// description are set explicitly here rather than inherited: before this, a
-// link to the homepage unfurled with an image but no title or description,
-// because the old hand-written <head> in the root layout emitted neither.
+// The metadata now resolves through lib/seo-metadata, which lays any override
+// set in /admin over the defaults below. The defaults stay here rather than
+// moving into the database: they are what ships, what renders if the database
+// is empty or unreachable, and what the file should say when you read it.
 // ============================================================================
 
 import type { Metadata } from "next";
 import { SITE_DESCRIPTION, SITE_NAME } from "@/lib/site";
+import { resolveSeo, resolveJsonLd } from "@/lib/seo-metadata";
+import { getContentBlocks } from "@/lib/site-content";
 import HomeView from "./home-view";
 
+const ROUTE = "/";
 const TITLE = `${SITE_NAME} — SEO & GEO Intelligence Platform`;
 
-export const metadata: Metadata = {
-  // `absolute` opts out of the root layout's "%s — AI Marketing Lab"
-  // template, which would otherwise append the brand name a second time.
-  title:       { absolute: TITLE },
-  description: SITE_DESCRIPTION,
-  alternates:  { canonical: "/" },
-  // NOTE: metadata merges SHALLOWLY — a nested object here REPLACES the root
-  // layout's version of the same key, it does not extend it. So siteName,
-  // locale and twitter.card have to be restated even though the root sets
-  // them. Omitting card is not cosmetic: it silently downgrades the homepage
-  // from a large-image Twitter/X card to a small one, which is exactly what
-  // happened on the first deploy of this file.
-  openGraph: {
-    title:       TITLE,
-    description: SITE_DESCRIPTION,
-    url:         "/",
-    type:        "website",
-    siteName:    SITE_NAME,
-    locale:      "en_GB",
-  },
-  twitter: {
-    card:        "summary_large_image",
-    title:       TITLE,
-    description: SITE_DESCRIPTION,
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return resolveSeo({
+    route:         ROUTE,
+    title:         TITLE,
+    // The homepage title is the brand line itself, so it must not have
+    // "— AI Marketing Lab" appended by the root layout's template.
+    titleAbsolute: true,
+    description:   SITE_DESCRIPTION,
+    canonical:     "/",
+    ogType:        "website",
+  });
+}
 
-export default function Page() {
-  return <HomeView />;
+export default async function Page() {
+  const [blocks, jsonLd] = await Promise.all([
+    getContentBlocks(),
+    resolveJsonLd(ROUTE),
+  ]);
+
+  return (
+    <>
+      {/* Operator-supplied structured data. Already escaped in resolveJsonLd so
+          a value containing "</script>" cannot break out of the tag. */}
+      {jsonLd && (
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd }} />
+      )}
+      <HomeView blocks={blocks} />
+    </>
+  );
 }

@@ -9,14 +9,18 @@
 // =============================================================================
 
 import type { Metadata } from "next";
+import { resolveSeo } from "@/lib/seo-metadata";
 import { LegalShell } from "../ui/legal-shell";
 
-// Bare page name — the root layout's template appends "— AI Marketing Lab".
-export const metadata: Metadata = {
-  title:       "Terms of Service",
-  description: "Terms of Service for AI Marketing Lab during the soft-launch period.",
-  alternates:  { canonical: "/terms" },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return resolveSeo({
+    route:       "/terms",
+    // Bare page name — the root layout's template appends "— AI Marketing Lab".
+    title:       "Terms of Service",
+    description: "Terms of Service for AI Marketing Lab during the soft-launch period.",
+    canonical:   "/terms",
+  });
+}
 
 export default function TermsPage() {
   return (

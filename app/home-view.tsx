@@ -20,6 +20,7 @@ import { motion, AnimatePresence, useInView } from "framer-motion";
 import { ArrowUpRight, ArrowRight } from "lucide-react";
 import { useAuthState } from "@/app/ui/app-shell";
 import { SITE_URL, SITE_NAME, SITE_DESCRIPTION } from "@/lib/site";
+import { block } from "@/lib/site-content";
 
 const EASE_EXPO = [0.16, 1, 0.3, 1] as const;
 const CAPABILITIES = [
@@ -189,13 +190,52 @@ interface Particle {
   accent: boolean;
 }
 
+/** The headline exactly as it ships, and the hand-tuned line break for it. */
+export const HEADLINE_DEFAULT = "Rank faster with AI-driven SEO & content strategy.";
+const HEADLINE_LINES_DEFAULT = ["Rank faster", "with AI-driven", "SEO & content", "strategy."];
+
+/**
+ * Split an edited headline into four balanced lines for the particle mask.
+ *
+ * Only used when the headline has actually been changed in /admin. The shipped
+ * copy keeps its hand-tuned break above — that array places the ampersand on
+ * line 3 specifically so it cannot end a line alone, and no general-purpose
+ * wrapper is going to rediscover that. Preserving the default verbatim means
+ * this function can never alter the animation as it exists today; it only has
+ * to be reasonable for text nobody has tuned.
+ */
+export function wrapHeadline(text: string, lines = 4): string[] {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return HEADLINE_LINES_DEFAULT;
+  if (words.length <= lines) return words;
+
+  // Greedy fill against a target character width, which keeps the lines close
+  // to equal length — the property that matters for a centred particle block.
+  const target = Math.ceil(text.length / lines);
+  const out: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (current && candidate.length > target && out.length < lines - 1) {
+      out.push(current);
+      current = word;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) out.push(current);
+  return out;
+}
+
 function MasterCanvas({
-  phase, onPhaseComplete, scrollFrac, isDark,
+  phase, onPhaseComplete, scrollFrac, isDark, headline,
 }: {
   phase: MasterPhase;
   onPhaseComplete: (p: MasterPhase) => void;
   scrollFrac: React.MutableRefObject<number>;
   isDark: boolean;
+  /** Kept in step with the rendered <h1> — see the note at the hlines usage. */
+  headline: string;
 }) {
   const canvasRef  = useRef<HTMLCanvasElement>(null);
   const phaseRef   = useRef<MasterPhase>(phase);
@@ -209,6 +249,11 @@ function MasterCanvas({
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
   useEffect(() => { isDarkRef.current = isDark; }, [isDark]);
+  // Through a ref, like phase and isDark: the canvas effect deliberately does
+  // not list these in its dependencies, because re-running it would rebuild
+  // every particle and restart the intro mid-animation.
+  const headlineRef = useRef(headline);
+  useEffect(() => { headlineRef.current = headline; }, [headline]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -267,11 +312,20 @@ function MasterCanvas({
       const hsize  = dense
         ? Math.max(40, Math.min(W * 0.072, 108))
         : Math.max(30, Math.min(W * 0.115, 58));
-      // Particle headline — mirrors the site's primary H1
-      // ("Rank faster with AI-driven SEO & content strategy.") split across
-      // four lines so each glyph gets room to assemble at display size.
-      // The ampersand lives on line 3 so it can't end up alone at a line end.
-      const hlines = ["Rank faster", "with AI-driven", "SEO & content", "strategy."];
+      // Particle headline — mirrors the site's primary H1, split across four
+      // lines so each glyph gets room to assemble at display size.
+      //
+      // This text and the rendered <h1> are the SAME string, deliberately. They
+      // used to be two hardcoded copies, which was survivable while only a
+      // developer could change them; now that the headline is editable from
+      // /admin, two copies would mean the animation spelling one thing and the
+      // heading beneath it spelling another.
+      //
+      // The shipped copy keeps its hand-tuned break (the ampersand sits on line
+      // 3 so it cannot end a line alone). Anything else gets wrapped.
+      const hlines = headlineRef.current === HEADLINE_DEFAULT
+        ? HEADLINE_LINES_DEFAULT
+        : wrapHeadline(headlineRef.current);
       const hlh    = hsize * 0.9;
       const hlOff  = document.createElement("canvas");
       hlOff.width  = W; hlOff.height = H;
@@ -767,7 +821,20 @@ function FAQRow({ item }: { item: typeof FAQ_ITEMS[0] }) {
 }
 
 // Page
-export default function HomePage() {
+//
+// `blocks` is the editable-copy map, fetched server-side in app/page.tsx and
+// passed down rather than fetched here — this is a client component, and a
+// database read in it would run in the browser and arrive after first paint,
+// which is exactly the "crawlers see nothing" failure this site already had
+// once. Resolved on the server, the edited copy is in the HTML crawlers read.
+//
+// Every call site passes its own default, so an empty map renders the shipped
+// copy verbatim. See lib/site-content.ts.
+export default function HomePage({ blocks = {} }: { blocks?: Record<string, string> }) {
+  const t = (key: string, fallback: string) => block(blocks, key, fallback);
+  // Resolved once and used in two places — the particle mask and the <h1> —
+  // so an edit cannot leave the animation and the heading disagreeing.
+  const headline = t("home.hero.headline", HEADLINE_DEFAULT);
   const [count,           setCount]           = useState(0);
   const [counterVisible,  setCounterVisible]  = useState(true);
   const [phase,           setPhase]           = useState<MasterPhase>("counter");
@@ -917,7 +984,7 @@ export default function HomePage() {
       <CounterOverlay count={count} visible={counterVisible} />
 
       {showCanvas && (
-        <MasterCanvas phase={phase} onPhaseComplete={handlePhaseComplete} scrollFrac={scrollFrac} isDark={isDark} />
+        <MasterCanvas phase={phase} onPhaseComplete={handlePhaseComplete} scrollFrac={scrollFrac} isDark={isDark} headline={headline} />
       )}
 
       <div style={{ background: phase === "converge" ? "transparent" : "var(--bg)", minHeight: "100vh", position: "relative", zIndex: 1 }}>
@@ -952,7 +1019,7 @@ export default function HomePage() {
                 Keep these two in sync: if the particle text changes, change
                 this too, or the page will claim something it doesn't show. */}
             <h1 className="aiml-sr-only">
-              Rank faster with AI-driven SEO &amp; content strategy.
+              {headline}
             </h1>
 
             {/* Spacer — particles form the headline text here */}
@@ -987,17 +1054,17 @@ export default function HomePage() {
                        pointerEvents: contentVisible ? "auto" : "none" }}
             >
                   <p style={{ fontFamily: "var(--font-body)", fontSize: "clamp(14px,1.4vw,17px)", color: "var(--text-secondary)", lineHeight: 1.7, maxWidth: "420px", margin: 0 }}>
-                    GA4 and Search Console unified. AI forecasts on your real traffic. Answer-engine visibility before anyone else notices.
+                    {t("home.hero.subheadline", "GA4 and Search Console unified. AI forecasts on your real traffic. Answer-engine visibility before anyone else notices.")}
                   </p>
                   <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
                     <Link href="/dashboard" style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: 500, color: "#fff", background: "var(--brand-strong)", textDecoration: "none", padding: "13px 26px", borderRadius: "100px", transition: "opacity 0.16s" }}
                       onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "0.85"}
                       onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
-                    >Open platform <ArrowUpRight size={14} /></Link>
+                    >{t("home.hero.cta_primary", "Open platform")} <ArrowUpRight size={14} /></Link>
                     <Link href="/blog" style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: 500, color: "var(--text-primary)", background: "transparent", textDecoration: "none", padding: "13px 26px", borderRadius: "100px", border: "1px solid var(--border-strong)", transition: "border-color 0.16s, background 0.16s" }}
                       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--text-secondary)"; (e.currentTarget as HTMLElement).style.background = "var(--muted)"; }}
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border-strong)"; (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-                    >Read intelligence</Link>
+                    >{t("home.hero.cta_secondary", "Read intelligence")}</Link>
                   </div>
             </motion.div>
           </div>

@@ -31,11 +31,15 @@
 
 -- ── Admin identity ───────────────────────────────────────────────────────────
 
--- The address the owner actually signs in with. Kept alongside the existing
--- entry rather than replacing it, so applying this migration cannot lock
--- anyone out of a system they currently administer.
+-- The owner address. Already inserted by migration 011; repeated here with
+-- ON CONFLICT DO NOTHING so this migration is self-contained and can be applied
+-- to a fresh database without depending on 011 having seeded it.
+--
+-- Exactly one administrator by design. Every additional address is another way
+-- into a panel that can noindex the whole site, so the list stays at one until
+-- there is a reason for a second.
 INSERT INTO public.blog_admins (email, note)
-VALUES ('fvzj7p9f6n@privaterelay.appleid.com', 'Owner — primary sign-in')
+VALUES ('ritvik.sharmarrs@gmail.com', 'Owner — sole site administrator')
 ON CONFLICT (email) DO NOTHING;
 
 /**

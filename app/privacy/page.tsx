@@ -15,15 +15,18 @@
 // =============================================================================
 
 import type { Metadata } from "next";
+import { resolveSeo } from "@/lib/seo-metadata";
 import { LegalShell } from "../ui/legal-shell";
 
-// Title is the bare page name: the root layout's title template appends
-// "— AI Marketing Lab". Spelling the brand out here too would render it twice.
-export const metadata: Metadata = {
-  title:       "Privacy Notice",
-  description: "How AI Marketing Lab collects, uses and protects personal data under UK GDPR.",
-  alternates:  { canonical: "/privacy" },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  return resolveSeo({
+    route:       "/privacy",
+    // Bare page name — the root layout's template appends "— AI Marketing Lab".
+    title:       "Privacy Notice",
+    description: "How AI Marketing Lab collects, uses and protects personal data under UK GDPR.",
+    canonical:   "/privacy",
+  });
+}
 
 export default function PrivacyPage() {
   return (
