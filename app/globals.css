@@ -67,6 +67,14 @@
      both read this, so they cannot drift apart when it wraps on small
      phones — a mismatch hides the top of every page behind the bar. */
   --marketing-header-h: 60px;
+
+  /* The frosted bar.
+     Both headers used to define this themselves — the marketing nav at
+     blur(20px)/saturate(180%) and the app header at 16px/160% — so the effect
+     visibly changed the moment you signed in. One token, one look. The 0.73
+     alpha lives on --nav-bg in each theme so the tint follows the palette
+     while the blur does not need to. */
+  --nav-blur: blur(20px) saturate(180%);
   /* Semantic type presets */
   --h1-size:      clamp(2rem, 5vw, 3.5rem);
   --h1-tracking: -0.04em;
@@ -97,9 +105,12 @@
   --brand:         #B86D48;
   --brand-rgb:     184, 109, 72;
   --brand-strong:  #AA6442;   /* carries white text at 4.55:1 — see note above */
-  /* Wordmark. Sampled from the supplied artwork: #2e3740 on the light lockup
-     and #25b67f on the dark one — both already within a hair of the palette. */
-  --logo:          #2D3642;
+  /* Wordmark, sampled from AIML_Bright_Logo_V3: the letters are Midnight Teal
+     rather than Deep Slate — the two brand darks, deliberately. 13.45:1. */
+  --logo:          #0B232F;
+  /* The chevrons are copper in BOTH themes. That is what makes this read as
+     one lockup rather than two differently-coloured logos. */
+  --logo-accent:   #AA6442;
   --brand-glow:    rgba(184, 109, 72, 0.18);
   --bg:            #EFE9E2;
   --surface:       #F7F3EE;
@@ -110,7 +121,7 @@
   --border-strong: rgba(45,54,66,0.20);
   --border-subtle: rgba(45,54,66,0.06);
   --muted:         rgba(45,54,66,0.05);
-  --nav-bg:        rgba(239,233,226,0.90);
+  --nav-bg:        rgba(239,233,226,0.73);
   --text-primary:   #2D3642;
   --text-secondary: rgba(45,54,66,0.72);
   --text-tertiary:  rgba(45,54,66,0.60);
@@ -156,7 +167,10 @@
   --brand:         #B86D48;
   --brand-rgb:     184, 109, 72;
   --brand-strong:  #C97B54;   /* on teal, lift rather than deepen for contrast */
-  --logo:          #25b57e;
+  /* Dark lockup inverts the wordmark to Alabaster; the chevrons don't change.
+     Sampled from AIML_Dark_Logo_V3. 13.48:1. */
+  --logo:          #F0E9E1;
+  --logo-accent:   #AA6442;
   /* Dark surfaces separate with borders, not shadows — a drop shadow on
      Midnight Teal is invisible. Declared so var() never resolves to empty. */
   --shadow-card:       none;
@@ -171,7 +185,7 @@
   --border-strong: rgba(245,240,233,0.18);
   --border-subtle: rgba(245,240,233,0.05);
   --muted:         rgba(245,240,233,0.06);
-  --nav-bg:        rgba(11,35,46,0.88);
+  --nav-bg:        rgba(11,35,46,0.73);
   --text-primary:   #F5F0E9;
   --text-secondary: rgba(245,240,233,0.62);
   --text-tertiary:  rgba(245,240,233,0.42);

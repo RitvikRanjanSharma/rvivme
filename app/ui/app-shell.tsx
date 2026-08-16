@@ -363,7 +363,12 @@ const SIDEBAR_OPERATOR = [
  *
  * Vector rather than the supplied bitmaps because those are 1080px squares
  * with the background baked in — the light lockup would show a linen tile on
- * a teal page. currentColor means one file serves both themes.
+ * a teal page.
+ *
+ * Two-tone as of V3: the wordmark inverts with the theme while the chevrons
+ * stay copper in both. Keeping the accent fixed is what makes the light and
+ * dark versions read as one mark rather than two logos that happen to share a
+ * shape, so it is a token of its own rather than currentColor.
  */
 function Wordmark({ size = 20 }: { size?: number }) {
   // Height drives the scale; the 3.46:1 ratio comes from the artwork.
@@ -384,8 +389,8 @@ function Wordmark({ size = 20 }: { size?: number }) {
       {/* L — foot runs under the chevrons */}
       <path d="M525 0h42v160h57v29H525Z" fill="currentColor" />
       {/* Two ascending chevrons, seated in the crook of the L */}
-      <path d="M594 75 624 55l30 20v20l-30-20-30 20Z" fill="currentColor" />
-      <path d="M594 117 624 97l30 20v20l-30-20-30 20Z" fill="currentColor" />
+      <path d="M594 75 624 55l30 20v20l-30-20-30 20Z" fill="var(--logo-accent)" />
+      <path d="M594 117 624 97l30 20v20l-30-20-30 20Z" fill="var(--logo-accent)" />
     </svg>
   );
 }
@@ -593,8 +598,8 @@ function MarketingHeader() {
         height: "var(--marketing-header-h, 60px)", display: "flex", alignItems: "center",
         justifyContent: "space-between", padding: "0 32px",
         background:      scrolled ? "var(--nav-bg)"                    : "transparent",
-        backdropFilter:  scrolled ? "blur(20px) saturate(180%)"        : "none",
-        WebkitBackdropFilter: scrolled ? "blur(20px) saturate(180%)"   : "none",
+        backdropFilter:       scrolled ? "var(--nav-blur)" : "none",
+        WebkitBackdropFilter: scrolled ? "var(--nav-blur)" : "none",
         borderBottom:    scrolled ? "1px solid var(--border)"          : "1px solid transparent",
         transition: "background var(--dur-base), border-color var(--dur-base), backdrop-filter var(--dur-base)",
       }}
@@ -715,8 +720,9 @@ function AppHeader({
         height: "56px", display: "flex", alignItems: "center",
         justifyContent: "space-between", padding: "0 20px",
         background: "var(--nav-bg)",
-        backdropFilter: "blur(16px) saturate(160%)",
-        WebkitBackdropFilter: "blur(16px) saturate(160%)",
+        // Same token as the marketing header — see --nav-blur.
+        backdropFilter:       "var(--nav-blur)",
+        WebkitBackdropFilter: "var(--nav-blur)",
         borderBottom: "1px solid var(--border)",
       }}
     >
