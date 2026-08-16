@@ -13,6 +13,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { identifyCrawler } from "@/lib/ai-crawlers";
+import { getCachedRedirects, matchRedirect } from "@/lib/redirect-cache";
 
 const PROTECTED_PREFIXES = [
   "/dashboard", "/keywords", "/competitors", "/settings",
@@ -24,6 +25,10 @@ const PROTECTED_PREFIXES = [
   "/alerts", "/audit",
   // Strategist surfaces
   "/opportunities", "/geo", "/local",
+  // Operator panel. The real gate is is_site_admin() in the database, checked
+  // in app/admin/layout.tsx — this only saves an anonymous visitor from being
+  // shown an authorisation error where a login prompt is the useful response.
+  "/admin",
 ];
 const AUTH_ROUTES        = ["/auth/login", "/auth/signup"];
 
@@ -78,6 +83,35 @@ export async function proxy(request: NextRequest) {
   // Runs first and never throws, so a crawler hit is recorded even when the
   // request is about to be redirected away from a protected route.
   logCrawlerVisit(request);
+
+  // ── Operator redirects ─────────────────────────────────────────────────────
+  // Before auth, because a redirect should apply whether or not someone is
+  // signed in — a moved page has moved for everybody.
+  //
+  // Skipped entirely for assets and API calls. Those are the overwhelming
+  // majority of requests, they are never the target of a "we moved this page"
+  // rule, and skipping them keeps this off the hot path.
+  const path = request.nextUrl.pathname;
+  if (!path.startsWith("/_next/") && !path.startsWith("/api/") && !path.includes(".")) {
+    try {
+      const rules = await getCachedRedirects();
+      const hit   = matchRedirect(rules, path);
+      if (hit) {
+        const destination = hit.destination.startsWith("http")
+          ? new URL(hit.destination)
+          : new URL(hit.destination, request.nextUrl.origin);
+        // Query strings are carried across: dropping them would break every
+        // campaign link and every ?utm_ tag pointing at the old URL.
+        for (const [k, v] of request.nextUrl.searchParams) {
+          if (!destination.searchParams.has(k)) destination.searchParams.append(k, v);
+        }
+        return NextResponse.redirect(destination, hit.status_code);
+      }
+    } catch {
+      // A redirect lookup failing must never take down the request. Worst case
+      // the old URL 404s, which is what it did before anyone added a rule.
+    }
+  }
 
   const url     = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
