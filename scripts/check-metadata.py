@@ -224,6 +224,55 @@ for page in pages:
                 )
 
 
+# ── 5b: shallow-merge completeness of openGraph / twitter ─────────────────────
+# Next merges metadata SHALLOWLY: a nested object in a child segment REPLACES
+# the parent's object of the same name rather than extending it. So a page that
+# sets `twitter: { title, description }` silently discards the root layout's
+# `card: "summary_large_image"` and drops to a small card, and a page that sets
+# its own `openGraph` loses siteName and locale.
+#
+# This is invisible in review — the child looks like it is adding two fields —
+# and invisible in the app. It only shows up in a link preview. It shipped once
+# on the homepage, hence this check.
+REQUIRED_IN_BLOCK = {
+    "openGraph": ["siteName", "locale"],
+    "twitter":   ["card"],
+}
+
+def nested_block(src: str, key: str) -> str | None:
+    """Return the text of `key: { ... }`, or None if absent."""
+    m = re.search(rf"\b{re.escape(key)}\s*:\s*\{{", src)
+    if not m:
+        return None
+    depth, j = 1, m.end()
+    while j < len(src) and depth:
+        if src[j] == "{":
+            depth += 1
+        elif src[j] == "}":
+            depth -= 1
+        j += 1
+    return src[m.end():j]
+
+for f in sorted(list(APP.rglob("page.tsx")) + list(APP.rglob("layout.tsx"))):
+    if f == root_layout:
+        continue  # the root IS the baseline
+    raw = read(f)
+    if not declares_metadata(raw):
+        continue
+    s = strip_comments(raw)
+    for key, required in REQUIRED_IN_BLOCK.items():
+        blk = nested_block(s, key)
+        if blk is None:
+            continue  # not overriding it — inherits the root's intact
+        for field in required:
+            if not re.search(rf"\b{field}\s*:", blk):
+                problems.append(
+                    f"{f.relative_to(ROOT)} — overrides `{key}` but omits `{field}`. "
+                    f"Metadata merges shallowly, so this replaces the root layout's "
+                    f"`{key}` entirely and `{field}` is lost."
+                )
+
+
 # ── 5: canonicals only on crawlable routes ────────────────────────────────────
 robots_src = strip_comments(read(APP / "robots.ts"))
 disallowed = re.findall(r'["\'](/[a-z0-9\-/]*)["\']', robots_src.split("disallow")[1]) if "disallow" in robots_src else []

@@ -20,12 +20,17 @@ export const metadata: Metadata = {
   description:
     "Strategy analysis, technical guides and growth insights on SEO, answer-engine visibility and GEO for UK businesses.",
   alternates:  { canonical: "/blog" },
+  // Restated rather than inherited: metadata merges shallowly, so this object
+  // REPLACES the root layout's openGraph wholesale. siteName and locale would
+  // otherwise silently disappear from the blog index's link previews.
   openGraph: {
     title:       "Blog — AI Marketing Lab",
     description:
       "Strategy analysis, technical guides and growth insights on SEO, answer-engine visibility and GEO for UK businesses.",
     url:         "/blog",
     type:        "website",
+    siteName:    "AI Marketing Lab",
+    locale:      "en_GB",
   },
 };
 

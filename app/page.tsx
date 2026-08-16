@@ -23,13 +23,22 @@ export const metadata: Metadata = {
   title:       { absolute: TITLE },
   description: SITE_DESCRIPTION,
   alternates:  { canonical: "/" },
+  // NOTE: metadata merges SHALLOWLY — a nested object here REPLACES the root
+  // layout's version of the same key, it does not extend it. So siteName,
+  // locale and twitter.card have to be restated even though the root sets
+  // them. Omitting card is not cosmetic: it silently downgrades the homepage
+  // from a large-image Twitter/X card to a small one, which is exactly what
+  // happened on the first deploy of this file.
   openGraph: {
     title:       TITLE,
     description: SITE_DESCRIPTION,
     url:         "/",
     type:        "website",
+    siteName:    SITE_NAME,
+    locale:      "en_GB",
   },
   twitter: {
+    card:        "summary_large_image",
     title:       TITLE,
     description: SITE_DESCRIPTION,
   },
