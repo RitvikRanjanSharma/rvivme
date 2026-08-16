@@ -19,6 +19,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getCallerOrNull } from "@/lib/supabase-server";
 import { runAudit, type AuditResult } from "@/lib/site-audit";
 import { checkAndIncrement } from "@/lib/quota";
+import { enrich, byImpact } from "@/lib/audit-guide";
 import type { Database } from "@/lib/supabase";
 
 type FindingInsert = Database["public"]["Tables"]["audit_findings"]["Insert"];
@@ -165,7 +166,12 @@ export async function POST(req: NextRequest) {
   const warnings = result.findings.filter(f => f.severity === "warning").length;
   const notices  = result.findings.filter(f => f.severity === "notice").length;
 
-  await caller.supabase
+  // The result of this update used to be discarded. If it failed — and it did,
+  // on a float being written to an INTEGER column — the row kept its
+  // insert-time defaults while the findings insert below still succeeded, so a
+  // finished audit rendered as "0 pages crawled, score 0" with a full list of
+  // findings underneath it. A write that can half-succeed must be checked.
+  const { error: updateErr } = await caller.supabase
     .from("site_audits")
     .update({
       status:               "completed",
@@ -188,6 +194,19 @@ export async function POST(req: NextRequest) {
       completed_at:         new Date().toISOString(),
     } as never)
     .eq("id", auditRow.id);
+
+  if (updateErr) {
+    await caller.supabase
+      .from("site_audits")
+      .update({ status: "failed", error_message: `summary write failed: ${updateErr.message}`, completed_at: new Date().toISOString() } as never)
+      .eq("id", auditRow.id);
+    return NextResponse.json({
+      success: false,
+      reason:  "save_failed",
+      message: `The scan finished but the result couldn't be saved: ${updateErr.message}`,
+      error:   updateErr.message,
+    }, { status: 500 });
+  }
 
   if (result.findings.length) {
     // Explicit FindingInsert[] typing — same Supabase v12 typing quirk that
@@ -228,12 +247,40 @@ export async function GET() {
     return NextResponse.json({ success: true, audit: null, findings: [] });
   }
 
+  // A run that was killed mid-flight leaves status "running" forever: the
+  // process died, so no catch block wrote a failure. Presenting that as a
+  // finished audit is how "0 pages crawled, score 0" appeared next to a full
+  // findings list. Anything still running after this long is dead.
+  const STALL_MINUTES = 5;
+  const row = latestRes.data as { id: string; status?: string; started_at?: string } | null;
+  const stalled =
+    row?.status === "running" &&
+    !!row.started_at &&
+    Date.now() - new Date(row.started_at).getTime() > STALL_MINUTES * 60_000;
+
   const findingsRes = await caller.supabase
     .from("audit_findings")
     .select("*")
     .eq("audit_id", latest.id)
     .order("severity", { ascending: true });
-  const findings = findingsRes.data ?? [];
+  // Reasoning is attached on READ, not stored per row.
+  //
+  // RULE_GUIDE is static and keyed by rule id, so persisting a copy of it
+  // alongside every finding would duplicate the text, freeze old audits with
+  // whatever wording shipped that day, and need a migration to add the columns.
+  // Enriching here means improving an explanation improves every past audit
+  // too, and nothing about the schema has to change.
+  const findings = ((findingsRes.data ?? []) as Array<{ rule: string; severity?: string }>)
+    .map(enrich)
+    .sort(byImpact);
 
-  return NextResponse.json({ success: true, audit: latestRes.data, findings });
+  return NextResponse.json({
+    success: true,
+    audit:   latestRes.data,
+    findings,
+    // Surfaced separately from `audit` so the UI can say the last run didn't
+    // finish rather than reporting its placeholder numbers as results.
+    stalled,
+    running: row?.status === "running" && !stalled,
+  });
 }

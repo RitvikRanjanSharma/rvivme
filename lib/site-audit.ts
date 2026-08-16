@@ -22,7 +22,8 @@
 // =============================================================================
 
 import { originCandidates, fetchText } from "@/lib/site-fetch";
-import { parseRobots } from "@/lib/ai-crawlers";
+import { parseRobots, scoreAnswerReadiness } from "@/lib/ai-crawlers";
+import { enrich, byImpact } from "@/lib/audit-guide";
 
 export type Severity  = "error" | "warning" | "notice";
 export type Category  =
@@ -36,6 +37,20 @@ export type Finding = {
   page_url?: string;
   message:  string;
   detail?:  Record<string, unknown>;
+  /**
+   * Why this matters and what to do — filled from RULE_GUIDE, not per finding.
+   *
+   * Every other analysis surface in this product explains itself: Opportunities
+   * carries evidence chains, Answer engines and Local carry a `why` on each
+   * check. Site audit was the exception, and it is the one a customer would
+   * call "the audit" — so the flagship surface was the only one behaving like
+   * every other SEO tool. "Page has only ~57 words" states a fact; it doesn't
+   * tell anyone whether to care.
+   */
+  why?:     string;
+  fix?:     string;
+  /** 0-100. Drives ordering — see IMPACT in RULE_GUIDE. */
+  impact?:  number;
 };
 
 export type AuditResult = {
@@ -125,7 +140,8 @@ export async function runAudit(domain: string): Promise<AuditResult> {
   }
 
   // Run on-page checks on the homepage.
-  findings.push(...checkOnPage(baseUrl, homepageHtml.html));
+  const pageFacts: PageFacts[] = [];
+  findings.push(...checkOnPage(baseUrl, homepageHtml.html, pageFacts));
 
   // Pick up to 8 same-origin links from the homepage and audit them too —
   // excluding anything robots.txt tells crawlers to leave alone. See
@@ -147,9 +163,38 @@ export async function runAudit(domain: string): Promise<AuditResult> {
       });
       continue;
     }
-    findings.push(...checkOnPage(link, sub.html));
+    findings.push(...checkOnPage(link, sub.html, pageFacts));
   }
   const pagesCrawled = 1 + sameOriginLinks.length;
+
+  // ── Answer-engine readiness ───────────────────────────────────────────────
+  // This scoring already existed and ran only on the Answer engines page, so
+  // the surface everyone calls "the audit" contained no AEO/GEO content at all.
+  // Same nine weighted checks, folded in here as findings, so one report
+  // covers search engines and answer engines rather than splitting them across
+  // two pages a user has to know to visit.
+  const readiness = scoreAnswerReadiness(homepageHtml.html, baseUrl);
+  meta.answer_readiness = { score: readiness.score };
+  for (const check of readiness.checks) {
+    if (check.passed) continue;
+    findings.push({
+      rule:     `aeo_${check.id}`,
+      severity: check.weight >= 3 ? "warning" : "notice",
+      category: "content",
+      message:  `Answer engines: ${check.label.toLowerCase()}.`,
+      page_url: baseUrl,
+      detail:   { detail: check.detail, weight: check.weight },
+      // The readiness checks already carry their own reasoning, so they bring
+      // it with them instead of needing an entry in RULE_GUIDE.
+      why:      check.why,
+      fix:      check.detail ?? undefined,
+      impact:   Math.min(100, 30 + check.weight * 12),
+    });
+  }
+
+  // Cross-page checks need every page collected first.
+  findings.push(...checkAcrossPages(pageFacts));
+  meta.pages = pageFacts.map(f => f.url);
 
   // 4. PageSpeed Insights — homepage only for v1.
   const psi = await fetchPSI(baseUrl);
@@ -184,9 +229,45 @@ export async function runAudit(domain: string): Promise<AuditResult> {
 // ---------------------------------------------------------------------------
 // On-page checks for one HTML document. Pure function — easy to unit test.
 // ---------------------------------------------------------------------------
-function checkOnPage(url: string, html: string): Finding[] {
+/** What one page told us, kept so cross-page checks can compare them. */
+export type PageFacts = {
+  url:         string;
+  title:       string | null;
+  description: string | null;
+  canonical:   string | null;
+  noindex:     boolean;
+  headings:    number[];   // heading levels in document order
+};
+
+function checkOnPage(url: string, html: string, collect?: PageFacts[]): Finding[] {
   const findings: Finding[] = [];
   const head = extractHead(html);
+
+  // ── Indexability ─────────────────────────────────────────────────────────
+  // A page can be excluded three different ways — a robots meta tag, a
+  // canonical pointing elsewhere, or absence from the sitemap — and they are
+  // routinely set by different people at different times. The failure mode
+  // that matters is a page you are actively trying to rank quietly carrying a
+  // noindex from a staging config.
+  const robotsMeta = extractFirst(head, /<meta[^>]+name=["']robots["'][^>]+content=["']([^"']+)["']/i)
+                  ?? extractFirst(head, /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']robots["']/i);
+  const noindex = /noindex/i.test(robotsMeta ?? "");
+  if (noindex) {
+    findings.push(of("noindex_page", "error", "technical",
+      "Page asks search engines not to index it (robots meta: noindex).", url,
+      { robots_meta: robotsMeta }));
+  }
+
+  // ── Heading hierarchy ────────────────────────────────────────────────────
+  const headings = [...html.matchAll(/<h([1-6])[\s>]/gi)].map(m => Number(m[1]));
+  for (let i = 1; i < headings.length; i++) {
+    if (headings[i] - headings[i - 1] > 1) {
+      findings.push(of("heading_skip", "notice", "on_page",
+        `Heading level jumps from h${headings[i - 1]} to h${headings[i]}.`, url,
+        { from: headings[i - 1], to: headings[i] }));
+      break;   // one report per page; the pattern matters, not every instance
+    }
+  }
 
   // Title
   const title = extractFirst(head, /<title[^>]*>([\s\S]*?)<\/title>/i)?.trim();
@@ -274,6 +355,65 @@ function checkOnPage(url: string, html: string): Finding[] {
       { word_count: wordCount }));
   }
 
+  // Record what this page claimed, so cross-page checks can compare. Duplicate
+  // titles and descriptions cannot be seen one page at a time — the whole
+  // point is that two pages say the same thing.
+  if (collect) {
+    collect.push({
+      url,
+      title:       extractFirst(head, /<title[^>]*>([\s\S]*?)<\/title>/i)?.trim() ?? null,
+      description: extractFirst(head, /<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i)?.trim() ?? null,
+      canonical:   extractFirst(head, /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i) ?? null,
+      noindex,
+      headings,
+    });
+  }
+
+  return findings;
+}
+
+/**
+ * Checks that only make sense across the whole crawl.
+ *
+ * Two pages with the same title are competing with each other for the same
+ * query — Google picks one and the other's signals are wasted. It is invisible
+ * to any per-page check, which is why most lightweight audits miss it.
+ */
+function checkAcrossPages(facts: PageFacts[]): Finding[] {
+  const findings: Finding[] = [];
+  const group = (pick: (f: PageFacts) => string | null) => {
+    const by = new Map<string, string[]>();
+    for (const f of facts) {
+      const v = pick(f)?.toLowerCase().trim();
+      if (!v) continue;
+      by.set(v, [...(by.get(v) ?? []), f.url]);
+    }
+    return [...by.entries()].filter(([, urls]) => urls.length > 1);
+  };
+
+  for (const [title, urls] of group(f => f.title)) {
+    findings.push(of("duplicate_title", "warning", "on_page",
+      `${urls.length} pages share the title "${title}".`, urls[0],
+      { title, pages: urls }));
+  }
+  for (const [desc, urls] of group(f => f.description)) {
+    findings.push(of("duplicate_meta_description", "notice", "on_page",
+      `${urls.length} pages share the same meta description.`, urls[0],
+      { description: desc.slice(0, 120), pages: urls }));
+  }
+
+  // A canonical pointing at a page that is itself noindexed sends contradictory
+  // instructions: "this is the version to index" and "don't index it".
+  const noindexed = new Set(facts.filter(f => f.noindex).map(f => f.url.replace(/\/+$/, "")));
+  for (const f of facts) {
+    if (!f.canonical || f.noindex) continue;
+    if (noindexed.has(f.canonical.replace(/\/+$/, ""))) {
+      findings.push(of("canonical_to_noindex", "error", "technical",
+        "Canonical URL points at a page marked noindex.", f.url,
+        { canonical: f.canonical }));
+    }
+  }
+
   return findings;
 }
 
@@ -341,9 +481,19 @@ function extractInternalLinks(baseUrl: string, html: string): string[] {
   return [...out].filter(l => norm(l) !== home);
 }
 
+/** Per-page fetch budget. A slow page should cost one check, not the run. */
+const PAGE_TIMEOUT_MS = 8_000;
+/** PageSpeed budget. Generous, because a real Lighthouse run takes ~20s. */
+const PSI_TIMEOUT_MS  = 35_000;
+
 async function safeFetchHtml(url: string): Promise<{ ok: true; html: string; status: number } | { ok: false; error: string; status?: number }> {
+  // Without a timeout a single request that hangs rather than fails stalls the
+  // whole function until the platform kills the process — and a killed process
+  // runs no catch block, so the audit row is left saying "running" forever with
+  // no error recorded. That is exactly how a run died at 02:46.
   try {
     const res = await fetch(url, {
+      signal:   AbortSignal.timeout(PAGE_TIMEOUT_MS),
       headers:  { "User-Agent": "AIMarketingLabBot/1.0 (+https://aimarketinglab.co.uk/bot)" },
       redirect: "follow",
       // Next.js's fetch types now include `next.revalidate` on RequestInit
@@ -356,7 +506,10 @@ async function safeFetchHtml(url: string): Promise<{ ok: true; html: string; sta
     const html = await res.text();
     return { ok: true, html, status: res.status };
   } catch (e: any) {
-    return { ok: false, error: e?.message ?? "fetch error" };
+    const msg = e?.name === "TimeoutError"
+      ? `no response within ${PAGE_TIMEOUT_MS / 1000}s`
+      : e?.message ?? "fetch error";
+    return { ok: false, error: msg };
   }
 }
 
@@ -427,9 +580,16 @@ async function fetchPSI(url: string) {
   }
 
   try {
+    // PSI runs a real Lighthouse pass, so it is slow by nature — and keyless it
+    // is rate-limited, at which point it stalls instead of erroring. It is the
+    // single most likely thing to hang in this whole module, and it produces
+    // the least essential part of the report, so it gets a hard ceiling.
     const res = await fetch(
       `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?${params.toString()}`,
-      { headers: { "User-Agent": "AIMarketingLabBot/1.0" } },
+      {
+        signal:  AbortSignal.timeout(PSI_TIMEOUT_MS),
+        headers: { "User-Agent": "AIMarketingLabBot/1.0" },
+      },
     );
     if (!res.ok) return { ok: false as const };
     const data = await res.json();
@@ -441,9 +601,19 @@ async function fetchPSI(url: string) {
       best_practices: cats["best-practices"] ? Math.round((cats["best-practices"].score ?? 0) * 100) : null,
       seo:            cats.seo              ? Math.round((cats.seo.score              ?? 0) * 100) : null,
     };
-    const lcp_ms = audits["largest-contentful-paint"]?.numericValue ?? null;
-    const cls    = audits["cumulative-layout-shift"]?.numericValue ?? null;
-    const inp_ms = audits["interaction-to-next-paint"]?.numericValue ?? null;
+    // numericValue is a float; lcp_ms and inp_ms are INTEGER columns. Writing
+    // 2345.67 into one makes Postgres reject the whole UPDATE — and since that
+    // update's error was being discarded, the audit row silently kept its
+    // insert-time defaults while the findings insert that followed succeeded.
+    // That is how a completed run could display as "0 pages crawled".
+    const round = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.round(v) : null);
+    const lcp_ms = round(audits["largest-contentful-paint"]?.numericValue);
+    const inp_ms = round(audits["interaction-to-next-paint"]?.numericValue);
+    // cls is NUMERIC(6,3) so it keeps decimals, but must fit three of them.
+    const rawCls = audits["cumulative-layout-shift"]?.numericValue;
+    const cls    = typeof rawCls === "number" && Number.isFinite(rawCls)
+      ? Number(rawCls.toFixed(3))
+      : null;
     return { ok: true as const, scores, lcp_ms, cls, inp_ms };
   } catch {
     return { ok: false as const };
@@ -470,6 +640,11 @@ function assemble(
     seen.add(key);
     return true;
   });
+
+  // Attach the reasoning, then order by likely return rather than by severity.
+  // A missing <h1> is an error, but on a page nobody searches for it matters
+  // less than a weak title on the page already collecting impressions.
+  findings = findings.map(enrich).sort(byImpact);
 
   // Score: weight on-page + technical heavily, performance medium, accessibility & schema light.
   const errors   = findings.filter(f => f.severity === "error").length;
