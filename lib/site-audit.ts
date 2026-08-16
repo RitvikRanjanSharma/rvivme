@@ -22,6 +22,7 @@
 // =============================================================================
 
 import { originCandidates, fetchText } from "@/lib/site-fetch";
+import { parseRobots } from "@/lib/ai-crawlers";
 
 export type Severity  = "error" | "warning" | "notice";
 export type Category  =
@@ -120,14 +121,20 @@ export async function runAudit(domain: string): Promise<AuditResult> {
       page_url: baseUrl,
       detail:   { error: homepageHtml.error },
     });
-    return assemble(domain, findings, meta, null, 0);
+    return assemble(baseUrl, findings, meta, null, 0);
   }
 
   // Run on-page checks on the homepage.
   findings.push(...checkOnPage(baseUrl, homepageHtml.html));
 
-  // Pick up to 8 same-origin links from the homepage and audit them too.
-  const sameOriginLinks = extractInternalLinks(baseUrl, homepageHtml.html).slice(0, 8);
+  // Pick up to 8 same-origin links from the homepage and audit them too —
+  // excluding anything robots.txt tells crawlers to leave alone. See
+  // isAuditable for why that matters more than it sounds.
+  const allLinks   = extractInternalLinks(baseUrl, homepageHtml.html);
+  const auditable  = allLinks.filter(l => isAuditable(l, baseUrl, robots.disallow));
+  const skipped    = allLinks.length - auditable.length;
+  const sameOriginLinks = auditable.slice(0, 8);
+  meta.crawl = { discovered: allLinks.length, audited: sameOriginLinks.length, skipped_disallowed: skipped };
   for (const link of sameOriginLinks) {
     const sub = await safeFetchHtml(link);
     if (!sub.ok) {
@@ -168,7 +175,10 @@ export async function runAudit(domain: string): Promise<AuditResult> {
     }
   }
 
-  return assemble(domain, findings, meta, psi.ok ? psi : null, pagesCrawled);
+  // baseUrl, not domain: the summary must show the host we actually crawled.
+  // They differ whenever the apex/www fallback fires, and reporting the
+  // requested host next to findings on a different one is quietly confusing.
+  return assemble(baseUrl, findings, meta, psi.ok ? psi : null, pagesCrawled);
 }
 
 // ---------------------------------------------------------------------------
@@ -320,8 +330,15 @@ function extractInternalLinks(baseUrl: string, html: string): string[] {
       out.add(abs.toString().split("#")[0]);
     } catch { /* malformed href */ }
   }
-  out.delete(baseUrl);
-  return [...out];
+  // The homepage must not be audited twice. `out.delete(baseUrl)` used to miss
+  // it: baseUrl has no trailing slash ("https://x.co.uk") while new URL("/")
+  // produces one ("https://x.co.uk/"), so the strings never matched. The logo
+  // links to "/" on every page, so the homepage was crawled a second time —
+  // which is where the duplicate Open Graph notices came from, and it burned
+  // one of the eight crawl slots.
+  const norm = (v: string) => v.replace(/\/+$/, "");
+  const home = norm(baseUrl);
+  return [...out].filter(l => norm(l) !== home);
 }
 
 async function safeFetchHtml(url: string): Promise<{ ok: true; html: string; status: number } | { ok: false; error: string; status?: number }> {
@@ -344,16 +361,47 @@ async function safeFetchHtml(url: string): Promise<{ ok: true; html: string; sta
 }
 
 async function fetchRobotsTxt(baseUrl: string) {
+  const empty = { found: false, sitemap: null as string | null, disallowsAll: false, disallow: [] as string[] };
   try {
     const res = await fetch(`${baseUrl}/robots.txt`);
-    if (!res.ok) return { found: false, sitemap: null as string | null, disallowsAll: false };
+    if (!res.ok) return empty;
     const txt = await res.text();
     const sitemap = txt.split(/\r?\n/).find(l => /^\s*Sitemap:/i.test(l))?.split(/:/i).slice(1).join(":").trim() || null;
-    const disallowsAll = /^\s*User-agent:\s*\*\s*$[\s\S]*?^\s*Disallow:\s*\/\s*$/im.test(txt);
-    return { found: true, sitemap, disallowsAll };
+
+    // Reuse the parser written for the answer-engine audit rather than a
+    // second regex. It already implements the group semantics correctly,
+    // including that consecutive User-agent lines share the rules below them.
+    const wildcard = parseRobots(txt).find(g => g.agents.includes("*"));
+    const disallow = (wildcard?.disallow ?? []).filter(d => d !== "");
+
+    return { found: true, sitemap, disallowsAll: disallow.includes("/"), disallow };
   } catch {
-    return { found: false, sitemap: null as string | null, disallowsAll: false };
+    return empty;
   }
+}
+
+/**
+ * Should this URL be audited?
+ *
+ * The crawler used to take the first eight same-origin links off the homepage
+ * and check them all — including /dashboard, /auth/login and /auth/signup,
+ * every one of them Disallow'd in the site's own robots.txt and sitting behind
+ * authentication.
+ *
+ * That produced the worst possible output: two red ERRORs for a missing <h1>
+ * on pages that can never be indexed, plus thin-content and Open Graph
+ * complaints about a signed-out app shell. All true statements, all
+ * meaningless, and they crowded out the four findings that mattered. A report
+ * that is half noise is worse than a shorter one, because the reader stops
+ * trusting the half that isn't.
+ *
+ * If the site tells crawlers not to look at a page, we don't audit it either.
+ */
+function isAuditable(url: string, baseUrl: string, disallow: string[]): boolean {
+  if (disallow.length === 0) return true;
+  let path: string;
+  try { path = new URL(url, baseUrl).pathname; } catch { return false; }
+  return !disallow.some(rule => path.startsWith(rule));
 }
 
 async function fetchSitemap(url: string) {
@@ -409,6 +457,20 @@ function assemble(
   psi: { scores: { performance: number | null; accessibility: number | null; best_practices: number | null; seo: number | null }; lcp_ms: number | null; cls: number | null; inp_ms: number | null } | null,
   pagesCrawled: number,
 ): AuditResult {
+  // Collapse duplicates before scoring.
+  //
+  // The same rule firing twice on one page is one problem, not two, and the
+  // score penalises per finding — so a page reached by two URL spellings
+  // (trailing slash, index path) would drag the score down twice for a single
+  // fault. Keyed on rule + normalised URL so "…/blog" and "…/blog/" count once.
+  const seen = new Set<string>();
+  findings = findings.filter(f => {
+    const key = `${f.rule}::${(f.page_url ?? "").replace(/\/+$/, "")}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
   // Score: weight on-page + technical heavily, performance medium, accessibility & schema light.
   const errors   = findings.filter(f => f.severity === "error").length;
   const warnings = findings.filter(f => f.severity === "warning").length;

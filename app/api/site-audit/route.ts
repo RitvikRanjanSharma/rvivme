@@ -169,6 +169,9 @@ export async function POST(req: NextRequest) {
     .from("site_audits")
     .update({
       status:               "completed",
+      // runAudit resolves apex vs www; store what it actually crawled so the
+      // summary line and the finding URLs agree.
+      domain:               result.domain,
       overall_score:        result.overall_score,
       pages_crawled:        result.pages_crawled,
       errors_count:         errors,
