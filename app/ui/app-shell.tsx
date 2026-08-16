@@ -302,7 +302,12 @@ const isAppRoute  = (p: string) =>
   p.startsWith("/strategies")  ||
   p.startsWith("/alerts")      || p.startsWith("/audit")      ||
   p.startsWith("/opportunities") || p.startsWith("/geo") || p.startsWith("/local") ||
-  p.startsWith("/onboarding");
+  p.startsWith("/onboarding") ||
+  // /admin is an application surface, not a marketing page. Without this it
+  // renders inside the public header — so the operator panel showed a "Home /
+  // Blog / Dashboard" nav and no sidebar, and the Site admin link was
+  // unreachable from the very page it points at.
+  p.startsWith("/admin");
 const isAuthRoute = (p: string) => p.startsWith("/auth");
 
 // ─── Nav definitions ──────────────────────────────────────────────────────────
