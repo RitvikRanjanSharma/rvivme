@@ -1,11 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="AI Marketing Lab">
+<!--
+  app/icon.svg — AI Marketing Lab favicon / tab icon
+  ============================================================================
+  Replaces the pre-rebrand "AIML" monogram (near-black bg, brand-blue stroke
+  text). At 16px — the size browsers and Google's SERP favicon fetcher
+  actually render — the fine letterforms vanished and only the bold
+  triangular stroke of the "A" survived, reading as a plain dark triangle:
+  a solid, closed shape on a near-black square, which happens to be exactly
+  Vercel's brand mark. Coincidence of geometry, not a real association.
+
+  This icon is the two ascending chevrons cut directly from the wordmark
+  (app/ui/app-shell.tsx, Wordmark component) — same path data, just framed
+  on their own with room to breathe. No background box: transparent, so it
+  sits correctly in both light and dark browser chrome. A chevron is an
+  open, notched shape, so even at 16px it can't be mistaken for a solid
+  triangle.
+============================================================================ -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="556 28 136 136" width="64" height="64" role="img" aria-label="AI Marketing Lab">
   <title>AI Marketing Lab</title>
-  <rect width="64" height="64" rx="14" fill="#111111"/>
-  <g fill="none" stroke="#F8F8F5" stroke-width="4.4" stroke-linecap="square" stroke-linejoin="miter">
-    <path d="M15 30 L21.5 14 L28 30"/>
-    <path d="M17.6 24.6 L25.4 24.6"/>
-    <path d="M38 14 L38 30"/>
-    <path d="M13 50 L13 34 L21.5 45 L30 34 L30 50"/>
-    <path d="M38 34 L38 50 L50 50"/>
-  </g>
+  <path d="M594 75 624 55l30 20v20l-30-20-30 20Z" fill="#AA6442"/>
+  <path d="M594 117 624 97l30 20v20l-30-20-30 20Z" fill="#AA6442"/>
 </svg>
