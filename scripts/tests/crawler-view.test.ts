@@ -10,7 +10,7 @@
 import assert from "node:assert";
 import {
   visibleText, countWords, looksLikeEmptyShell, hasNoscriptWarning,
-  normaliseUrl, snapshotFrom, analyse, inspectAsCrawler,
+  normaliseUrl, snapshotFrom, analyse, inspectAsCrawler, looksLikeSignIn,
   CRAWLER_AGENTS, DEFAULT_AGENT,
 } from "../../lib/ai-crawler-view";
 
@@ -185,6 +185,50 @@ test("default agent is the search bot, not the training bot", () => {
   // blocking training is a legitimate choice with no effect on citation.
   assert.strictEqual(DEFAULT_AGENT, "OAI-SearchBot");
   assert.ok(CRAWLER_AGENTS["GPTBot"].note.toLowerCase().includes("training"));
+});
+
+// ─── pages that were never meant to be crawled ───────────────────────────────
+// Regression tests for a false positive found on the deployed site: checking
+// /dashboard reported "content is assembled by JavaScript, server-render it"
+// about a login-gated, robots-disallowed page. Both the crawler and the browser
+// received the SAME six words — the sign-in screen — so it was never a
+// rendering problem at all.
+
+const SIGNIN_HTML = `<html><head><title>Sign in — AI Marketing Lab</title></head><body><p>Sign in to continue</p></body></html>`;
+
+test("a robots-disallowed page is reported as excluded, not broken", () => {
+  const snap = snapshotFrom(SIGNIN_HTML, 200, true, null, "https://x.test/dashboard");
+  const r = analyse("https://x.test/dashboard", DEFAULT_AGENT, snap, snap, true);
+  assert.strictEqual(r.verdict, "ok", "an intentionally excluded page is not a failure");
+  assert.ok(r.findings.some(f => f.rule === "excluded_by_robots"));
+  assert.ok(!r.findings.some(f => f.rule === "js_rendered_content"),
+    "must NOT tell the user to server-render a page no crawler will fetch");
+});
+
+test("a login redirect is reported as a login, not as a JS shell", () => {
+  const snap = snapshotFrom(SIGNIN_HTML, 200, true, null, "https://x.test/auth/login");
+  const r = analyse("https://x.test/dashboard", DEFAULT_AGENT, snap, snap, false);
+  assert.strictEqual(r.verdict, "ok");
+  assert.ok(r.findings.some(f => f.rule === "requires_sign_in"));
+  assert.ok(!r.findings.some(f => f.rule === "js_rendered_content"));
+});
+
+test("looksLikeSignIn does not fire on an auth page requested directly", () => {
+  // Asking "what does the crawler see on my login page" should report on the
+  // login page, not announce that it redirected to itself.
+  const snap = snapshotFrom(SIGNIN_HTML, 200, true, null, "https://x.test/auth/login");
+  assert.strictEqual(looksLikeSignIn(snap, "https://x.test/auth/login"), false);
+});
+
+test("a genuine JS shell is still caught when robots permits it", () => {
+  // The suppression must not swallow the real bug it was built to find.
+  const shell = snapshotFrom(
+    `<html><head><title>Site</title></head><body><div id="__next"></div>${"<script src='/a.js'></script>".repeat(10)}</body></html>`,
+    200, true, null, "https://x.test/",
+  );
+  const r = analyse("https://x.test/", DEFAULT_AGENT, shell, snapshotFrom(GOOD_HTML, 200, true), false);
+  assert.strictEqual(r.verdict, "invisible");
+  assert.ok(r.findings.some(f => f.rule === "js_rendered_content"));
 });
 
 // ─── end to end with a fake fetcher ──────────────────────────────────────────

@@ -279,12 +279,24 @@ function MasterCanvas({
       // Density. Sampling every 2px instead of 3 yields ~2.25x the points, so
       // the glyphs read as letterforms rather than as a haze around them.
       //
-      // Phones get the coarser grid and a lower cap: the per-frame cost is
-      // linear in particle count, and a headline that stutters is worse than
-      // one that's slightly sparser. Desktop carries the full density.
+      // Phones used to get a COARSER grid (step 3) and a lower cap, on the
+      // theory that fewer particles meant a smoother frame. That was the wrong
+      // trade and it showed: combined with the larger dot size below, the
+      // mobile headline rendered as chunky blocks that were hard to read as
+      // letters at all.
+      //
+      // The reasoning was also flawed. Particle count is not a function of the
+      // step alone — it is the step across the TEXT AREA, and a phone's text
+      // area is a quarter of a desktop's. Sampling a 390px-wide headline at
+      // step 2 yields far fewer points than a 1400px one at the same step, so
+      // matching the desktop step costs much less on mobile than it looks.
+      //
+      // Now: same grid resolution everywhere, with the cap raised enough to
+      // let the finer sampling actually produce particles rather than being
+      // clipped straight back to the old count.
       const dense    = W >= 900;
-      const step     = dense ? 2 : 3;
-      const maxPts   = dense ? 9000 : 4200;
+      const step     = 2;
+      const maxPts   = dense ? 9000 : 7000;
 
       // Where the headline block sits vertically, as a fraction of viewport.
       //
@@ -400,7 +412,13 @@ function MasterCanvas({
           dps: 0.006 + Math.random() * 0.01,
           // Smaller than before: at 2px spacing the old 1.5-2.5px dots
           // overlapped into solid strokes and lost the "data points" read.
-          size: (dense ? 1.15 : 1.4) + Math.random() * 0.85,
+          //
+          // Mobile is now SMALLER than desktop rather than larger. It was
+          // larger to compensate for the coarser grid above — bigger dots
+          // filling the wider gaps — but that is what made the glyphs read as
+          // blocks. With the grid matched, the dots have to come down or they
+          // merge back into solid strokes at the smaller display size.
+          size: (dense ? 1.15 : 0.95) + Math.random() * (dense ? 0.85 : 0.6),
           depth,
           burstDelay:    (i / N) * 0.35,
           convergeDelay: Math.random() * 0.6,

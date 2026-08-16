@@ -114,6 +114,13 @@ export type Snapshot = {
   h1:         string | null;
   /** Bytes of HTML, useful for spotting a shell vs a full document. */
   bytes:      number;
+  /**
+   * Where the request actually ended up after redirects.
+   *
+   * Without this we cannot tell "this page is broken" from "this page sent us
+   * to the login screen", and those need opposite advice.
+   */
+  finalUrl:   string | null;
 };
 
 export type ViewSeverity = "error" | "warning" | "notice" | "ok";
@@ -188,7 +195,10 @@ function firstMatch(html: string, re: RegExp): string | null {
   return m?.[1] ? decodeEntities(m[1].replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim() : null;
 }
 
-export function snapshotFrom(html: string, status: number | null, ok: boolean, error: string | null = null): Snapshot {
+export function snapshotFrom(
+  html: string, status: number | null, ok: boolean,
+  error: string | null = null, finalUrl: string | null = null,
+): Snapshot {
   const text = visibleText(html);
   return {
     ok, status, error, html,
@@ -197,6 +207,7 @@ export function snapshotFrom(html: string, status: number | null, ok: boolean, e
     title: firstMatch(html, /<title[^>]*>([\s\S]*?)<\/title>/i),
     h1:    firstMatch(html, /<h1[^>]*>([\s\S]*?)<\/h1>/i),
     bytes: html.length,
+    finalUrl,
   };
 }
 
@@ -220,11 +231,14 @@ async function fetchAs(url: string, ua: string, fetcher: Fetcher): Promise<Snaps
       redirect: "follow",
     });
     const html = await res.text().catch(() => "");
-    return snapshotFrom(html, res.status, res.ok);
+    // res.url is the URL after redirects — the difference between "broken" and
+    // "sent to the sign-in page".
+    return snapshotFrom(html, res.status, res.ok, null, res.url || url);
   } catch (err) {
     return {
       ok: false, status: null, error: describeFetchError(err),
       html: "", text: "", wordCount: 0, title: null, h1: null, bytes: 0,
+      finalUrl: null,
     };
   } finally {
     clearTimeout(timer);
@@ -263,11 +277,40 @@ const MIN_USEFUL_WORDS = 50;
 /** Crawler text below this share of the browser's is a real gap, not noise. */
 const PARITY_FLOOR = 0.6;
 
+/**
+ * Did this request end up on a sign-in page?
+ *
+ * Checked on the FINAL url and the title, not the body, because a login page
+ * is short by nature and would otherwise be indistinguishable from a broken
+ * one on word count alone.
+ */
+export function looksLikeSignIn(snap: Snapshot, requestedUrl: string): boolean {
+  const AUTH = /\/(auth|login|signin|sign-in|account\/login)(\/|$|\?)/i;
+  try {
+    const requestedPath = new URL(requestedUrl).pathname;
+    // Already an auth page — landing on one is the correct outcome, not a
+    // redirect worth reporting.
+    if (AUTH.test(requestedPath)) return false;
+  } catch { /* fall through */ }
+
+  if (snap.finalUrl) {
+    try {
+      if (AUTH.test(new URL(snap.finalUrl).pathname)) return true;
+    } catch { /* fall through */ }
+  }
+  return /\bsign in\b|\bsign-in\b|\blog in\b|\blogin\b/i.test(snap.title ?? "");
+}
+
 export function analyse(
   url: string,
   agent: string,
   crawler: Snapshot,
   browser: Snapshot,
+  /**
+   * Whether robots.txt disallows this path for this crawler. Optional so the
+   * pure function stays testable without a network.
+   */
+  disallowedByRobots = false,
 ): CrawlerViewResult {
   const findings: ViewFinding[] = [];
   const agentLabel = CRAWLER_AGENTS[agent]?.label ?? agent;
@@ -300,6 +343,43 @@ export function analyse(
       why: "We could not read the page as anyone, so this is a availability problem rather than an answer-engine one. No crawler can cite a URL that does not respond.",
       fix: "Check the URL is correct and publicly reachable, that the certificate matches the hostname, and that the origin is not rate-limiting automated requests.",
     });
+  }
+
+  // ── 2b. The page is not meant to be crawled at all ─────────────────────────
+  //
+  // This runs BEFORE the content checks and suppresses them, because reporting
+  // "server-render your content" about a page robots.txt already excludes is
+  // advice for a problem that does not exist. It sent a user to look at their
+  // rendering setup when nothing was wrong.
+  const signIn = crawler.ok && looksLikeSignIn(crawler, url);
+
+  if (disallowedByRobots || signIn) {
+    if (disallowedByRobots) {
+      findings.push({
+        rule: "excluded_by_robots",
+        severity: "notice",
+        message: `Your robots.txt tells ${agentLabel} not to fetch this page.`,
+        why: "No answer engine will read it, so nothing else about this page affects your visibility. If the exclusion is deliberate — an app screen, an account area — this is working as intended.",
+        fix: "Nothing to do unless you expected this page to be citable. If you did, remove the matching Disallow rule from robots.txt.",
+      });
+    }
+    if (signIn) {
+      findings.push({
+        rule: "requires_sign_in",
+        severity: "notice",
+        message: "This URL returns a sign-in page rather than content.",
+        why: "The page is behind a login, so a crawler receives the sign-in screen — which is the correct behaviour for a private page, not a fault. Whatever is behind the login was never going to be citable.",
+        fix: "Nothing to fix. To test how your public pages read to an answer engine, check one that does not require an account.",
+      });
+    }
+
+    return {
+      url, agent, agentLabel, crawler, browser, findings,
+      // Not "invisible": that word means something is wrong. A private page not
+      // being readable by ChatGPT is the system working.
+      verdict: "ok",
+      parity,
+    };
   }
 
   if (crawler.ok) {
@@ -412,9 +492,14 @@ export async function inspectAsCrawler(
   url: string,
   agent: string = DEFAULT_AGENT,
   fetcher: Fetcher = fetch,
+  disallowedByRobots = false,
 ): Promise<CrawlerViewResult> {
   const spec = CRAWLER_AGENTS[agent] ?? CRAWLER_AGENTS[DEFAULT_AGENT];
   const crawler = await fetchAs(url, spec.ua, fetcher);
   const browser = await fetchAs(url, BROWSER_UA, fetcher);
-  return analyse(url, agent in CRAWLER_AGENTS ? agent : DEFAULT_AGENT, crawler, browser);
+  return analyse(
+    url,
+    agent in CRAWLER_AGENTS ? agent : DEFAULT_AGENT,
+    crawler, browser, disallowedByRobots,
+  );
 }

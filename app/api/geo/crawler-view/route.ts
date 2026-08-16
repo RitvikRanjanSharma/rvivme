@@ -28,7 +28,8 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { getCallerOrNull } from "@/lib/supabase-server";
-import { originCandidates } from "@/lib/site-fetch";
+import { originCandidates, fetchText } from "@/lib/site-fetch";
+import { parseRobots, crawlerAccess, AI_CRAWLERS } from "@/lib/ai-crawlers";
 import {
   inspectAsCrawler, normaliseUrl, CRAWLER_AGENTS, DEFAULT_AGENT,
 } from "@/lib/ai-crawler-view";
@@ -119,7 +120,30 @@ export async function GET(request: NextRequest) {
     const agentParam = params.get("agent") ?? DEFAULT_AGENT;
     const agent = agentParam in CRAWLER_AGENTS ? agentParam : DEFAULT_AGENT;
 
-    const result = await inspectAsCrawler(target, agent);
+    // Check robots.txt FIRST so a page the site already excludes is reported as
+    // excluded, not as broken. Without this the tool told the owner of an
+    // app screen to "server-render your content" about a URL no crawler will
+    // ever request — advice for a problem that does not exist.
+    let disallowed = false;
+    try {
+      const targetPath = new URL(target).pathname;
+      const robotsRes  = await fetchText(`${new URL(target).origin}/robots.txt`);
+      if (robotsRes.kind === "ok") {
+        const groups  = parseRobots(robotsRes.text);
+        const crawler = AI_CRAWLERS.find(c => c.token === agent);
+        if (crawler) {
+          const access = crawlerAccess(groups, crawler, targetPath);
+          disallowed = access.status === "blocked"
+            || (access.excluded ?? []).some(p => targetPath.startsWith(p));
+        }
+      }
+    } catch {
+      // Unknown is not the same as disallowed. If we cannot read robots.txt we
+      // report on the content as usual rather than inventing an exclusion.
+      disallowed = false;
+    }
+
+    const result = await inspectAsCrawler(target, agent, fetch, disallowed);
 
     return NextResponse.json({
       success: true,
