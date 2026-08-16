@@ -14,11 +14,15 @@
 // that's accurate for what the app actually does today.
 // =============================================================================
 
+import type { Metadata } from "next";
 import { LegalShell } from "../ui/legal-shell";
 
-export const metadata = {
-  title:       "Privacy Notice — AI Marketing Lab",
+// Title is the bare page name: the root layout's title template appends
+// "— AI Marketing Lab". Spelling the brand out here too would render it twice.
+export const metadata: Metadata = {
+  title:       "Privacy Notice",
   description: "How AI Marketing Lab collects, uses and protects personal data under UK GDPR.",
+  alternates:  { canonical: "/privacy" },
 };
 
 export default function PrivacyPage() {

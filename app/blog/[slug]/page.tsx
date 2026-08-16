@@ -84,7 +84,8 @@ export async function generateMetadata(
 
   if (!post) {
     return {
-      title: "Post not found — AI Marketing Lab",
+      // Bare name — the root layout's template appends "— AI Marketing Lab".
+      title: "Post not found",
       robots: { index: false, follow: true },
       alternates: { canonical: url },
     };

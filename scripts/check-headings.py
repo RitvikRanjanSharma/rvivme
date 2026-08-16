@@ -4,7 +4,9 @@ CSS = pathlib.Path("app/globals.css").read_text()
 has_class = bool(re.search(r'\.aiml-page-title\s*\{[^}]*font-weight', CSS))
 
 # Public marketing surfaces style their headings deliberately; app pages must not.
-EXEMPT = {"app/page.tsx", "app/blog/page.tsx", "app/blog/[slug]/post-view.tsx",
+# The homepage lives in home-view.tsx, not page.tsx: page.tsx is now a server
+# shell that exists only to export metadata, and holds no markup.
+EXEMPT = {"app/home-view.tsx", "app/blog/page.tsx", "app/blog/[slug]/post-view.tsx",
           "app/ui/legal-shell.tsx", "app/not-found.tsx", "app/portfolio/page.tsx",
           "app/onboarding/page.tsx", "app/dashboard/blog/page.tsx"}
 EXEMPT |= {p for p in map(str, pathlib.Path("app/auth").rglob("*.tsx"))}

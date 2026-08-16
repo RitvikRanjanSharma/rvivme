@@ -1,16 +1,35 @@
-"use client";
-
 // app/layout.tsx — AI Marketing Lab
 // ============================================================================
-// Root layout. Owns <html>, <head>, <body>, and font loading. The nav / shell
-// lives in ./ui/app-shell so it can be versioned and iterated on independently.
+// Root layout. Owns <html>, <body>, font loading, and the site-wide metadata
+// defaults. The nav / shell lives in ./ui/app-shell so it can be versioned and
+// iterated on independently.
+//
+// WHY THIS IS A SERVER COMPONENT (it used to be "use client")
+//
+// It was a client component for exactly one reason: usePathname(), used to
+// derive a per-route canonical URL. That single hook had a large cost, because
+// Next only supports the `metadata` export in Server Components — so the head
+// had to be hand-written in JSX, and a hand-written head cannot vary by route.
+// Every client-rendered page therefore served the same <title> and meta
+// description, and none of them had og:title or og:description at all.
+//
+// Worse, the hand-written <title> did not replace the metadata API, it
+// coexisted with it: pages that DID export metadata (privacy, terms, blog
+// posts) emitted their own correct title plus this one, and blog posts emitted
+// two canonicals. Removing the hand-written head fixes those duplicates as
+// well as the missing per-page tags.
+//
+// Canonicals now come from each page's `alternates.canonical`, set on the
+// routes search engines are actually allowed to index (see app/robots.ts).
+// Application routes are disallowed there, so a canonical on them had no
+// effect and is not missed.
 // ============================================================================
 
+import type { Metadata, Viewport } from "next";
 import { Poppins, DM_Mono } from "next/font/google";
-import { usePathname } from "next/navigation";
 import { AppShell } from "./ui/app-shell";
 import { CookieBanner } from "./ui/cookie-banner";
-import { absoluteUrl } from "@/lib/site";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
 import "./globals.css";
 
 // Poppins across the whole interface. Geometric sans with a wide aperture,
@@ -41,28 +60,48 @@ const dmMono = DM_Mono({
   display:  "swap",
 });
 
-export { useTheme } from "./ui/app-shell";
+// metadataBase lets pages express canonical and Open Graph URLs as paths
+// ("/blog") instead of repeating the origin. It must be absolute, and it must
+// be the www host — the apex serves a parking certificate. See lib/site.ts.
+export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
+  title: {
+    // `default` covers anything without its own title — notably 404s, which
+    // render inside this layout and cannot export metadata of their own.
+    default:  `${SITE_NAME} — SEO & GEO Intelligence Platform`,
+    // Every page that sets a plain string title gets the brand appended, so
+    // "Site audit" becomes "Site audit — AI Marketing Lab" without each route
+    // having to remember to write it.
+    template: `%s — ${SITE_NAME}`,
+  },
+  description: SITE_DESCRIPTION,
+  openGraph: {
+    siteName: SITE_NAME,
+    locale:   "en_GB",
+    type:     "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+  },
+};
+
+// themeColor tints the mobile browser chrome to match the palette. Two entries
+// so the phone's address bar follows the theme instead of being permanently
+// the old near-black, which now belongs to neither palette.
+//
+// This lives in `viewport`, not `metadata` — Next moved it, and leaving it in
+// metadata logs a deprecation warning while emitting nothing.
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#EFE9E2" },
+    { media: "(prefers-color-scheme: dark)",  color: "#0B232E" },
+  ],
+};
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  // This layout is a client component, so it cannot export Next's `metadata`
-  // object — hence the hand-written <head>. A single hardcoded canonical here
-  // would be worse than none at all, because every page would claim to be the
-  // homepage. Deriving it from the pathname gives each route its own, and
-  // client components still render on the server, so it lands in the HTML.
-  const pathname = usePathname();
-  const canonical = absoluteUrl(pathname ?? "/");
-
   return (
     <html lang="en-GB" className={`${poppins.variable} ${dmMono.variable}`} suppressHydrationWarning>
       <head>
-        <title>AI Marketing Lab — SEO & GEO Intelligence Platform</title>
-        <meta name="description" content="Unified SEO and GEO intelligence. Google Analytics 4, Search Console, and AI answer-engine tracking in one workspace."/>
-        {/* Tints the mobile browser chrome to match. Two tags so the phone's
-            address bar follows the theme instead of being permanently the old
-            near-black, which now belongs to neither palette. */}
-        <meta name="theme-color" content="#EFE9E2" media="(prefers-color-scheme: light)"/>
-        <meta name="theme-color" content="#0B232E" media="(prefers-color-scheme: dark)"/>
-        <link rel="canonical" href={canonical}/>
         <link rel="preconnect" href="https://fonts.googleapis.com"/>
         {/* Applies the stored theme BEFORE first paint.
 
@@ -74,7 +113,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
             Deliberately inline and blocking: an async script would paint
             first, which is the exact thing this exists to prevent. It is
-            small, wrapped in try/catch, and failure degrades to the default. */}
+            small, wrapped in try/catch, and failure degrades to the default.
+
+            Still valid in a Server Component — this is a static string, not a
+            client behaviour, and it must run before React does. */}
         <script
           dangerouslySetInnerHTML={{ __html: `
             (function(){try{

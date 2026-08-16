@@ -8,11 +8,14 @@
 // the indemnity, liability cap, and AI-output disclaimer language.
 // =============================================================================
 
+import type { Metadata } from "next";
 import { LegalShell } from "../ui/legal-shell";
 
-export const metadata = {
-  title:       "Terms of Service — AI Marketing Lab",
+// Bare page name — the root layout's template appends "— AI Marketing Lab".
+export const metadata: Metadata = {
+  title:       "Terms of Service",
   description: "Terms of Service for AI Marketing Lab during the soft-launch period.",
+  alternates:  { canonical: "/terms" },
 };
 
 export default function TermsPage() {

@@ -847,12 +847,16 @@ function IntegrationsTab({ brandColor }: { brandColor: string }) {
       <motion.div variants={pv(0.34)} initial="hidden" animate="visible">
         <div style={{ padding: "16px 20px", background: "var(--muted)", border: "1px solid var(--border)", borderRadius: "12px" }}>
           <div style={{ fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: 500, color: "var(--text-secondary)", marginBottom: "4px" }}>
-            GA4 and Search Console use a shared service account managed by
-            your admin. DataForSEO and Anthropic keys are global — update
-            them in your deployment environment.
+            Analytics and Search Console read through the Google account you
+            connect above. The keys below are server-side and global — update
+            them in your deployment environment, not here.
           </div>
+          {/* Listed only what the server actually reads. This previously named
+              PERPLEXITY_API_KEY, which no code path has ever read, and credited
+              DataForSEO, whose routes are disabled — so the panel was telling
+              the operator to maintain two credentials that do nothing. */}
           <div style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>
-            GA4_SERVICE_ACCOUNT_KEY · ANTHROPIC_API_KEY · PERPLEXITY_API_KEY
+            GA4_SERVICE_ACCOUNT_KEY · ANTHROPIC_API_KEY · GOOGLE_PSI_API_KEY
           </div>
         </div>
       </motion.div>
