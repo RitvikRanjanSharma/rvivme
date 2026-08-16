@@ -21,6 +21,8 @@
 //   * Per-page LCP/CLS/INP via real CrUX data — only PSI lab metrics
 // =============================================================================
 
+import { originCandidates, fetchText } from "@/lib/site-fetch";
+
 export type Severity  = "error" | "warning" | "notice";
 export type Category  =
   | "on_page" | "technical" | "performance"
@@ -58,7 +60,17 @@ export type AuditResult = {
 // everything into an AuditResult.
 // ---------------------------------------------------------------------------
 export async function runAudit(domain: string): Promise<AuditResult> {
-  const baseUrl  = normaliseDomain(domain);
+  // Resolve which host actually serves the site before crawling anything.
+  //
+  // normaliseDomain just prepends https:// to whatever it is given. For a
+  // Search Console domain property that yields the apex — and an apex with a
+  // parking certificate fails at TLS, so every check below would report a
+  // missing robots.txt, a missing sitemap and an unreachable homepage. The
+  // audit would look like a catastrophic result for a perfectly healthy site.
+  //
+  // Same fallback the answer-engine and local modules use: try the given host,
+  // then its www/apex sibling, and crawl whichever one answers.
+  const baseUrl  = await resolveReachableBase(normaliseDomain(domain));
   const findings: Finding[] = [];
   const meta:     Record<string, unknown> = { ran_at: new Date().toISOString(), base_url: baseUrl };
 
@@ -426,6 +438,29 @@ function assemble(
 function avg(xs: number[]): number {
   if (xs.length === 0) return 0;
   return xs.reduce((a, b) => a + b, 0) / xs.length;
+}
+
+/**
+ * Pick the host that responds, preferring the one supplied.
+ *
+ * Falls through only when the first host is genuinely unreachable — a 404 or
+ * a 500 means a server answered, and that is the site we were asked to audit.
+ * Throws when neither responds, so the caller reports "couldn't reach your
+ * site" rather than emitting a report full of false failures.
+ */
+async function resolveReachableBase(base: string): Promise<string> {
+  const candidates = originCandidates(base);
+  let lastDetail = "the request failed";
+
+  for (const origin of candidates) {
+    const r = await fetchText(`${origin}/`, 8000);
+    if (r.kind !== "unreachable") return origin;
+    lastDetail = r.detail;
+  }
+  throw new Error(
+    `${candidates[0]} could not be reached — ${lastDetail}` +
+    (candidates.length > 1 ? ` (also tried ${candidates[1]})` : "")
+  );
 }
 
 function normaliseDomain(input: string): string {

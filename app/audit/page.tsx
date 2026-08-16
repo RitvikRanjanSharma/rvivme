@@ -88,7 +88,12 @@ export default function AuditPage() {
       if (!json?.success) {
         setProblem({
           reason:  json?.reason ?? "api_error",
-          message: json?.message ?? "The audit couldn't run. Try again in a moment.",
+          // Prefer the route's own message, then its raw error. The generic
+          // sentence is a last resort — it previously swallowed a database
+          // error that said exactly what was wrong ("relation site_audits does
+          // not exist"), leaving no way to tell a missing table from a
+          // transient blip.
+          message: json?.message ?? json?.error ?? "The audit couldn't run. Try again in a moment.",
         });
         return;
       }
@@ -152,6 +157,8 @@ export default function AuditPage() {
               {problem.reason === "no_domain"      ? "No website URL set"
              : problem.reason === "quota_exceeded" ? "Daily limit reached"
              : problem.reason === "blocked"        ? "That address can't be audited"
+             : problem.reason === "missing_tables" ? "Database setup incomplete"
+             : problem.reason === "crawl_failed"   ? "Couldn't reach your site"
              : "The audit didn't run"}
             </div>
             <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6 }}>

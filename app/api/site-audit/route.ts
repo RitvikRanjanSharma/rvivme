@@ -123,18 +123,41 @@ export async function POST(req: NextRequest) {
   const auditRow  = startResult.data;
   const insertErr = startResult.error;
   if (insertErr || !auditRow) {
-    return NextResponse.json({ success: false, error: insertErr?.message ?? "insert_failed" }, { status: 500 });
+    // A missing table is by far the most common cause here and the least
+    // guessable from the outside — Postgres says 'relation "site_audits" does
+    // not exist', which the UI previously flattened to "try again in a
+    // moment". It is not a transient failure and retrying will never help, so
+    // it gets its own reason and says which migration provides the table.
+    const raw     = insertErr?.message ?? "insert_failed";
+    const missing = /relation .* does not exist|could not find the table/i.test(raw);
+    return NextResponse.json({
+      success: false,
+      reason:  missing ? "missing_tables" : "insert_failed",
+      message: missing
+        ? "The audit tables haven't been created in the database yet. Run supabase/migrations/007_seo_foundations.sql."
+        : `Couldn't start the audit: ${raw}`,
+      error:   raw,
+    }, { status: 500 });
   }
 
   let result: AuditResult;
   try {
     result = await runAudit(domain);
   } catch (e: any) {
+    const raw = String(e?.message ?? e);
     await caller.supabase
       .from("site_audits")
-      .update({ status: "failed", error_message: String(e?.message ?? e), completed_at: new Date().toISOString() } as never)
+      .update({ status: "failed", error_message: raw, completed_at: new Date().toISOString() } as never)
       .eq("id", auditRow.id);
-    return NextResponse.json({ success: false, error: String(e?.message ?? e) }, { status: 500 });
+    // Carry the real reason out. The crawl failing because a site is
+    // unreachable is a different problem from a bug in the crawler, and the
+    // user can only act on the first if we say which it was.
+    return NextResponse.json({
+      success: false,
+      reason:  "crawl_failed",
+      message: `Couldn't scan ${domain}: ${raw}`,
+      error:   raw,
+    }, { status: 500 });
   }
 
   // Persist completed audit + findings
