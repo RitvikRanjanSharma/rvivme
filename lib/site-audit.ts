@@ -270,7 +270,7 @@ function checkOnPage(url: string, html: string, collect?: PageFacts[]): Finding[
   }
 
   // Title
-  const title = extractFirst(head, /<title[^>]*>([\s\S]*?)<\/title>/i)?.trim();
+  const title = decodeEntities(extractFirst(head, /<title[^>]*>([\s\S]*?)<\/title>/i)?.trim() ?? "") || undefined;
   if (!title) {
     findings.push(of("missing_title", "error", "on_page", "Page is missing a <title> tag.", url));
   } else if (title.length < 15) {
@@ -361,8 +361,8 @@ function checkOnPage(url: string, html: string, collect?: PageFacts[]): Finding[
   if (collect) {
     collect.push({
       url,
-      title:       extractFirst(head, /<title[^>]*>([\s\S]*?)<\/title>/i)?.trim() ?? null,
-      description: extractFirst(head, /<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i)?.trim() ?? null,
+      title:       decodeEntities(extractFirst(head, /<title[^>]*>([\s\S]*?)<\/title>/i)?.trim() ?? "") || null,
+      description: decodeEntities(extractFirst(head, /<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i)?.trim() ?? "") || null,
       canonical:   extractFirst(head, /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i) ?? null,
       noindex,
       headings,
@@ -423,6 +423,26 @@ function checkAcrossPages(facts: PageFacts[]): Finding[] {
 
 function of(rule: string, severity: Severity, category: Category, message: string, page_url?: string, detail?: Record<string, unknown>): Finding {
   return { rule, severity, category, message, page_url, detail };
+}
+
+/**
+ * Decode the handful of HTML entities that show up in titles and descriptions.
+ *
+ * Without this a finding reads: 3 pages share the title "… seo &amp; geo …",
+ * which makes the tool look like it can't read HTML. Worse, two titles that a
+ * user considers identical could compare as different if one is encoded and
+ * the other isn't — so this affects the duplicate detection, not just display.
+ */
+function decodeEntities(text: string): string {
+  return text
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0?39;|&apos;/gi, "'")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&#(\d+);/g, (_, d) => String.fromCharCode(Number(d)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)));
 }
 
 function extractHead(html: string): string {
