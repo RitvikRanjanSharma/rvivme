@@ -339,6 +339,7 @@ const SIDEBAR_ADMIN = [
 // customers should never see this entry (previously it was hidden from every
 // user, which meant even operators had to type the URL by hand).
 const SIDEBAR_OPERATOR = [
+  { href: "/admin",          label: "Site admin",  icon: Settings        },
   { href: "/dashboard/blog", label: "Blog admin",  icon: Newspaper       },
 ] as const;
 

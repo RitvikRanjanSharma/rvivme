@@ -182,6 +182,64 @@ export type Database = {
         Insert: Partial<Database["public"]["Tables"]["ai_content"]["Row"]>;
         Update: Partial<Database["public"]["Tables"]["ai_content"]["Row"]>;
       };
+      // ── Operator-editable site content (migration 014) ──────────────────
+      // Every column beyond the primary key is nullable by design: NULL means
+      // "use the value compiled into the app", which is what lets a single
+      // field be overridden without restating the rest of the page.
+      seo_overrides: {
+        Row: {
+          route:          string;
+          title:          string | null;
+          description:    string | null;
+          canonical:      string | null;
+          robots_index:   boolean | null;
+          robots_follow:  boolean | null;
+          og_title:       string | null;
+          og_description: string | null;
+          og_image:       string | null;
+          json_ld:        unknown | null;
+          updated_at:     string;
+          updated_by:     string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["seo_overrides"]["Row"]> & { route: string };
+        Update: Partial<Database["public"]["Tables"]["seo_overrides"]["Row"]>;
+      };
+      content_blocks: {
+        Row: {
+          key:        string;
+          value:      string;
+          label:      string | null;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["content_blocks"]["Row"]> & { key: string; value: string };
+        Update: Partial<Database["public"]["Tables"]["content_blocks"]["Row"]>;
+      };
+      site_files: {
+        Row: {
+          key:        "robots_txt" | "llms_txt";
+          content:    string;
+          enabled:    boolean;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["site_files"]["Row"]> & { key: "robots_txt" | "llms_txt"; content: string };
+        Update: Partial<Database["public"]["Tables"]["site_files"]["Row"]>;
+      };
+      redirects: {
+        Row: {
+          source:      string;
+          destination: string;
+          status_code: number;
+          enabled:     boolean;
+          note:        string | null;
+          created_at:  string;
+          updated_at:  string;
+          updated_by:  string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["redirects"]["Row"]> & { source: string; destination: string };
+        Update: Partial<Database["public"]["Tables"]["redirects"]["Row"]>;
+      };
       blog_posts: {
         Row: {
           id: string;
