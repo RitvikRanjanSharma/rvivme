@@ -48,6 +48,8 @@ type Audit = {
   inp_ms: number | null;
   started_at: string;
   completed_at: string | null;
+  /** Crawl bookkeeping written by runAudit — see meta.crawl. */
+  meta: { crawl?: { discovered?: number; audited?: number; skipped_disallowed?: number } } | null;
 };
 
 export default function AuditPage() {
@@ -59,6 +61,7 @@ export default function AuditPage() {
    *  rather than an HTTP error, so this is the only place it can surface. */
   const [problem, setProblem]   = useState<{ reason: string; message: string } | null>(null);
   const [stalled, setStalled]   = useState(false);
+  const [inFlight, setInFlight] = useState(false);
 
   async function refresh() {
     setLoading(true);
@@ -71,6 +74,7 @@ export default function AuditPage() {
       // placeholder zeros. Showing that as a result is how a dead audit looked
       // like a score of 0 out of 100.
       setStalled(Boolean(j.stalled));
+      setInFlight(Boolean(j.running));
     } finally {
       setLoading(false);
     }
@@ -154,6 +158,22 @@ export default function AuditPage() {
         />
       )}
 
+      {/* Started, not yet stalled. Without this the page shows the previous
+          audit's numbers while a new one is mid-flight, which reads as though
+          the new run produced them. */}
+      {inFlight && !running && !problem && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10,
+          padding: "14px 18px", borderRadius: 12, marginBottom: 20,
+          background: "var(--surface)", border: "1px solid var(--border)",
+        }}>
+          <Loader2 size={14} style={{ animation: "spin 1.4s linear infinite", flexShrink: 0 }} />
+          <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+            A scan is running. Anything shown below is from the previous run until it finishes.
+          </div>
+        </div>
+      )}
+
       {stalled && !problem && (
         <div style={{
           display: "flex", alignItems: "flex-start", gap: 10,
@@ -186,6 +206,8 @@ export default function AuditPage() {
              : problem.reason === "blocked"        ? "That address can't be audited"
              : problem.reason === "missing_tables" ? "Database setup incomplete"
              : problem.reason === "crawl_failed"   ? "Couldn't reach your site"
+             : problem.reason === "save_failed"    ? "Scan finished but couldn't be saved"
+             : problem.reason === "insert_failed"  ? "Couldn't start the scan"
              : "The audit didn't run"}
             </div>
             <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6 }}>
@@ -213,7 +235,11 @@ export default function AuditPage() {
         />
       )}
 
-      {audit && (
+      {/* A stalled run has nothing to report. Rendering its placeholder zeros
+          under the warning invites the reader to treat them as results —
+          "score 0 out of 100" is a far more alarming statement than "the scan
+          didn't finish", and it isn't true. */}
+      {audit && !stalled && (
         <>
           <Scorecard audit={audit} />
 
@@ -237,6 +263,7 @@ export default function AuditPage() {
 
 function Scorecard({ audit }: { audit: Audit }) {
   const score = audit.overall_score ?? 0;
+  const skippedDisallowed = audit.meta?.crawl?.skipped_disallowed ?? 0;
   const colour = score >= 80 ? "var(--signal-green)" : score >= 50 ? "var(--signal-amber)" : "var(--signal-red)";
   return (
     <div
@@ -261,6 +288,14 @@ function Scorecard({ audit }: { audit: Audit }) {
               robots.txt permits. Overstating the scope is the kind of small
               dishonesty that costs trust when someone notices. */}
           {audit.domain} · sampled {audit.pages_crawled} {audit.pages_crawled === 1 ? "page" : "pages"} (homepage + linked pages)
+          {skippedDisallowed > 0 && (
+            <>
+              {" · "}
+              <span title="Pages your robots.txt tells crawlers to ignore aren't audited, because findings on them can't affect search results.">
+                {skippedDisallowed} skipped as disallowed
+              </span>
+            </>
+          )}
         </div>
       </div>
       <div className="grid-2-mobile" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, alignContent: "start" }}>
