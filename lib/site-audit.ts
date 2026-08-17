@@ -269,44 +269,66 @@ function checkOnPage(url: string, html: string, collect?: PageFacts[]): Finding[
     }
   }
 
+  // ── Page context ─────────────────────────────────────────────────────────
+  // Captured once and attached to the findings that can be fixed by writing
+  // something. A suggested title generated from the rule alone would be
+  // generic advice with a different font; generated from the page's own
+  // heading and opening sentences it is specific enough to paste.
+  const firstH1  = decodeEntities(
+    (html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1] ?? "").replace(/<[^>]+>/g, " ")
+  ).replace(/\s+/g, " ").trim();
+  const bodyText = decodeEntities(
+    html.replace(/<script[\s\S]*?<\/script>/gi, " ")
+        .replace(/<style[\s\S]*?<\/style>/gi, " ")
+        .replace(/<nav[\s\S]*?<\/nav>/gi, " ")
+        .replace(/<footer[\s\S]*?<\/footer>/gi, " ")
+        .replace(/<[^>]+>/g, " ")
+  ).replace(/\s+/g, " ").trim();
+  const context = {
+    h1:      firstH1 || undefined,
+    // Enough for a model to know the subject; short enough not to bloat the row.
+    excerpt: bodyText.slice(0, 600) || undefined,
+  };
+
   // Title
   const title = decodeEntities(extractFirst(head, /<title[^>]*>([\s\S]*?)<\/title>/i)?.trim() ?? "") || undefined;
   if (!title) {
-    findings.push(of("missing_title", "error", "on_page", "Page is missing a <title> tag.", url));
+    findings.push(of("missing_title", "error", "on_page", "Page is missing a <title> tag.", url, { ...context }));
   } else if (title.length < 15) {
-    findings.push(of("title_too_short", "warning", "on_page", `Title is only ${title.length} characters. Aim for 50-60.`, url, { title }));
+    findings.push(of("title_too_short", "warning", "on_page", `Title is only ${title.length} characters. Aim for 50-60.`, url, { title, length: title.length, ...context }));
   } else if (title.length > 65) {
-    findings.push(of("title_too_long", "notice", "on_page", `Title is ${title.length} characters and may be truncated in SERPs.`, url, { title }));
+    findings.push(of("title_too_long", "notice", "on_page", `Title is ${title.length} characters and may be truncated in SERPs.`, url, { title, length: title.length, ...context }));
   }
 
   // Meta description
   const desc = extractMeta(head, "description");
   if (!desc) {
-    findings.push(of("missing_meta_description", "error", "on_page", "Page is missing a meta description.", url));
+    findings.push(of("missing_meta_description", "error", "on_page", "Page is missing a meta description.", url, { title, ...context }));
   } else if (desc.length < 70) {
-    findings.push(of("meta_description_short", "notice", "on_page", `Meta description is ${desc.length} characters; aim for 120-160.`, url, { length: desc.length }));
+    findings.push(of("meta_description_short", "notice", "on_page", `Meta description is ${desc.length} characters; aim for 120-160.`, url, { description: desc, length: desc.length, title, ...context }));
   } else if (desc.length > 170) {
-    findings.push(of("meta_description_long", "notice", "on_page", `Meta description is ${desc.length} characters; SERPs may truncate it.`, url, { length: desc.length }));
+    findings.push(of("meta_description_long", "notice", "on_page", `Meta description is ${desc.length} characters; SERPs may truncate it.`, url, { description: desc, length: desc.length, title, ...context }));
   }
 
   // H1
   const h1Matches = [...html.matchAll(/<h1[^>]*>([\s\S]*?)<\/h1>/gi)];
   if (h1Matches.length === 0) {
-    findings.push(of("missing_h1", "error", "on_page", "Page has no <h1> heading.", url));
+    findings.push(of("missing_h1", "error", "on_page", "Page has no <h1> heading.", url, { title, ...context }));
   } else if (h1Matches.length > 1) {
-    findings.push(of("multiple_h1", "warning", "on_page", `Page has ${h1Matches.length} <h1> tags; use one canonical heading.`, url));
+    findings.push(of("multiple_h1", "warning", "on_page", `Page has ${h1Matches.length} <h1> tags; use one canonical heading.`, url,
+      { headings: h1Matches.map(m => decodeEntities(m[1].replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim()).slice(0, 6), ...context }));
   }
 
   // Canonical
   const canonical = extractFirstAttr(head, /<link[^>]*rel=["']canonical["'][^>]*>/i, "href");
   if (!canonical) {
-    findings.push(of("missing_canonical", "warning", "on_page", "No <link rel=\"canonical\"> on the page.", url));
+    findings.push(of("missing_canonical", "warning", "on_page", "No <link rel=\"canonical\"> on the page.", url, { url }));
   }
 
   // viewport
   const viewport = extractMetaName(head, "viewport");
   if (!viewport) {
-    findings.push(of("missing_viewport", "error", "best_practice", "Missing <meta name=\"viewport\"> — required for mobile.", url));
+    findings.push(of("missing_viewport", "error", "best_practice", "Missing <meta name=\"viewport\"> — required for mobile.", url, {}));
   }
 
   // OpenGraph minimum
@@ -316,7 +338,7 @@ function checkOnPage(url: string, html: string, collect?: PageFacts[]): Finding[
   if (!ogTitle || !ogDesc || !ogImage) {
     findings.push(of("incomplete_open_graph", "notice", "content",
       "Open Graph tags are incomplete (og:title, og:description, og:image).", url,
-      { has: { title: !!ogTitle, description: !!ogDesc, image: !!ogImage } }));
+      { has: { title: !!ogTitle, description: !!ogDesc, image: !!ogImage }, title, description: desc, url, ...context }));
   }
 
   // Image alt
@@ -332,7 +354,8 @@ function checkOnPage(url: string, html: string, collect?: PageFacts[]): Finding[
   const hasJsonLd = /<script[^>]*type=["']application\/ld\+json["'][^>]*>/i.test(html);
   if (!hasJsonLd) {
     findings.push(of("no_structured_data", "notice", "schema",
-      "No JSON-LD structured data found. Schema markup helps AI search and rich results.", url));
+      "No JSON-LD structured data found. Schema markup helps AI search and rich results.", url,
+      { title, description: desc, url, ...context }));
   }
 
   // Hreflang sanity check (only flag if multiple hreflang tags but no x-default)
@@ -352,7 +375,7 @@ function checkOnPage(url: string, html: string, collect?: PageFacts[]): Finding[
   if (wordCount > 0 && wordCount < 200) {
     findings.push(of("thin_content", "warning", "content",
       `Page has only ~${wordCount} words. Thin content can hurt rankings.`, url,
-      { word_count: wordCount }));
+      { word_count: wordCount, title, ...context }));
   }
 
   // Record what this page claimed, so cross-page checks can compare. Duplicate

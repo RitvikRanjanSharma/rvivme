@@ -10,6 +10,7 @@
 // =============================================================================
 
 import { useEffect, useState } from "react";
+import { readyFix, canSuggest } from "@/lib/audit-fixes";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -442,7 +443,7 @@ function FindingsList({ findings }: { findings: Finding[] }) {
 
                   {/* The reasoning is the point. Collapsed by default so the
                       list stays scannable, but one click from every row. */}
-                  {(f.why || f.fix) && (
+                  {true && (
                     <>
                       <button
                         onClick={() => setOpen(isOpen ? null : f.id)}
@@ -473,6 +474,13 @@ function FindingsList({ findings }: { findings: Finding[] }) {
                                 <strong style={{ color: "var(--text-primary)" }}>Fix:</strong> {f.fix}
                               </p>
                             )}
+
+                            {/* Evidence, then the fix itself. In that order on
+                                purpose: showing the actual value is what makes
+                                the finding verifiable rather than a claim. */}
+                            <Evidence detail={f.detail} />
+                            <ReadyFixes rule={f.rule} detail={f.detail} pageUrl={f.page_url} />
+                            <Suggest rule={f.rule} detail={f.detail} pageUrl={f.page_url} />
                           </motion.div>
                         )}
                       </AnimatePresence>
@@ -667,6 +675,232 @@ function ActionPlan({ plan, loading, onBuild }: {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+
+// ─── Evidence ────────────────────────────────────────────────────────────────
+// "Title is 68 characters" is a claim. Showing the title, with its length, is
+// evidence — and it is the difference between a reader trusting the audit and
+// wondering whether it actually read their page. The crawler was already
+// capturing these values; they were simply never displayed.
+
+function Evidence({ detail }: { detail: Record<string, unknown> | null }) {
+  if (!detail) return null;
+
+  const rows: { label: string; value: string; count?: number }[] = [];
+  const s = (k: string) => (typeof detail[k] === "string" ? (detail[k] as string) : undefined);
+
+  const title = s("title");
+  const desc  = s("description");
+  const h1    = s("h1");
+
+  if (title) rows.push({ label: "Current title", value: title, count: title.length });
+  if (desc)  rows.push({ label: "Current description", value: desc, count: desc.length });
+  if (h1 && !title) rows.push({ label: "Page heading", value: h1 });
+
+  if (Array.isArray(detail.headings) && detail.headings.length) {
+    rows.push({ label: "Headings found", value: (detail.headings as string[]).map(h => `“${h}”`).join("  ·  ") });
+  }
+  if (typeof detail.word_count === "number") {
+    rows.push({ label: "Words on page", value: String(detail.word_count) });
+  }
+  if (typeof detail.total === "number" && typeof detail.missing === "number") {
+    rows.push({ label: "Images", value: `${detail.missing} of ${detail.total} missing alt text` });
+  }
+  if (Array.isArray(detail.pages) && detail.pages.length) {
+    rows.push({ label: "Pages affected", value: (detail.pages as string[]).join("\n") });
+  }
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      {rows.map(r => (
+        <div key={r.label} style={{ marginBottom: 8 }}>
+          <div style={{
+            fontFamily: "var(--font-mono)", fontSize: 9.5, letterSpacing: "0.1em",
+            textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 3,
+          }}>
+            {r.label}{r.count !== undefined ? ` · ${r.count} characters` : ""}
+          </div>
+          <div style={{
+            fontFamily: "var(--font-body)", fontSize: 13, color: "var(--text-primary)",
+            background: "var(--surface)", border: "1px solid var(--border)",
+            borderRadius: 8, padding: "8px 10px", lineHeight: 1.55,
+            whiteSpace: "pre-wrap", wordBreak: "break-word",
+          }}>
+            {r.value}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Ready-to-paste fixes ────────────────────────────────────────────────────
+// Generated in code, not by a model. For these rules there is exactly one
+// correct answer, and a deterministic function cannot hallucinate an attribute
+// or drift between runs.
+
+function ReadyFixes({ rule, detail, pageUrl }: {
+  rule: string; detail: Record<string, unknown> | null; pageUrl: string | null;
+}) {
+  const fixes = readyFix(rule, detail ?? undefined, pageUrl ?? undefined);
+  if (fixes.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: 14 }}>
+      {fixes.map(fx => (
+        <div key={fx.label} style={{ marginBottom: 12 }}>
+          <div style={{
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            gap: 10, marginBottom: 4, flexWrap: "wrap",
+          }}>
+            <span style={{
+              fontFamily: "var(--font-mono)", fontSize: 9.5, letterSpacing: "0.1em",
+              textTransform: "uppercase", color: "var(--text-tertiary)",
+            }}>
+              Paste this · {fx.label}
+            </span>
+            <CopyButton text={fx.code} />
+          </div>
+          <pre style={{
+            fontFamily: "var(--font-mono)", fontSize: 11.5, lineHeight: 1.6,
+            color: "var(--text-primary)", background: "var(--surface)",
+            border: "1px solid var(--border)", borderRadius: 8,
+            padding: "10px 12px", margin: 0, overflowX: "auto", whiteSpace: "pre",
+          }}>
+            {fx.code}
+          </pre>
+          <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 4, lineHeight: 1.5 }}>
+            {fx.where}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setDone(true);
+          setTimeout(() => setDone(false), 1600);
+        } catch { /* clipboard blocked — the text is still selectable */ }
+      }}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 5,
+        fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.06em",
+        color: done ? "var(--signal-green)" : "var(--text-secondary)",
+        background: "transparent", border: "1px solid var(--border)",
+        borderRadius: 6, padding: "4px 9px", cursor: "pointer",
+      }}
+    >
+      {done ? "COPIED" : "COPY"}
+    </button>
+  );
+}
+
+// ─── On-demand suggestions ───────────────────────────────────────────────────
+// Only for rules where writing something IS the fix. A broken link needs
+// finding, not writing — offering a button there that returns waffle would be
+// worse than not offering one.
+
+function Suggest({ rule, detail, pageUrl }: {
+  rule: string; detail: Record<string, unknown> | null; pageUrl: string | null;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [result,  setResult]  = useState<{
+    heading: string; kind: string; options: string[]; lengths: number[] | null; dropped: number;
+  } | null>(null);
+  const [error,   setError]   = useState<string | null>(null);
+
+  if (!canSuggest(rule)) return null;
+
+  async function run() {
+    setLoading(true); setError(null);
+    try {
+      const res = await fetch("/api/site-audit/suggest", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ rule, detail, page_url: pageUrl }),
+      });
+      const j = await res.json().catch(() => null);
+      if (j?.success) setResult(j);
+      else setError(j?.message ?? "Couldn't generate a suggestion.");
+    } catch {
+      setError("Couldn't reach the server.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 14 }}>
+      {!result && (
+        <button onClick={run} disabled={loading} style={{
+          display: "inline-flex", alignItems: "center", gap: 6,
+          fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.08em",
+          textTransform: "uppercase", color: "#fff",
+          background: loading ? "var(--text-tertiary)" : "var(--brand-strong)",
+          border: "none", borderRadius: 7, padding: "6px 12px",
+          cursor: loading ? "wait" : "pointer",
+        }}>
+          {loading ? "Writing…" : "Write the fix for me"}
+        </button>
+      )}
+
+      {error && (
+        <div style={{ fontSize: 12.5, color: "var(--signal-amber)", marginTop: 8, lineHeight: 1.55 }}>
+          {error}
+        </div>
+      )}
+
+      {result && (
+        <div>
+          <div style={{
+            fontFamily: "var(--font-mono)", fontSize: 9.5, letterSpacing: "0.1em",
+            textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 6,
+          }}>
+            {result.heading}
+          </div>
+          {result.options.map((opt, i) => (
+            <div key={i} style={{
+              display: "flex", gap: 10, alignItems: "flex-start",
+              background: "var(--surface)", border: "1px solid var(--border)",
+              borderRadius: 8, padding: "9px 11px", marginBottom: 6,
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontSize: 13, color: "var(--text-primary)",
+                  lineHeight: 1.55, whiteSpace: "pre-wrap", wordBreak: "break-word",
+                }}>
+                  {opt}
+                </div>
+                {result.lengths && (
+                  <div style={{
+                    fontFamily: "var(--font-mono)", fontSize: 10,
+                    color: "var(--text-tertiary)", marginTop: 3,
+                  }}>
+                    {result.lengths[i]} characters
+                  </div>
+                )}
+              </div>
+              <CopyButton text={opt} />
+            </div>
+          ))}
+          <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", lineHeight: 1.5, marginTop: 4 }}>
+            Written from this page&rsquo;s own heading and opening content. Read before
+            publishing &mdash; you know your business better than we do.
+          </div>
+        </div>
+      )}
     </div>
   );
 }
