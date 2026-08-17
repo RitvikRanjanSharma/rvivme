@@ -79,8 +79,16 @@ export default function OnboardingPage() {
       if (data) {
         // Already completed onboarding — bounce to dashboard.
         if (data.onboarding_complete) { router.replace("/dashboard"); return; }
-        setCompanyName(data.company_name ?? "");
-        // Don't pre-fill the placeholder example.com value
+        // Both of these have sentinel defaults assigned by the signup trigger
+        // (handle_new_auth_user in migration 001), so a new account arrives
+        // here already holding "Unnamed Organisation" and "https://example.com".
+        // Pre-filling those makes the user delete our junk before typing their
+        // own, and "https://example.com" is close enough to a real URL that
+        // someone could plausibly leave it and audit the wrong site.
+        setCompanyName(
+          data.company_name && data.company_name !== "Unnamed Organisation"
+            ? data.company_name : ""
+        );
         setWebsiteUrl(
           data.website_url && data.website_url !== "https://example.com"
             ? data.website_url : ""

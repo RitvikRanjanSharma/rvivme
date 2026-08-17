@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { isAdminEmail } from "@/lib/admin";
+import { useDomain } from "@/lib/useDomain";
 
 // ─── Theme context ────────────────────────────────────────────────────────────
 type ThemeMode = "dark" | "light";
@@ -822,7 +823,7 @@ function AppHeader({
             whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
           }}
         >
-          Workspace · {workspaceDomain}
+          {workspaceDomain ? `Workspace · ${workspaceDomain}` : "Workspace"}
         </span>
       </div>
 
@@ -1137,8 +1138,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isAuth   = isAuthRoute(pathname);
   const isApp    = isAppRoute(pathname);
 
-  const workspaceDomain =
-    process.env.NEXT_PUBLIC_SITE_DOMAIN?.trim() || "aimarketinglab.co.uk";
+  // The signed-in user's OWN site, not ours.
+  //
+  // This read NEXT_PUBLIC_SITE_DOMAIN with "aimarketinglab.co.uk" as the
+  // fallback — but that env var is a single global value, so it was never the
+  // caller's domain under any circumstances. Every customer opened the app to
+  // a header reading "Workspace · aimarketinglab.co.uk", which is both wrong
+  // and, for a tool whose pitch is that it reports on YOUR site, precisely the
+  // wrong first impression.
+  //
+  // useDomain already exists for this and already does the right thing: it
+  // returns "" rather than substituting anything when the user has not set a
+  // site, and it treats the signup sentinel (https://example.com) as unset.
+  const { domain: workspaceDomain } = useDomain();
 
   if (isAuth) {
     // Auth pages render without chrome — they manage their own layout.

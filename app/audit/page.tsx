@@ -11,6 +11,7 @@
 
 import { useEffect, useState } from "react";
 import { FirstVisitHint } from "@/app/ui/first-visit-hint";
+import { AuditWalkthrough } from "@/app/ui/audit-walkthrough";
 import { readyFix, canSuggest } from "@/lib/audit-fixes";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
@@ -200,6 +201,11 @@ export default function AuditPage() {
         shows your actual page content, and most come with a ready-to-paste fix or a
         <strong> Write the fix for me</strong> button.
       </FirstVisitHint>
+
+      {/* Only once there is a result to point at — explaining "the number
+          in the circle" to someone looking at an empty page is the mistake
+          this is meant to avoid. */}
+      <AuditWalkthrough ready={Boolean(audit && !inFlight && findings.length > 0)} />
 
       {audit && !inFlight && (
         <ActionPlan plan={plan} loading={planning} onBuild={buildPlan} />

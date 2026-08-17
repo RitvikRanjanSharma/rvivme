@@ -377,10 +377,18 @@ function VoicePanel({ brandColor }: { brandColor: string }) {
 type IntgStatus = "connected" | "disconnected" | "error" | "checking";
 
 function IntegrationsTab({ brandColor }: { brandColor: string }) {
-  // Keep the note text deterministic on first render — only fill in the domain
-  // after mount. Otherwise the server (no localStorage) and client (has
-  // localStorage) produce different HTML and React throws a hydration error.
-  const [domain,  setDomain]  = useState("aimarketinglab.co.uk");
+  // Empty until the caller's own value loads.
+  //
+  // This used to initialise to "aimarketinglab.co.uk" — our domain — as a
+  // hydration-stability trick. It worked for that, and it meant every other
+  // user opened Settings looking at OUR website as their workspace domain
+  // until their real value arrived. Showing one customer another customer's
+  // data, even for a frame, even when the other customer is us, is not a
+  // trade worth making for render determinism.
+  //
+  // Empty string is equally deterministic across server and client, so the
+  // hydration concern is satisfied without the borrowed value.
+  const [domain,  setDomain]  = useState("");
   const [ga4St,   setGa4St]   = useState<IntgStatus>("checking");
   const [gscSt,   setGscSt]   = useState<IntgStatus>("checking");
   const [dfsSt,   setDfsSt]   = useState<IntgStatus>("checking");
@@ -836,7 +844,7 @@ function IntegrationsTab({ brandColor }: { brandColor: string }) {
               These are read using the Google account connected above — only
               properties you already have access to are listed, and access is
               read-only.
-              {domain && domain !== "aimarketinglab.co.uk" && (
+              {domain && (
                 <> Your current workspace domain is <strong>{domain}</strong>.</>
               )}
             </div>
