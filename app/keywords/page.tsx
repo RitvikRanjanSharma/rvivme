@@ -561,7 +561,7 @@ export default function KeywordsPage() {
       // update the row instead of failing on the unique constraint.
       const { error: upErr, count } = await supabase
         .from("tracked_keywords")
-        .upsert(rows as never, { onConflict: "user_id,keyword,competitor_domain", count: "exact" });
+        .upsert(rows as never, { onConflict: "user_id,keyword,competitor_domain", count: "exact" }).select("id");
 
       if (upErr) throw new Error(upErr.message);
 

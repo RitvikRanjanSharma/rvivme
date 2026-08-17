@@ -44,6 +44,7 @@ const STEPS: { id: StepId; title: string; subtitle: string }[] = [
 export default function OnboardingPage() {
   const router = useRouter();
   const [stepIdx, setStepIdx] = useState(0);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
 
@@ -113,26 +114,43 @@ export default function OnboardingPage() {
   const step = STEPS[stepIdx];
   const isLast = stepIdx === STEPS.length - 1;
 
-  async function persistDomain() {
-    if (!userId) return;
-    await supabase
+  // These awaited the update and inspected NOTHING — not the error, not the
+  // affected rows. PostgREST reports success when an UPDATE matches zero rows,
+  // so if the account row was missing or hidden by RLS, every value typed
+  // during onboarding was silently discarded and the wizard advanced happily
+  // to the next step. That is the reported "the tool isn't saving my GA4 and
+  // GSC data": it was never saving it, and never said so.
+  //
+  // Now each returns whether the write landed, and next() refuses to advance
+  // when it did not.
+  async function persistDomain(): Promise<string | null> {
+    if (!userId) return "Not signed in.";
+    const { data, error } = await supabase
       .from("users")
       .update({
         company_name: companyName.trim() || "My Workspace",
         website_url:  normaliseUrl(websiteUrl),
       } as never)
-      .eq("id", userId);
+      .eq("id", userId)
+      .select("id");
+    if (error) return error.message;
+    if (!data || data.length === 0) return "Your account record couldn't be found, so nothing was saved.";
+    return null;
   }
 
-  async function persistAnalytics() {
-    if (!userId) return;
-    await supabase
+  async function persistAnalytics(): Promise<string | null> {
+    if (!userId) return "Not signed in.";
+    const { data, error } = await supabase
       .from("users")
       .update({
         ga4_property_id: ga4Id.trim() || null,
         gsc_site_url:    gscUrl.trim() || null,
       } as never)
-      .eq("id", userId);
+      .eq("id", userId)
+      .select("id");
+    if (error) return error.message;
+    if (!data || data.length === 0) return "Your account record couldn't be found, so nothing was saved.";
+    return null;
   }
 
   async function persistCompetitors() {
@@ -176,13 +194,14 @@ export default function OnboardingPage() {
   async function finish() {
     if (!userId) return;
     setBusy(true);
-    await persistDomain();
-    await persistAnalytics();
+    const failure = (await persistDomain()) ?? (await persistAnalytics());
+    if (failure) { setSaveError(failure); setBusy(false); return; }
     await persistCompetitors();
     await supabase
       .from("users")
       .update({ onboarding_complete: true } as never)
-      .eq("id", userId);
+      .eq("id", userId)
+      .select("id");
     // Land on the AUDIT, not the dashboard.
     //
     // A brand-new account has no Search Console history and no GA4 sessions,
@@ -202,8 +221,16 @@ export default function OnboardingPage() {
     if (busy) return;
     setBusy(true);
     try {
-      if (step.id === "domain")      await persistDomain();
-      if (step.id === "analytics")   await persistAnalytics();
+      // Advancing past a step whose data did not save is how someone reaches
+      // the end of a wizard having entered everything and stored none of it.
+      if (step.id === "domain") {
+        const err = await persistDomain();
+        if (err) { setSaveError(err); return; }
+      }
+      if (step.id === "analytics") {
+        const err = await persistAnalytics();
+        if (err) { setSaveError(err); return; }
+      }
       if (step.id === "competitors") await persistCompetitors();
       if (isLast) { await finish(); return; }
       setStepIdx(i => i + 1);
@@ -226,6 +253,16 @@ export default function OnboardingPage() {
     >
       <div style={{ width: "100%", maxWidth: 640 }}>
         <Stepper activeIdx={stepIdx} />
+
+        {saveError && (
+          <div style={{
+            margin: "16px 0 0", padding: "12px 14px", borderRadius: 10,
+            background: "rgba(255,171,0,0.07)", border: "1px solid rgba(255,171,0,0.25)",
+            fontSize: 13, color: "var(--signal-amber)", lineHeight: 1.6,
+          }}>
+            {saveError}
+          </div>
+        )}
 
         <div
           style={{

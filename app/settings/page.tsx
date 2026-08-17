@@ -117,9 +117,18 @@ function ProfileTab({ brandColor }: { brandColor: string }) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       setEmail(user.email ?? "");
-      const { data } = await supabase.from("users").select("company_name, website_url").eq("id", user.id).single();
+      // Same pair of silent failures the analytics panel had — the error was
+      // dropped on load, and the update below reported success without
+      // checking a row was touched.
+      const { data, error: loadErr } = await supabase
+        .from("users").select("company_name, website_url").eq("id", user.id).maybeSingle();
+      if (loadErr) { setError(`Couldn't load your profile: ${loadErr.message}`); return; }
       const row = data as { company_name: string; website_url: string } | null;
-      if (row) { setCompany(row.company_name ?? ""); setWebsite(row.website_url ?? ""); }
+      if (row) {
+        // Sentinels assigned by the signup trigger, not real answers.
+        setCompany(row.company_name && row.company_name !== "Unnamed Organisation" ? row.company_name : "");
+        setWebsite(row.website_url && row.website_url !== "https://example.com" ? row.website_url : "");
+      }
     }
     load();
   }, []);
@@ -128,11 +137,16 @@ function ProfileTab({ brandColor }: { brandColor: string }) {
     setSaving(true); setError(null);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const { error: dbErr } = await supabase.from("users").update({
+    const { data: updated, error: dbErr } = await supabase.from("users").update({
       company_name: company.trim(),
       website_url:  website.trim(),
-    } as never).eq("id", user.id);
+    } as never).eq("id", user.id).select("company_name, website_url");
     if (dbErr) { setError(dbErr.message); setSaving(false); return; }
+    if (!updated || updated.length === 0) {
+      setError("The save didn't reach your account record — no row was updated. Sign out and back in, then try again.");
+      setSaving(false);
+      return;
+    }
     // Update localStorage fallback domain
     if (typeof window !== "undefined") {
       localStorage.setItem("aiml-domain", website.trim().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, ""));
@@ -197,7 +211,7 @@ function BrandingTab({ brandColor, onBrandChange }: { brandColor: string; onBran
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      await supabase.from("users").update({ primary_color_hex: hex } as never).eq("id", user.id);
+      await supabase.from("users").update({ primary_color_hex: hex } as never).eq("id", user.id).select("id");
     }
     setSaving(false); setSaved(true);
     setTimeout(() => setSaved(false), 2500);
@@ -494,17 +508,33 @@ function IntegrationsTab({ brandColor }: { brandColor: string }) {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) { if (alive) setAnalyticsLoading(false); return; }
-        const { data } = await supabase
+        // maybeSingle, and the error is READ.
+        //
+        // This used .single() and destructured only `data`, throwing the error
+        // away. .single() returns an error when it matches zero rows, so if the
+        // caller's row was missing or hidden by RLS, the failure was completely
+        // invisible: no console line, no message, just permanently empty
+        // fields that looked exactly like "the save didn't work".
+        const { data, error: loadErr } = await supabase
           .from("users")
           .select("gsc_site_url, ga4_property_id")
           .eq("id", user.id)
-          .single();
+          .maybeSingle();
         if (!alive) return;
-        const row = data as { gsc_site_url: string | null; ga4_property_id: string | null } | null;
-        if (row) {
-          setGscSiteUrl(row.gsc_site_url ?? "");
-          setGa4PropertyId(row.ga4_property_id ?? "");
+        if (loadErr) {
+          setAnalyticsError(`Couldn't load your saved properties: ${loadErr.message}`);
+          return;
         }
+        const row = data as { gsc_site_url: string | null; ga4_property_id: string | null } | null;
+        if (!row) {
+          setAnalyticsError(
+            "We couldn't find your account record, so nothing can be saved against it. " +
+            "Sign out and back in — if it persists, the account row is missing."
+          );
+          return;
+        }
+        setGscSiteUrl(row.gsc_site_url ?? "");
+        setGa4PropertyId(row.ga4_property_id ?? "");
       } finally {
         if (alive) setAnalyticsLoading(false);
       }
@@ -546,12 +576,30 @@ function IntegrationsTab({ brandColor }: { brandColor: string }) {
       setAnalyticsError("Your session has expired — please sign in again.");
       return;
     }
-    const { error: dbErr } = await supabase.from("users").update({
+    // .select() so we can VERIFY the write landed.
+    //
+    // An UPDATE that matches no rows is NOT an error in postgrest — it reports
+    // success having changed nothing. So if the row is missing, or RLS hides it
+    // from this caller, the old code showed a green "Saved" tick and persisted
+    // absolutely nothing. That is the worst possible failure: it actively tells
+    // the user the opposite of what happened.
+    //
+    // Asking for the updated row back turns that into something we can detect:
+    // no row returned means no row was written.
+    const { data: updated, error: dbErr } = await supabase.from("users").update({
       gsc_site_url:    gscSiteUrl.trim()    || null,
       ga4_property_id: ga4PropertyId.trim() || null,
-    } as never).eq("id", user.id);
+    } as never).eq("id", user.id).select("gsc_site_url, ga4_property_id");
+
     setAnalyticsSaving(false);
     if (dbErr) { setAnalyticsError(dbErr.message); return; }
+    if (!updated || updated.length === 0) {
+      setAnalyticsError(
+        "The save didn't reach your account record — no row was updated. " +
+        "This usually means the session is stale: sign out and back in, then try again."
+      );
+      return;
+    }
     setAnalyticsSaved(true);
     setTimeout(() => setAnalyticsSaved(false), 2500);
     // Pick up the new pill colours right away

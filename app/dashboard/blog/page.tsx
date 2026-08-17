@@ -418,7 +418,7 @@ function PostEditor({ post, onClose, onSaved, brandColor }: {
         const { error: updateErr } = await supabase
           .from("blog_posts")
           .update(payload as never)
-          .eq("id", post.id);
+          .eq("id", post.id).select("id");
         if (updateErr) throw updateErr;
       }
 
@@ -788,7 +788,7 @@ export default function BlogAdminPage() {
         status:       newStatus,
         published_at: newStatus === "published" ? new Date().toISOString() : undefined,
       } as never)
-      .eq("id", id);
+      .eq("id", id).select("id");
     if (!updateErr) setPosts(prev => prev.map(p => p.id === id ? { ...p, status: newStatus } : p));
   }
 

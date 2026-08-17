@@ -212,7 +212,7 @@ export default function CompetitorsPage() {
         user_id:        user.id,
         competitor_url: url,
         is_active:      true,
-      } as never, { onConflict: "user_id,competitor_url" });
+      } as never, { onConflict: "user_id,competitor_url" }).select("id");
       if (upErr) throw new Error(upErr.message);
 
       // Fetch metrics for THIS specific domain AND the user's own domain in a
@@ -273,7 +273,7 @@ export default function CompetitorsPage() {
       // Match on the GENERATED `domain` column — the original competitor_url could
       // have been entered as http/https, with or without www, or a trailing slash.
       await supabase.from("competitors").update({ is_active: false } as never)
-        .eq("user_id", user.id).eq("domain", domain2);
+        .eq("user_id", user.id).eq("domain", domain2).select("id");
     }
     setCompetitors(prev => prev.filter(c => c.domain !== domain2));
   }
