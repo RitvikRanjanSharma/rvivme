@@ -69,16 +69,31 @@ export async function resolveSeo(defaults: RouteSeo): Promise<Metadata> {
   const ogDescription = pick(override?.og_description, undefined) ?? description;
   const ogImage       = override?.og_image ?? undefined;
 
-  // Keys are OMITTED rather than set to undefined when there is no value.
+  // THE SOCIAL IMAGE IS SET EXPLICITLY, NOT INHERITED FROM THE FILE CONVENTION.
   //
-  // This is not tidiness. The deployed site was serving twitter:card
-  // "summary" — a small thumbnail — despite this file asking for
-  // "summary_large_image". The cause appears to be `images: undefined`:
-  // Next resolves the twitter object first and treats an explicitly imageless
-  // card as a small one, then merges in the image from the file-based
-  // opengraph-image convention afterwards, by which point the card type is
-  // already decided. Leaving the key out entirely lets the file convention
-  // govern images from the start.
+  // app/opengraph-image.tsx generates a card image, and Next normally attaches
+  // it to every route automatically. Relying on that turned out to be fragile:
+  // across two deploys of this file the automatic attachment applied in one and
+  // silently stopped in the other, leaving the homepage with no og:image at all
+  // and link previews showing a broken-image placeholder.
+  //
+  // The exact merge rule between an explicit openGraph object in
+  // generateMetadata and the file-based convention is not something the docs
+  // pin down, and `next build` cannot run in this environment to test it. So
+  // rather than depend on behaviour I cannot verify, the image is named here.
+  // It is our own route at a stable path; being explicit costs one line and
+  // removes a whole class of "why did the preview break" questions.
+  //
+  // Dimensions and alt text mirror the exports in app/opengraph-image.tsx.
+  // They matter: Twitter downgrades summary_large_image to a small card when
+  // it cannot establish a valid image, which is what started this.
+  const SOCIAL_IMAGE = {
+    url:    ogImage ?? "/opengraph-image",
+    width:  1200,
+    height: 630,
+    alt:    "AI Marketing Lab — SEO and answer-engine intelligence",
+  };
+
   const openGraph: NonNullable<Metadata["openGraph"]> = {
     title:       ogTitle,
     description: ogDescription,
@@ -87,15 +102,15 @@ export async function resolveSeo(defaults: RouteSeo): Promise<Metadata> {
     // Restated because of the shallow merge described above.
     siteName:    SITE_NAME,
     locale:      "en_GB",
+    images:      [SOCIAL_IMAGE],
   };
-  if (ogImage) openGraph.images = [{ url: ogImage }];
 
   const twitter: NonNullable<Metadata["twitter"]> = {
     card:        "summary_large_image",
     title:       ogTitle,
     description: ogDescription,
+    images:      [SOCIAL_IMAGE],
   };
-  if (ogImage) twitter.images = [ogImage];
 
   const meta: Metadata = {
     title: defaults.titleAbsolute && title ? { absolute: title } : title,

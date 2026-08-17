@@ -234,9 +234,15 @@ for page in pages:
 # This is invisible in review — the child looks like it is adding two fields —
 # and invisible in the app. It only shows up in a link preview. It shipped once
 # on the homepage, hence this check.
+# `images` is required in both because a social card with no resolvable image
+# is silently downgraded by Twitter/X to a small thumbnail, and renders a
+# broken-image placeholder elsewhere. This shipped twice: once relying on the
+# file-based opengraph-image convention to attach it automatically, which
+# worked on one deploy and stopped on the next for reasons the docs do not
+# pin down. Naming the image explicitly is the only version that stays fixed.
 REQUIRED_IN_BLOCK = {
-    "openGraph": ["siteName", "locale"],
-    "twitter":   ["card"],
+    "openGraph": ["siteName", "locale", "images"],
+    "twitter":   ["card", "images"],
 }
 
 def nested_block(src: str, key: str) -> str | None:
@@ -271,6 +277,38 @@ for f in sorted(list(APP.rglob("page.tsx")) + list(APP.rglob("layout.tsx"))):
                     f"Metadata merges shallowly, so this replaces the root layout's "
                     f"`{key}` entirely and `{field}` is lost."
                 )
+
+
+# ── 5c: the shared resolver builds complete social objects ────────────────────
+# Routes no longer declare openGraph/twitter themselves — they call resolveSeo,
+# so the check above scans files that legitimately contain neither. The fields
+# every social card needs are now built in ONE place, and that place has to be
+# checked directly or the whole check is theatre. It already passed a change
+# that dropped og:image from every page on the site.
+resolver = ROOT / "lib/seo-metadata.ts"
+rsrc = strip_comments(read(resolver))
+if rsrc:
+    for key, required in REQUIRED_IN_BLOCK.items():
+        # Matches `const openGraph<anything> = {` — the type annotation between
+        # the name and the `=` varies, so anchor on the name and the brace.
+        m = re.search(rf"\bconst\s+{key}\b[^=]*=\s*\{{", rsrc)
+        if not m:
+            problems.append(f"lib/seo-metadata.ts does not build a `{key}` object.")
+            continue
+        depth, j = 1, m.end()
+        while j < len(rsrc) and depth:
+            if rsrc[j] == "{": depth += 1
+            elif rsrc[j] == "}": depth -= 1
+            j += 1
+        blk = rsrc[m.end():j]
+        for field in required:
+            if not re.search(rf"\b{field}\s*:", blk):
+                problems.append(
+                    f"lib/seo-metadata.ts builds `{key}` without `{field}`. Every route "
+                    f"gets its social tags from here, so this drops {field} site-wide."
+                )
+else:
+    notes.append("lib/seo-metadata.ts not found — social tag checks skipped.")
 
 
 # ── 5: canonicals only on crawlable routes ────────────────────────────────────
