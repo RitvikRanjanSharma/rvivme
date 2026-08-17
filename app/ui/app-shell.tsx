@@ -24,7 +24,7 @@ import {
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  AlertTriangle, Bell, Bot, Brain, ChevronDown, FileText, Flag, Gauge, LayoutDashboard,
+  AlertTriangle, Bell, Bot, Brain, ChevronDown, Flag, Gauge, LayoutDashboard,
   LogOut, MapPin, Menu, Moon, Newspaper, Search, Settings, Sun, Target,
   User, Users, X,
 } from "lucide-react";
@@ -317,18 +317,68 @@ const PUBLIC_NAV = [
   { href: "/portfolio", label: "About"     },
 ] as const;
 
-const SIDEBAR_INTEL = [
-  { href: "/dashboard",      label: "Dashboard",   icon: LayoutDashboard },
-  { href: "/opportunities",  label: "Opportunities", icon: Target        },
-  { href: "/geo",            label: "Answer engines", icon: Bot          },
-  { href: "/local",          label: "Local search", icon: MapPin         },
-  { href: "/strategies",     label: "Strategies",  icon: Flag            },
-  { href: "/keywords",       label: "Keywords",    icon: Search          },
-  { href: "/competitors",    label: "Competitors", icon: Users           },
-  { href: "/audit",          label: "Site audit",  icon: Gauge           },
-  { href: "/alerts",         label: "Alerts",      icon: AlertTriangle   },
-  { href: "/blog",           label: "Public blog", icon: Newspaper       },
-] as const;
+// ─── Sidebar groups ──────────────────────────────────────────────────────────
+//
+// Grouped by JOB, not by acronym, and the grouping is a product decision worth
+// recording.
+//
+// The obvious split was SEO / AEO / GEO. Two problems killed it. AEO and GEO
+// are near-synonyms — both mean "be readable and citable by answer engines",
+// they target the same engines and use the same techniques — so two menu items
+// meaning the same thing would just make people guess which one holds the
+// feature they want. And the buckets do not balance: SEO has four surfaces,
+// answer engines has one, which would ship navigation that advertises how thin
+// one half is.
+//
+// So: one plain-English "AI visibility" section that can grow, and SEO named
+// as what it contains rather than as a three-letter word a plumber has to
+// decode. The acronyms stay in the marketing copy, where people search for
+// them — a homepage and a sidebar have different audiences.
+//
+// WORKSPACE sits above both on purpose. Opportunities and Strategies cut
+// ACROSS the disciplines: the whole positioning is one ranked list of what to
+// do next, and filing that under SEO or under AI visibility would ask the user
+// to diagnose which kind of problem they have before seeing the answer — which
+// is the judgement they came here for.
+const SIDEBAR_GROUPS: {
+  label: string;
+  hint?: string;
+  items: readonly { href: string; label: string; icon: typeof LayoutDashboard }[];
+}[] = [
+  {
+    label: "Workspace",
+    items: [
+      { href: "/dashboard",     label: "Dashboard",     icon: LayoutDashboard },
+      { href: "/opportunities", label: "Opportunities", icon: Target          },
+      { href: "/strategies",    label: "Strategies",    icon: Flag            },
+    ],
+  },
+  {
+    label: "SEO",
+    hint:  "Search rankings and site health",
+    items: [
+      { href: "/audit",       label: "Site audit",   icon: Gauge  },
+      { href: "/keywords",    label: "Keywords",     icon: Search },
+      { href: "/competitors", label: "Competitors",  icon: Users  },
+      { href: "/local",       label: "Local search", icon: MapPin },
+    ],
+  },
+  {
+    label: "AI visibility",
+    hint:  "AEO / GEO — answer engines",
+    items: [
+      { href: "/geo", label: "Answer engines", icon: Bot },
+    ],
+  },
+  {
+    label: "Monitoring",
+    items: [
+      { href: "/alerts", label: "Alerts",      icon: AlertTriangle },
+      { href: "/blog",   label: "Public blog", icon: Newspaper     },
+    ],
+  },
+];
+
 // SIDEBAR_ADMIN — visible to all signed-in users.
 const SIDEBAR_ADMIN = [
   { href: "/settings",       label: "Settings",    icon: Settings        },
@@ -857,12 +907,28 @@ function AppSidebar({ open = false }: { open?: boolean }) {
         gap: "2px", zIndex: 50, overflowY: "auto",
       }}
     >
-      <span style={{
-        padding: "0 12px 12px", fontFamily: "var(--font-mono)",
-        fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase",
-        color: "var(--text-tertiary)",
-      }}>Intelligence</span>
-      {SIDEBAR_INTEL.map(renderItem)}
+      {SIDEBAR_GROUPS.map((group, gi) => (
+        <div key={group.label} style={{ marginBottom: gi === SIDEBAR_GROUPS.length - 1 ? 0 : 14 }}>
+          <div style={{
+            padding: "0 12px 8px", fontFamily: "var(--font-mono)",
+            fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase",
+            color: "var(--text-tertiary)",
+          }}>
+            {group.label}
+          </div>
+          {/* The hint carries the acronyms so someone searching for "GEO"
+              still finds it, without making the nav label itself jargon. */}
+          {group.hint && (
+            <div style={{
+              padding: "0 12px 8px", fontFamily: "var(--font-body)",
+              fontSize: "10.5px", color: "var(--text-tertiary)", lineHeight: 1.4,
+            }}>
+              {group.hint}
+            </div>
+          )}
+          {group.items.map(renderItem)}
+        </div>
+      ))}
 
       <div style={{
         height: "1px", background: "var(--border)", margin: "14px 8px",
