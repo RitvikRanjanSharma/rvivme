@@ -554,7 +554,7 @@ function CrawlerView({ brandColor }: { brandColor: string }) {
             value={url}
             onChange={e => setUrl(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter" && !loading) run(); }}
-            placeholder="Your homepage, or paste a page URL"
+            placeholder="Any website — yours or a competitor\u2019s"
             aria-label="Page URL to check"
             style={{
               flex: "1 1 240px", minWidth: 0,

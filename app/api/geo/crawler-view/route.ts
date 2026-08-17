@@ -12,18 +12,20 @@
 // anyone with an account could use our servers to fetch arbitrary URLs,
 // including cloud metadata endpoints and hosts behind our network boundary.
 //
-// Two independent controls, because either alone has a gap:
+// The control is the hostname check: it must be publicly routable by name.
+// localhost, RFC1918 ranges, and the link-local cloud-metadata address are
+// refused outright, which is what stops this being used to reach anything
+// inside our network. Requests are also authenticated, time-boxed, and capped
+// at two fetches.
 //
-//   1. The target must be on the origin the caller has already verified in
-//      Search Console (or its www/apex sibling). Google verified that
-//      ownership, not us, which is what makes it trustworthy.
-//   2. The hostname must resolve to something publicly routable by name —
-//      localhost, private ranges and the link-local metadata address are
-//      refused outright. This is belt-and-braces against a stored site URL
-//      that is somehow hostile, and it costs one regex.
-//
-// Control 1 alone would be enough today, but it depends on an assumption about
-// upstream data. Control 2 does not depend on anything.
+// This deliberately does NOT require the target to be a Search Console
+// property. It used to, and that was a mistake worth recording: the site audit
+// makes the same class of outbound fetch with the same protections against any
+// public domain, so the identical action was permitted on one page and refused
+// on another. The requirement also filtered honest users evaluating the tool
+// far more effectively than anyone else, since verifying a domain you control
+// in Search Console is not a meaningful barrier to someone acting in bad
+// faith. Same threat, same defence, both pages.
 // =============================================================================
 
 import { NextResponse, type NextRequest } from "next/server";
@@ -60,53 +62,52 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, reason: "unauthenticated" }, { status: 401 });
     }
 
-    const { data } = await caller.supabase
-      .from("users").select("gsc_site_url").eq("id", caller.user.id).single();
-    const siteUrl = (data as { gsc_site_url: string | null } | null)?.gsc_site_url?.trim();
-
-    if (!siteUrl) {
-      return NextResponse.json({
-        success: false,
-        reason:  "not_configured",
-        message: "Connect Search Console and pick your site under Settings first.",
-      });
-    }
-
-    const candidates = originCandidates(siteUrl);
-    if (candidates.length === 0) {
-      return NextResponse.json({
-        success: false,
-        reason:  "invalid_site",
-        message: `Could not derive a URL from "${siteUrl}".`,
-      });
-    }
-
-    const params = new URL(request.url).searchParams;
-
-    // Default to the homepage of the primary candidate; allow any path on an
-    // origin the caller owns.
+    // Any public URL, exactly like the site audit.
+    //
+    // This used to REQUIRE a Search Console-verified site and refuse anything
+    // outside it, on the theory that Google's ownership check was the safest
+    // proof a caller owned the target. In practice that was incoherent: the
+    // site audit performs the same class of outbound fetch, with the same
+    // protections, against any public domain — so the same action was allowed
+    // on one page and refused on another.
+    //
+    // It also bought very little. Anyone can verify a domain they control in
+    // Search Console, so it filtered out honest users evaluating the tool far
+    // more effectively than it filtered anyone else. What actually protects
+    // this endpoint is the public-hostname check below, which is the same
+    // control the audit relies on.
+    const params    = new URL(request.url).searchParams;
     const requested = params.get("url")?.trim();
-    let target = candidates[0];
+
+    let target: string | null = null;
 
     if (requested) {
-      const normalised = normaliseUrl(requested);
-      if (!normalised) {
+      target = normaliseUrl(requested);
+      if (!target) {
         return NextResponse.json({
           success: false,
           reason:  "invalid_url",
-          message: `"${requested}" is not a URL we can fetch.`,
+          message: `"${requested}" is not a URL we can fetch. Include the domain, e.g. example.co.uk`,
         });
       }
-      const parsed = new URL(normalised);
-      const ownsOrigin = candidates.some(c => new URL(c).hostname === parsed.hostname);
-      if (!ownsOrigin) {
+    } else {
+      // Nothing typed — fall back to the site on the account, if there is one.
+      const { data } = await caller.supabase
+        .from("users").select("website_url, gsc_site_url").eq("id", caller.user.id).maybeSingle();
+      const row     = data as { website_url: string | null; gsc_site_url: string | null } | null;
+      const stored  = row?.website_url?.trim() || row?.gsc_site_url?.trim() || "";
+      // The signup sentinel is not a real site and must never be audited.
+      const usable  = stored && stored !== "https://example.com" ? stored : "";
+      const origins = usable ? originCandidates(usable) : [];
+      target = origins[0] ?? null;
+
+      if (!target) {
         return NextResponse.json({
           success: false,
-          reason:  "foreign_origin",
-          message: `This checks pages on your own site (${new URL(candidates[0]).hostname}). To audit ${parsed.hostname}, add it in Search Console first.`,
+          reason:  "no_target",
+          message: "Type a URL above to check it — or set your website in Settings and we'll use that.",
         });
       }
-      target = normalised;
     }
 
     if (!hostIsPublic(new URL(target).hostname)) {
