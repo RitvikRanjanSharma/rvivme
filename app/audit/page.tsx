@@ -62,6 +62,21 @@ export default function AuditPage() {
   const [problem, setProblem]   = useState<{ reason: string; message: string } | null>(null);
   const [stalled, setStalled]   = useState(false);
   const [inFlight, setInFlight] = useState(false);
+  /** Any domain can be audited on the spot — no Google connection needed. */
+  const [domain,   setDomain]   = useState("");
+  const [plan,      setPlan]      = useState<Plan | null>(null);
+  const [planning,  setPlanning]  = useState(false);
+
+  async function buildPlan() {
+    setPlanning(true);
+    try {
+      const res = await fetch("/api/site-audit/plan", { method: "POST" });
+      const j = await res.json().catch(() => null);
+      if (j?.success) setPlan(j);
+    } finally {
+      setPlanning(false);
+    }
+  }
 
   async function refresh() {
     setLoading(true);
@@ -74,6 +89,9 @@ export default function AuditPage() {
       // placeholder zeros. Showing that as a result is how a dead audit looked
       // like a score of 0 out of 100.
       setStalled(Boolean(j.stalled));
+      // A plan describes one audit. Keeping it across a refresh would show
+      // advice for findings that are no longer on screen.
+      setPlan(null);
       setInFlight(Boolean(j.running));
     } finally {
       setLoading(false);
@@ -95,7 +113,17 @@ export default function AuditPage() {
       // spun, the page returned to "No audits yet", and no reason was given
       // anywhere. The most common cause is simply an unset website URL, which
       // is one click to fix once you know.
-      const res = await fetch("/api/site-audit", { method: "POST" });
+      // Send whatever is typed in the box; the route falls back to the stored
+      // website URL when it is empty. This is what makes the audit usable
+      // against a site the visitor has never connected — the crawler and
+      // PageSpeed both work from the public URL alone, so nothing here needs
+      // Search Console or Analytics.
+      const target = domain.trim();
+      const res = await fetch("/api/site-audit", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(target ? { domain: target } : {}),
+      });
       const json = await res.json().catch(() => null);
 
       if (!json?.success) {
@@ -130,9 +158,23 @@ export default function AuditPage() {
         <div>
           <h1 className="aiml-page-title">Site audit</h1>
           <p style={{ color: "var(--text-secondary)", margin: "6px 0 0", fontSize: 15 }}>
-            Technical SEO scan of your website. Run any time; daily limit applies.
+            Technical SEO scan of any website. Nothing to connect — paste a URL and run it.
           </p>
         </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <input
+          value={domain}
+          onChange={e => setDomain(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter" && !running) run(); }}
+          placeholder="yourcompany.co.uk"
+          aria-label="Website to audit"
+          style={{
+            fontFamily: "var(--font-body)", fontSize: 14,
+            color: "var(--text-primary)", background: "var(--surface)",
+            border: "1px solid var(--border)", borderRadius: "var(--radius-pill)",
+            padding: "10px 16px", minWidth: 220,
+          }}
+        />
         <button
           onClick={run}
           disabled={running}
@@ -148,7 +190,12 @@ export default function AuditPage() {
             ? <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Running…</>
             : <><Play size={14} /> Run audit</>}
         </button>
+        </div>
       </header>
+
+      {audit && !inFlight && (
+        <ActionPlan plan={plan} loading={planning} onBuild={buildPlan} />
+      )}
 
       {loading && !audit && (
         <Empty
@@ -514,4 +561,112 @@ function formatTime(iso: string): string {
   const hr = Math.round(min / 60);
   if (hr < 24) return `${hr}h ago`;
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
+
+// ─── Action plan ─────────────────────────────────────────────────────────────
+// The audit says what is wrong; this says what to do about it and in what
+// order. Ordering comes from our own impact scores rather than the model —
+// letting an LLM rank the work produces confident-sounding priorities nobody
+// can defend.
+
+type PlanAction = {
+  order: number; rule: string; title: string; severity: string;
+  count: number; impact: number; effort: "quick" | "medium" | "project";
+  why: string; fix: string; pages: string[];
+};
+type Plan = {
+  success: boolean; clean: boolean; summary: string;
+  audit?: { domain: string; score: number; pages: number };
+  actions: PlanAction[];
+};
+
+const EFFORT_LABEL: Record<string, string> = {
+  quick:   "Under an hour",
+  medium:  "A few hours",
+  project: "A day or more",
+};
+
+function ActionPlan({ plan, loading, onBuild }: {
+  plan: Plan | null; loading: boolean; onBuild: () => void;
+}) {
+  if (!plan) {
+    return (
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        gap: 14, flexWrap: "wrap", padding: "16px 18px", borderRadius: 12,
+        marginBottom: 20, background: "var(--card)", border: "1px solid var(--border)",
+      }}>
+        <div style={{ fontSize: 13.5, color: "var(--text-reading)", lineHeight: 1.6, maxWidth: 620 }}>
+          <strong style={{ color: "var(--text-primary)" }}>Turn this into a plan.</strong>{" "}
+          Groups the findings, orders them by what will actually move the needle,
+          and estimates the effort for each.
+        </div>
+        <button onClick={onBuild} disabled={loading} style={{
+          display: "inline-flex", alignItems: "center", gap: 8,
+          padding: "10px 18px", borderRadius: "var(--radius-pill)",
+          background: loading ? "var(--text-tertiary)" : "var(--brand-strong)",
+          color: "#fff", border: "none", fontSize: 14, fontWeight: 500,
+          cursor: loading ? "wait" : "pointer", whiteSpace: "nowrap",
+        }}>
+          {loading ? "Building…" : "Build action plan"}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      padding: "20px 22px", borderRadius: 14, marginBottom: 24,
+      background: "var(--card)", border: "1px solid var(--border)",
+    }}>
+      <div style={{
+        fontFamily: "var(--font-mono)", fontSize: 9.5, letterSpacing: "0.12em",
+        textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 10,
+      }}>
+        What to do, in order
+      </div>
+
+      <p style={{ fontSize: 14, color: "var(--text-reading)", lineHeight: 1.7, margin: "0 0 18px" }}>
+        {plan.summary}
+      </p>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {plan.actions.map(a => (
+          <div key={a.rule} style={{
+            display: "flex", gap: 12, paddingBottom: 14,
+            borderBottom: "1px solid var(--border-subtle)",
+          }}>
+            <div style={{
+              flexShrink: 0, width: 26, height: 26, borderRadius: "50%",
+              background: "var(--muted)", border: "1px solid var(--border)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-secondary)",
+            }}>
+              {a.order}
+            </div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+                <span style={{ fontSize: 14.5, fontWeight: 500, color: "var(--text-primary)" }}>
+                  {a.title}
+                </span>
+                <span style={{
+                  fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.06em",
+                  color: "var(--text-tertiary)",
+                }}>
+                  {EFFORT_LABEL[a.effort]} · impact {a.impact}/100
+                </span>
+              </div>
+              <div style={{ fontSize: 13, color: "var(--text-reading)", lineHeight: 1.65, marginTop: 4 }}>
+                {a.why}
+              </div>
+              <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.65, marginTop: 4 }}>
+                <strong style={{ color: "var(--brand)" }}>Do this:</strong> {a.fix}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }

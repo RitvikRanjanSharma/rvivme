@@ -22,10 +22,9 @@
 // login page, so what a crawler could index was a dozen URLs all duplicating
 // /auth/login. This list tracks the protected prefixes in proxy.ts.
 //
-// /portfolio is blocked while it is an empty placeholder. It also carries a
-// noindex, which does a different job: robots.txt stops the crawl, noindex
-// stops indexing when the URL is reached another way — a disallowed URL can
-// still be indexed on the strength of external links alone.
+// /portfolio was blocked while it was an empty placeholder. It now carries a
+// real profile, so it is crawlable and indexable again — flipped here, in the
+// page metadata and in the nav together.
 // =============================================================================
 
 import { SITE_URL } from "@/lib/site";
@@ -40,8 +39,6 @@ const DISALLOW = [
   "/audit", "/alerts", "/onboarding",
   // Operator-only.
   "/admin",
-  // Placeholder, pending real content.
-  "/portfolio",
   // Auth and internals.
   "/auth", "/api",
 ];
@@ -52,6 +49,7 @@ export function generatedRobots(): string {
     "User-agent: *",
     "Allow: /",
     "Allow: /blog",
+    "Allow: /portfolio",
     ...DISALLOW.map(p => `Disallow: ${p}`),
     "",
     `Sitemap: ${SITE_URL}/sitemap.xml`,

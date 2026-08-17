@@ -311,15 +311,10 @@ const isAppRoute  = (p: string) =>
 const isAuthRoute = (p: string) => p.startsWith("/auth");
 
 // ─── Nav definitions ──────────────────────────────────────────────────────────
-// Portfolio is deliberately absent. The page is still routable, but it has no
-// real content yet, and linking to an empty page from every header sends both
-// visitors and crawlers somewhere that cannot help them. It carries
-// noindex/nofollow to match (app/portfolio/layout.tsx). Restore the entry here
-// at the same time as removing that robots directive, once there is work to
-// show.
 const PUBLIC_NAV = [
   { href: "/",          label: "Home"      },
   { href: "/blog",      label: "Blog"      },
+  { href: "/portfolio", label: "About"     },
 ] as const;
 
 const SIDEBAR_INTEL = [
