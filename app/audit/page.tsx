@@ -10,6 +10,7 @@
 // =============================================================================
 
 import { useEffect, useState } from "react";
+import { FirstVisitHint } from "@/app/ui/first-visit-hint";
 import { readyFix, canSuggest } from "@/lib/audit-fixes";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
@@ -193,6 +194,12 @@ export default function AuditPage() {
         </button>
         </div>
       </header>
+
+      <FirstVisitHint id="audit">
+        Paste any website above and press <strong>Run audit</strong>. Every finding
+        shows your actual page content, and most come with a ready-to-paste fix or a
+        <strong> Write the fix for me</strong> button.
+      </FirstVisitHint>
 
       {audit && !inFlight && (
         <ActionPlan plan={plan} loading={planning} onBuild={buildPlan} />

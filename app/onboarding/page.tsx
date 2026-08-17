@@ -158,7 +158,11 @@ export default function OnboardingPage() {
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ domain: hostFor(websiteUrl) }),
       });
-    } catch { /* swallow — user can re-run from the audit page */ }
+    } catch {
+      // Deliberately soft: the audit page has its own Run button and reports
+      // its own reasons, so a failure here costs one click rather than
+      // blocking the end of onboarding on something recoverable.
+    }
   }
 
   async function finish() {
@@ -171,8 +175,19 @@ export default function OnboardingPage() {
       .from("users")
       .update({ onboarding_complete: true } as never)
       .eq("id", userId);
-    void kickoffFirstAudit();
-    router.replace("/dashboard");
+    // Land on the AUDIT, not the dashboard.
+    //
+    // A brand-new account has no Search Console history and no GA4 sessions,
+    // so the dashboard is empty by definition on day one — which made the last
+    // thing anyone saw after five steps of setup a screen full of zeroes. The
+    // audit is the one surface that produces a real result immediately,
+    // because it reads their live site rather than waiting on Google.
+    //
+    // Awaited rather than fired-and-forgotten so the run has actually started
+    // before we navigate; otherwise the audit page can load, see nothing
+    // running, and show "no audits yet" a second before one appears.
+    await kickoffFirstAudit();
+    router.replace("/audit");
   }
 
   async function next() {
@@ -258,7 +273,7 @@ export default function OnboardingPage() {
             <div className="aiml-button-row" style={{ display: "flex", gap: 10 }}>
               {!isLast && step.id !== "welcome" && (
                 <button onClick={() => setStepIdx(i => i + 1)} disabled={busy} style={btnGhost(false)}>
-                  Skip for now
+                  {step.id === "domain" ? "Skip for now" : "Skip \u2014 not needed for the audit"}
                 </button>
               )}
               <button onClick={next} disabled={busy || !canAdvance(step.id, { websiteUrl })} style={btnPrimary(busy)}>
@@ -459,8 +474,8 @@ function AuditStep({ websiteUrl }: { websiteUrl: string }) {
         It checks meta tags, headings, broken links, schema, and Core Web Vitals.
       </p>
       <p style={{ color: "var(--text-secondary)", fontSize: 14, lineHeight: 1.6 }}>
-        The audit runs in the background while you explore the dashboard. You&rsquo;ll
-        see results in the Site Audit panel within ~60 seconds.
+        It needs nothing connected &mdash; no Google account, no tracking code. We
+        read your live pages the same way a search engine does.
       </p>
       <div
         style={{
@@ -474,7 +489,7 @@ function AuditStep({ websiteUrl }: { websiteUrl: string }) {
           display:      "flex", alignItems: "center", gap: 10,
         }}
       >
-        <Search size={16} /> Click <strong style={{ color: "var(--text-primary)" }}>Finish</strong> to start the audit and open your dashboard.
+        <Search size={16} /> Click <strong style={{ color: "var(--text-primary)" }}>Finish</strong> &mdash; we&rsquo;ll run the audit and take you straight to the results.
       </div>
     </div>
   );

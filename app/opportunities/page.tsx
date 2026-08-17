@@ -13,6 +13,7 @@
 // =============================================================================
 
 import { useCallback, useEffect, useState } from "react";
+import { FirstVisitHint } from "@/app/ui/first-visit-hint";
 import { BRAND_DEFAULT } from "@/app/ui/app-shell";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
@@ -320,6 +321,12 @@ export default function OpportunitiesPage() {
           REFRESH
         </button>
       </motion.div>
+
+      <FirstVisitHint id="opportunities">
+        Ranked by what will move results, not by what is loudest. Every recommendation
+        expands to show the Search Console rows behind it, so you can check the
+        reasoning &mdash; and disagree with it.
+      </FirstVisitHint>
 
       {loading && (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>

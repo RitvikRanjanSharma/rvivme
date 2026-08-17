@@ -15,6 +15,7 @@
 // =============================================================================
 
 import { useCallback, useEffect, useState } from "react";
+import { FirstVisitHint } from "@/app/ui/first-visit-hint";
 import { BRAND_DEFAULT } from "@/app/ui/app-shell";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
@@ -151,6 +152,10 @@ export default function GeoPage() {
           <RefreshCw size={11} style={{ animation: loading ? "spin 0.7s linear infinite" : "none" }} /> REFRESH
         </button>
       </motion.div>
+
+      <FirstVisitHint id="geo">
+        This checks whether AI answer engines &mdash; ChatGPT, Perplexity, Claude and Gemini &mdash; are allowed to read your site, and what they actually receive when they do. Nothing to install.
+      </FirstVisitHint>
 
       {loading && (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
