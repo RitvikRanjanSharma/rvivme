@@ -227,6 +227,24 @@ function UserCacheGuard() {
         if (!current && prev) clearAimlKeys();
         if (current) localStorage.setItem(LAST_USER_KEY, current);
         else         localStorage.removeItem(LAST_USER_KEY);
+
+        // Self-heal a missing profile row.
+        //
+        // A bug in the signup trigger (see migration 015) left some accounts
+        // existing in auth.users with no row in public.users. Everything that
+        // writes to that table then matched zero rows — which PostgREST calls
+        // success — so saves showed a tick and stored nothing, and the audit
+        // failed on a foreign key nobody could see.
+        //
+        // RLS deliberately forbids the client from inserting its own row, so
+        // this goes through a SECURITY DEFINER function that can only ever
+        // create a row for auth.uid(). Idempotent and cheap: ON CONFLICT DO
+        // NOTHING, once per mount. Failure is ignored on purpose — if the
+        // migration has not been applied yet the RPC simply will not exist,
+        // and that must not stop the app rendering.
+        if (current) {
+          try { await supabase.rpc("ensure_user_row"); } catch { /* not fatal */ }
+        }
       } catch {
         /* auth not configured — don't block the shell */
       }

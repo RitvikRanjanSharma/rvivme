@@ -131,12 +131,20 @@ export async function POST(req: NextRequest) {
     // it gets its own reason and says which migration provides the table.
     const raw     = insertErr?.message ?? "insert_failed";
     const missing = /relation .* does not exist|could not find the table/i.test(raw);
+    // The FK on site_audits.user_id points at public.users. Violating it means
+    // the caller has an auth session but no profile row — the signup-trigger
+    // bug fixed in migration 015. Raw Postgres constraint text is useless to
+    // the person reading it, and it is not a problem with their website.
+    const noProfile = /violates foreign key constraint .*user_id/i.test(raw);
+
     return NextResponse.json({
       success: false,
-      reason:  missing ? "missing_tables" : "insert_failed",
-      message: missing
-        ? "The audit tables haven't been created in the database yet. Run supabase/migrations/007_seo_foundations.sql."
-        : `Couldn't start the audit: ${raw}`,
+      reason:  noProfile ? "no_profile_row" : missing ? "missing_tables" : "insert_failed",
+      message: noProfile
+        ? "Your account is missing its profile record, so there is nothing to attach the audit to. Reload the page — the app repairs this automatically. If it persists, sign out and back in."
+        : missing
+          ? "The audit tables haven't been created in the database yet. Run supabase/migrations/007_seo_foundations.sql."
+          : `Couldn't start the audit: ${raw}`,
       error:   raw,
     }, { status: 500 });
   }
