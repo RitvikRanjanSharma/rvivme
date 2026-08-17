@@ -21,22 +21,31 @@ export function absoluteUrl(path: string): string {
   return `${SITE_URL}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
-/** The apex that does not serve the site. Kept explicit so the guard below reads. */
-const DEAD_APEX = "aimarketinglab.co.uk";
+/** The apex. Redirects to www — see the note on resolveBaseUrl. */
+const APEX = "aimarketinglab.co.uk";
 
 /**
  * The base URL for links we hand to the outside world — emails, RSS items,
  * canonical tags, Open Graph.
  *
- * Respects APP_URL, but corrects one specific known-broken value. Several
- * places defaulted to `https://aimarketinglab.co.uk`, and APP_URL in
- * production may well be set to it too, because the apex is the obvious thing
- * to type. It resolves to a parking certificate, so every one of those links
- * lands on a TLS warning: RSS entries, blog Open Graph URLs shared to
- * LinkedIn, and the unsubscribe links in outbound email.
+ * Respects APP_URL, but rewrites the apex to www.
  *
- * This is a deliberate override of configuration rather than a general
- * normaliser — it fires only for the one hostname we know doesn't serve.
+ * WHY THIS STILL EXISTS NOW THE APEX IS FIXED
+ *
+ * It was originally a workaround for a broken host: the apex served a parking
+ * certificate, so every link built from it — RSS entries, Open Graph URLs
+ * shared to LinkedIn, unsubscribe links in email — landed on a TLS warning.
+ * That is no longer true. The apex now resolves to Vercel and issues a 308 to
+ * www, verified August 2026.
+ *
+ * The rewrite is kept because its justification changed rather than
+ * disappeared. www is the canonical host, and a link to the apex now costs an
+ * extra redirect hop on every click. In email and RSS that hop is paid by the
+ * recipient, and for a canonical tag it is worth nothing at all — a canonical
+ * pointing at a URL that redirects is a canonical pointing at the wrong URL.
+ *
+ * So this is now canonicalisation, not damage control. If the apex is ever
+ * made to serve directly, this can go.
  */
 export function resolveBaseUrl(): string {
   const configured =
@@ -49,7 +58,7 @@ export function resolveBaseUrl(): string {
   try {
     const u = new URL(configured.replace(/\/$/, ""));
     // Leave localhost and preview deployments completely alone.
-    if (u.hostname === DEAD_APEX) return SITE_URL;
+    if (u.hostname === APEX) return SITE_URL;
     return u.origin;
   } catch {
     return SITE_URL;

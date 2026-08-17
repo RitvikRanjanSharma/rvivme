@@ -69,6 +69,34 @@ export async function resolveSeo(defaults: RouteSeo): Promise<Metadata> {
   const ogDescription = pick(override?.og_description, undefined) ?? description;
   const ogImage       = override?.og_image ?? undefined;
 
+  // Keys are OMITTED rather than set to undefined when there is no value.
+  //
+  // This is not tidiness. The deployed site was serving twitter:card
+  // "summary" — a small thumbnail — despite this file asking for
+  // "summary_large_image". The cause appears to be `images: undefined`:
+  // Next resolves the twitter object first and treats an explicitly imageless
+  // card as a small one, then merges in the image from the file-based
+  // opengraph-image convention afterwards, by which point the card type is
+  // already decided. Leaving the key out entirely lets the file convention
+  // govern images from the start.
+  const openGraph: NonNullable<Metadata["openGraph"]> = {
+    title:       ogTitle,
+    description: ogDescription,
+    url:         canonical,
+    type:        defaults.ogType ?? "website",
+    // Restated because of the shallow merge described above.
+    siteName:    SITE_NAME,
+    locale:      "en_GB",
+  };
+  if (ogImage) openGraph.images = [{ url: ogImage }];
+
+  const twitter: NonNullable<Metadata["twitter"]> = {
+    card:        "summary_large_image",
+    title:       ogTitle,
+    description: ogDescription,
+  };
+  if (ogImage) twitter.images = [ogImage];
+
   const meta: Metadata = {
     title: defaults.titleAbsolute && title ? { absolute: title } : title,
     description,
@@ -76,22 +104,8 @@ export async function resolveSeo(defaults: RouteSeo): Promise<Metadata> {
     // Only emitted when something is actually restricted — an explicit
     // "index, follow" is noise, and its absence is the same instruction.
     robots: index && follow ? undefined : { index, follow },
-    openGraph: {
-      title:       ogTitle,
-      description: ogDescription,
-      url:         canonical,
-      type:        defaults.ogType ?? "website",
-      // Restated because of the shallow merge described above.
-      siteName:    SITE_NAME,
-      locale:      "en_GB",
-      images:      ogImage ? [{ url: ogImage }] : undefined,
-    },
-    twitter: {
-      card:        "summary_large_image",
-      title:       ogTitle,
-      description: ogDescription,
-      images:      ogImage ? [ogImage] : undefined,
-    },
+    openGraph,
+    twitter,
   };
 
   return meta;
