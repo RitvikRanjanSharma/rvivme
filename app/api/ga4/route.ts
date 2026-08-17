@@ -9,6 +9,7 @@
 
 import { NextResponse } from "next/server";
 import { getCallerOrNull } from "@/lib/supabase-server";
+import { rangeFor, bucketFor, bucketSeries } from "@/lib/date-range";
 import { resolveGoogleToken } from "@/lib/google-oauth";
 
 const GA4_API_BASE = "https://analyticsdata.googleapis.com/v1beta";
@@ -44,7 +45,7 @@ async function runReport(propertyId: string, token: string, body: object) {
 // for the *authenticated caller's* GA4 property, or a calm `not_configured`
 // signal if they haven't entered a property ID under Settings → Integrations.
 // ─────────────────────────────────────────────────────────────────────────────
-export async function GET() {
+export async function GET(request: Request) {
   try {
     // 1. Require an authenticated session.
     const caller = await getCallerOrNull();
@@ -107,12 +108,18 @@ export async function GET() {
     }
     const token = tokenResult.accessToken;
 
+    // Range from the caller, validated against the shared list. GA4 reports
+    // same-day, so no lag offset — unlike Search Console.
+    const spec   = rangeFor(new URL(request.url).searchParams.get("range"));
+    const bucket = bucketFor(spec);
+    const GA_RANGE = [{ startDate: `${spec.days}daysAgo`, endDate: "today" }];
+
     // Run all reports in parallel
     const [summaryData, trendData, pagesData, sourcesData] = await Promise.all([
 
       // 1. Summary — last 30 days totals
       runReport(propertyId, token, {
-        dateRanges: [{ startDate: "30daysAgo", endDate: "today" }],
+        dateRanges: GA_RANGE,
         metrics: [
           { name: "sessions"         },
           { name: "totalUsers"       },
@@ -125,7 +132,7 @@ export async function GET() {
 
       // 2. Daily trend — last 30 days by date
       runReport(propertyId, token, {
-        dateRanges: [{ startDate: "30daysAgo", endDate: "today" }],
+        dateRanges: GA_RANGE,
         dimensions: [{ name: "date" }],
         metrics:    [{ name: "sessions" }, { name: "totalUsers" }],
         orderBys:   [{ dimension: { dimensionName: "date" }, desc: false }],
@@ -133,7 +140,7 @@ export async function GET() {
 
       // 3. Top pages
       runReport(propertyId, token, {
-        dateRanges: [{ startDate: "30daysAgo", endDate: "today" }],
+        dateRanges: GA_RANGE,
         dimensions: [{ name: "pagePath" }],
         metrics:    [{ name: "screenPageViews" }, { name: "sessions" }],
         orderBys:   [{ metric: { metricName: "screenPageViews" }, desc: true }],
@@ -142,7 +149,7 @@ export async function GET() {
 
       // 4. Traffic sources
       runReport(propertyId, token, {
-        dateRanges: [{ startDate: "30daysAgo", endDate: "today" }],
+        dateRanges: GA_RANGE,
         dimensions: [{ name: "sessionDefaultChannelGroup" }],
         metrics:    [{ name: "sessions" }],
         orderBys:   [{ metric: { metricName: "sessions" }, desc: true }],
@@ -163,7 +170,7 @@ export async function GET() {
     };
 
     // ── Parse daily trend ──────────────────────────────────────────────────
-    const trend = (trendData.rows ?? []).map((row: any) => {
+    const dailyTrend = (trendData.rows ?? []).map((row: any) => {
       const rawDate = row.dimensionValues[0].value; // "20260101"
       const d = `${rawDate.slice(0,4)}-${rawDate.slice(4,6)}-${rawDate.slice(6,8)}`;
       return {
@@ -180,6 +187,10 @@ export async function GET() {
       sessions:  parseInt(row.metricValues[1].value),
     }));
 
+    // Same bucketing as Search Console so the two charts line up visually when
+    // a user switches between them on the same range.
+    const trend = bucketSeries(dailyTrend, bucket.size, ["sessions", "users"], "date");
+
     // ── Parse traffic sources ──────────────────────────────────────────────
     const totalSessions = summary.sessions || 1;
     const sources = (sourcesData.rows ?? []).map((row: any) => ({
@@ -194,7 +205,12 @@ export async function GET() {
       trend,
       topPages,
       sources,
-      period: "last_30_days",
+      range: {
+        key:    spec.key,
+        label:  spec.long,
+        days:   spec.days,
+        bucket: bucket.unit,
+      },
     });
 
   } catch (err: any) {

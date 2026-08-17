@@ -29,6 +29,7 @@ import type { Metadata, Viewport } from "next";
 import { Poppins, DM_Mono } from "next/font/google";
 import { AppShell } from "./ui/app-shell";
 import { CookieBanner } from "./ui/cookie-banner";
+import { Analytics } from "./ui/analytics";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
 import "./globals.css";
 
@@ -140,6 +141,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body style={{ margin:0, padding:0 }}>
         <AppShell>{children}</AppShell>
         <CookieBanner />
+        {/* Loads GA4 only after analytics consent — see ui/analytics.tsx. */}
+        <Analytics />
       </body>
     </html>
   );

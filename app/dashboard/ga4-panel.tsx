@@ -8,6 +8,8 @@
 // =============================================================================
 
 import { useState, useEffect } from "react";
+import { RangeSelector } from "@/app/ui/range-selector";
+import { RANGES, DEFAULT_RANGE, type RangeKey } from "@/lib/date-range";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -56,6 +58,7 @@ interface GA4Data {
   topPages: GA4Page[];
   sources:  GA4Source[];
   period:   string;
+  range?: { key: string; label: string; days: number; bucket: string };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -126,7 +129,7 @@ function KpiCard({ label, value, icon: Icon, color, loading }: {
 // ─────────────────────────────────────────────────────────────────────────────
 // Trend chart
 // ─────────────────────────────────────────────────────────────────────────────
-function TrendChart({ data, brandColor, loading }: { data: GA4TrendPoint[]; brandColor: string; loading: boolean }) {
+function TrendChart({ data, brandColor, loading, rangeLong }: { data: GA4TrendPoint[]; brandColor: string; loading: boolean; rangeLong: string }) {
   const chartData = data.map(d => ({ ...d, dateLabel: fmtDate(d.date) }));
 
   return (
@@ -134,7 +137,7 @@ function TrendChart({ data, brandColor, loading }: { data: GA4TrendPoint[]; bran
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
         <div>
           <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "2px" }}>
-            Sessions & Users · Last 30 Days
+            {`Sessions & Users · Last ${rangeLong}`}
           </div>
           <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.08em" }}>
             LIVE · GOOGLE ANALYTICS 4
@@ -268,12 +271,17 @@ export function GA4Panel({ brandColor }: { brandColor: string }) {
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState("—");
+  const [range,       setRange]       = useState<RangeKey>(DEFAULT_RANGE);
 
-  async function fetchGA4() {
+  const spec       = RANGES.find(r => r.key === range) ?? RANGES[1];
+  const rangeLong  = data?.range?.label ?? spec.long;
+  const rangeLabel = spec.label;
+
+  async function fetchGA4(key: RangeKey = range) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/ga4");
+      const res = await fetch(`/api/ga4?range=${key}`);
       if (!res.ok) throw new Error(`API error ${res.status}`);
       const json = await res.json();
       // The API returns { success:false, reason, message } — not `error`.
@@ -296,7 +304,8 @@ export function GA4Panel({ brandColor }: { brandColor: string }) {
     }
   }
 
-  useEffect(() => { fetchGA4(); }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchGA4(range); }, [range]);
 
   const summary = data?.summary;
 
@@ -315,7 +324,7 @@ export function GA4Panel({ brandColor }: { brandColor: string }) {
             UPDATED {lastUpdated}
           </span>
           <button
-            onClick={fetchGA4}
+            onClick={() => fetchGA4(range)}
             disabled={loading}
             style={{ display: "flex", alignItems: "center", gap: "4px", fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", background: "transparent", border: "1px solid var(--border)", borderRadius: "5px", padding: "4px 8px", cursor: "pointer", letterSpacing: "0.06em" }}
           >
@@ -344,15 +353,15 @@ export function GA4Panel({ brandColor }: { brandColor: string }) {
 
       {/* KPI strip */}
       <div className="aiml-kpi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginBottom: "14px" }}>
-        <KpiCard label="Sessions (30d)"       value={summary ? fmtNum(summary.sessions)            : "—"} icon={Activity}          color={brandColor}            loading={loading} />
-        <KpiCard label="Users (30d)"          value={summary ? fmtNum(summary.users)               : "—"} icon={Users}             color="var(--signal-green)"   loading={loading} />
-        <KpiCard label="Pageviews (30d)"      value={summary ? fmtNum(summary.pageviews)           : "—"} icon={Eye}               color="var(--signal-amber)"   loading={loading} />
+        <KpiCard label={`Sessions (${rangeLabel})`}       value={summary ? fmtNum(summary.sessions)            : "—"} icon={Activity}          color={brandColor}            loading={loading} />
+        <KpiCard label={`Users (${rangeLabel})`}          value={summary ? fmtNum(summary.users)               : "—"} icon={Users}             color="var(--signal-green)"   loading={loading} />
+        <KpiCard label={`Pageviews (${rangeLabel})`}      value={summary ? fmtNum(summary.pageviews)           : "—"} icon={Eye}               color="var(--signal-amber)"   loading={loading} />
         <KpiCard label="Avg. Session"         value={summary ? fmtDuration(summary.avgSessionSecs) : "—"} icon={Clock}             color="var(--brand)"          loading={loading} />
       </div>
 
       {/* Trend chart — full width */}
       <div style={{ marginBottom: "14px" }}>
-        <TrendChart data={data?.trend ?? []} brandColor={brandColor} loading={loading} />
+        <TrendChart data={data?.trend ?? []} brandColor={brandColor} loading={loading} rangeLong={rangeLong} />
       </div>
 
       {/* Bottom row — top pages + sources */}

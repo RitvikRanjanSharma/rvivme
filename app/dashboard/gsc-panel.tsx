@@ -7,6 +7,8 @@
 // =============================================================================
 
 import { useState, useEffect } from "react";
+import { RangeSelector } from "@/app/ui/range-selector";
+import { RANGES, DEFAULT_RANGE, type RangeKey } from "@/lib/date-range";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -57,7 +59,8 @@ interface GSCData {
   topQueries: GSCQuery[];
   topPages:   GSCPage[];
   trend:      GSCTrendPoint[];
-  period:     string;
+  /** Echoed back by the API so headings describe the data actually returned. */
+  range?:     { key: string; label: string; days: number; bucket: string; start: string; end: string };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -124,7 +127,7 @@ function KpiCard({ label, value, icon: Icon, color, loading, hint }: {
 // ─────────────────────────────────────────────────────────────────────────────
 // Trend chart — clicks + impressions
 // ─────────────────────────────────────────────────────────────────────────────
-function GscTrendChart({ data, brandColor, loading }: { data: GSCTrendPoint[]; brandColor: string; loading: boolean }) {
+function GscTrendChart({ data, brandColor, loading, rangeLong }: { data: GSCTrendPoint[]; brandColor: string; loading: boolean; rangeLong: string }) {
   const chartData = data.map(d => ({ ...d, dateLabel: fmtDate(d.date) }));
 
   return (
@@ -132,7 +135,7 @@ function GscTrendChart({ data, brandColor, loading }: { data: GSCTrendPoint[]; b
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
         <div>
           <div style={{ fontFamily: "var(--font-syne), sans-serif", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "2px" }}>
-            Search Performance · Last 28 Days
+            {`Search Performance · Last ${rangeLong}`}
           </div>
           <div style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.08em" }}>
             LIVE · GOOGLE SEARCH CONSOLE
@@ -277,12 +280,20 @@ export function GSCPanel({ brandColor }: { brandColor: string }) {
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState("—");
+  const [range,       setRange]       = useState<RangeKey>(DEFAULT_RANGE);
 
-  async function fetchGSC() {
+  // Prefer what the API says it returned over what we asked for. If the two
+  // ever disagree, the chart should describe the data on screen rather than
+  // the request that produced it.
+  const spec       = RANGES.find(r => r.key === range) ?? RANGES[1];
+  const rangeLong  = data?.range?.label ?? spec.long;
+  const rangeLabel = spec.label;
+
+  async function fetchGSC(key: RangeKey = range) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/gsc");
+      const res = await fetch(`/api/gsc?range=${key}`);
       if (!res.ok) throw new Error(`API error ${res.status}`);
       const json = await res.json();
       // The API returns { success:false, reason, message } — not `error`.
@@ -305,7 +316,11 @@ export function GSCPanel({ brandColor }: { brandColor: string }) {
     }
   }
 
-  useEffect(() => { fetchGSC(); }, []);
+  // Refetches on range change. The dependency is the range key alone —
+  // including fetchGSC would re-run on every render, since it is redefined
+  // each time.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchGSC(range); }, [range]);
 
   const summary = data?.summary;
 
@@ -319,11 +334,12 @@ export function GSCPanel({ brandColor }: { brandColor: string }) {
           </span>
           <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: loading ? "var(--signal-amber)" : error ? "var(--signal-red)" : "var(--signal-green)", boxShadow: `0 0 6px ${loading ? "rgba(255,171,0,0.5)" : error ? "rgba(255,23,68,0.5)" : "rgba(37,181,126,0.5)"}` }} />
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          <RangeSelector value={range} onChange={setRange} disabled={loading} />
           <span style={{ fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.06em" }}>
             UPDATED {lastUpdated}
           </span>
-          <button onClick={fetchGSC} disabled={loading} style={{ display: "flex", alignItems: "center", gap: "4px", fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", background: "transparent", border: "1px solid var(--border)", borderRadius: "5px", padding: "4px 8px", cursor: "pointer", letterSpacing: "0.06em" }}>
+          <button onClick={() => fetchGSC(range)} disabled={loading} style={{ display: "flex", alignItems: "center", gap: "4px", fontFamily: "var(--font-dm-mono), monospace", fontSize: "10px", color: "var(--text-tertiary)", background: "transparent", border: "1px solid var(--border)", borderRadius: "5px", padding: "4px 8px", cursor: "pointer", letterSpacing: "0.06em" }}>
             <RefreshCw size={9} style={{ animation: loading ? "spin 0.7s linear infinite" : "none" }} />
             REFRESH
           </button>
@@ -344,15 +360,15 @@ export function GSCPanel({ brandColor }: { brandColor: string }) {
 
       {/* KPI strip */}
       <div className="aiml-kpi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginBottom: "14px" }}>
-        <KpiCard label="Total Clicks (28d)"       value={summary ? fmtNum(summary.clicks)      : "—"} icon={MousePointerClick} color={brandColor}           loading={loading} />
-        <KpiCard label="Impressions (28d)"        value={summary ? fmtNum(summary.impressions)  : "—"} icon={Eye}               color="var(--signal-green)"  loading={loading} />
+        <KpiCard label={`Total Clicks (${rangeLabel})`}       value={summary ? fmtNum(summary.clicks)      : "—"} icon={MousePointerClick} color={brandColor}           loading={loading} />
+        <KpiCard label={`Impressions (${rangeLabel})`}        value={summary ? fmtNum(summary.impressions)  : "—"} icon={Eye}               color="var(--signal-green)"  loading={loading} />
         <KpiCard label="Click-Through Rate"       value={summary ? `${summary.ctr}%`            : "—"} icon={TrendingUp}        color="var(--signal-amber)"  loading={loading} hint="AVG" />
         <KpiCard label="Average Position"         value={summary ? `#${summary.position}`       : "—"} icon={Hash}              color="var(--brand)"         loading={loading} hint="SERP" />
       </div>
 
       {/* Trend chart — full width */}
       <div style={{ marginBottom: "14px" }}>
-        <GscTrendChart data={data?.trend ?? []} brandColor={brandColor} loading={loading} />
+        <GscTrendChart data={data?.trend ?? []} brandColor={brandColor} loading={loading} rangeLong={rangeLong} />
       </div>
 
       {/* Bottom row — queries + pages */}

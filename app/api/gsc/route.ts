@@ -9,6 +9,7 @@
 
 import { NextResponse } from "next/server";
 import { getCallerOrNull } from "@/lib/supabase-server";
+import { rangeFor, rangeDates, bucketFor, bucketSeries, GSC_LAG_DAYS } from "@/lib/date-range";
 import { resolveGoogleToken } from "@/lib/google-oauth";
 
 const GSC_API_BASE = "https://www.googleapis.com/webmasters/v3";
@@ -49,7 +50,7 @@ async function searchAnalytics(
 // *authenticated caller's* GSC site, or a calm `not_configured` signal if
 // they haven't entered one under Settings → Integrations.
 // ─────────────────────────────────────────────────────────────────────────────
-export async function GET() {
+export async function GET(request: Request) {
   try {
     // 1. Require an authenticated session. Prevents a logged-out browser (or
     //    a different user on the same browser before cookies load) from
@@ -114,12 +115,11 @@ export async function GET() {
     }
     const token = tokenResult.accessToken;
 
-    const dateRange = {
-      startDate: new Date(Date.now() - 28 * 24 * 60 * 60 * 1000)
-        .toISOString().slice(0, 10),
-      endDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
-        .toISOString().slice(0, 10), // GSC has ~3 day lag
-    };
+    // Range comes from the caller, validated against the shared list so an
+    // arbitrary ?range= cannot ask Google for something it will refuse.
+    const spec      = rangeFor(new URL(request.url).searchParams.get("range"));
+    const dateRange = rangeDates(spec, GSC_LAG_DAYS);
+    const bucket    = bucketFor(spec);
 
     // Run all queries in parallel
     const [summaryData, queriesData, pagesData, trendData] = await Promise.all([
@@ -153,7 +153,10 @@ export async function GET() {
         ...dateRange,
         searchType: "web",
         dimensions: ["date"],
-        rowLimit:   30,
+        // One row per day for the whole window. The old value of 30 silently
+        // truncated anything longer, so a 90-day range would have charted its
+        // first 30 days and called it three months.
+        rowLimit:   spec.days + 1,
         orderBy:    [{ fieldName: "date", sortOrder: "ASCENDING" }],
       }),
 
@@ -187,7 +190,7 @@ export async function GET() {
     }));
 
     // ── Parse daily trend ──────────────────────────────────────────────────
-    const trend = (trendData.rows ?? []).map((row: any) => ({
+    const dailyTrend = (trendData.rows ?? []).map((row: any) => ({
       date:        row.keys[0],
       clicks:      Math.round(row.clicks),
       impressions: Math.round(row.impressions),
@@ -195,13 +198,25 @@ export async function GET() {
       position:    parseFloat(row.position.toFixed(1)),
     }));
 
+    // Longer ranges are bucketed so the line stays readable. CTR and position
+    // are deliberately NOT summed — they are ratios and averages, and adding
+    // them would produce nonsense like a 400% click-through rate.
+    const trend = bucketSeries(dailyTrend, bucket.size, ["clicks", "impressions"], "date");
+
     return NextResponse.json({
       success: true,
       summary,
       topQueries,
       topPages,
       trend,
-      period:  "last_28_days",
+      range: {
+        key:    spec.key,
+        label:  spec.long,
+        days:   spec.days,
+        bucket: bucket.unit,
+        start:  dateRange.startDate,
+        end:    dateRange.endDate,
+      },
     });
 
   } catch (err: any) {
