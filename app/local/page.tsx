@@ -565,7 +565,9 @@ function BusinessPanel({ business, brandColor }: { business: BusinessReport | nu
             {business.locations?.find(l => l.name === business.selected)?.title ?? "Your profile"}
           </span>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-tertiary)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-            Profile completeness {business.profile?.score ?? 0}/100
+            {business.profile
+              ? `Profile completeness ${business.profile.score}/100`
+              : "Profile completeness not measured yet"}
           </span>
         </div>
 

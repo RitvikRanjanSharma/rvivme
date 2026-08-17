@@ -83,6 +83,73 @@ export function originCandidates(siteUrl: string): string[] {
 /** Injectable so tests don't need a network. */
 export type Fetcher = typeof fetch;
 
+// ─── SSRF: which hostnames we will fetch on a caller's behalf ────────────────
+//
+// Any endpoint that fetches a URL chosen by the caller is a server-side request
+// forgery hole unless the target is checked. Left open, an account holder could
+// use our servers to reach cloud metadata endpoints and hosts behind our
+// network boundary.
+//
+// This lives here, next to the fetchers, because it was previously copied into
+// each route that needed it. A duplicated security control drifts: the copy
+// that gets a fix and the copy that doesn't look identical at a glance, and the
+// one that matters is whichever the next endpoint copies from. One definition,
+// imported everywhere.
+
+/** Hostnames we will never fetch, whatever the caller or the database says. */
+const BLOCKED_HOST =
+  /^(localhost$|.*\.localhost$|127\.|10\.|192\.168\.|169\.254\.|0\.0\.0\.0$|\[?::1?\]?$|.*\.local$|.*\.internal$)/i;
+
+/** 172.16.0.0/12 — the private range that needs arithmetic rather than a prefix. */
+function isPrivate172(hostname: string): boolean {
+  const m = hostname.match(/^172\.(\d+)\./);
+  return !!m && Number(m[1]) >= 16 && Number(m[1]) <= 31;
+}
+
+/** True when the hostname is publicly routable by name. */
+export function hostIsPublic(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  return !BLOCKED_HOST.test(h) && !isPrivate172(h);
+}
+
+/** The same check applied to a full URL or a bare domain. Invalid input is refused. */
+export function urlIsPublic(url: string): boolean {
+  return ssrfReason(url) === null;
+}
+
+/**
+ * Why we will not fetch this, in words a user can act on — or null if it's fine.
+ *
+ * Returns a reason rather than a boolean because these rejections are shown to
+ * people. "That hostname isn't publicly reachable" and "only http and https are
+ * supported" send someone to different fixes, and collapsing them into `false`
+ * means the UI has to guess which one happened.
+ *
+ * DELIBERATE LIMIT: this is hostname pattern matching, not post-resolution
+ * checking. Someone who points a public DNS record at an internal IP still gets
+ * through. Closing that needs DNS-rebinding protection at connect time, which
+ * is a bigger change than this codebase currently warrants — but the limit is
+ * written down here so nobody assumes protection that isn't present.
+ */
+export function ssrfReason(input: string): string | null {
+  let u: URL;
+  try {
+    u = input.includes("://") ? new URL(input) : new URL(`https://${input}`);
+  } catch {
+    return "That doesn't look like a valid domain.";
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") {
+    return "Only http and https addresses are supported.";
+  }
+  // Strip IPv6 brackets so ::1 is recognised in either form.
+  const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (!host) return "That doesn't look like a valid domain.";
+  if (!hostIsPublic(host)) {
+    return "That hostname isn't publicly reachable, so no crawler could fetch it either.";
+  }
+  return null;
+}
+
 export async function fetchText(
   url: string,
   timeoutMs = 8000,

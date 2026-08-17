@@ -277,7 +277,7 @@ export default function GeoPage() {
                 color: "var(--text-secondary)", lineHeight: 1.7,
               }}>
                 Per-crawler status is unavailable until the robots.txt fetch succeeds.
-                We track {audit.crawlerCount ?? 0} answer-engine and training crawlers —
+                We track{audit.crawlerCount ? ` ${audit.crawlerCount}` : ""} answer-engine and training crawlers —
                 fix the site URL in Settings and re-run to see where each one stands.
                 <div style={{ marginTop: "12px" }}>
                   <Link href="/settings?tab=integrations" style={{
@@ -354,7 +354,7 @@ export default function GeoPage() {
               {observed?.success && (observed.totalHits ?? 0) > 0 ? (
                 <>
                   <div style={{ fontFamily: "var(--font-body)", fontSize: "13.5px", color: "var(--text-reading)", lineHeight: 1.7, marginBottom: "10px" }}>
-                    {observed.seenCount} of {audit.crawlerCount ?? 0} crawlers have fetched pages in the last {observed.days} days
+                    {observed.seenCount}{audit.crawlerCount ? ` of ${audit.crawlerCount}` : ""} crawlers have fetched pages in the last {observed.days} days
                     {" "}({observed.totalHits} requests).
                   </div>
                   {(observed.crawlers ?? []).filter(c => c.hits > 0).map(c => (
@@ -628,7 +628,7 @@ function CrawlerView({ brandColor }: { brandColor: string }) {
                 {tone.label}
               </span>
               <span style={{ fontFamily: "var(--font-body)", fontSize: "12.5px", color: "var(--text-reading)" }}>
-                {result.agentLabel} receives {result.crawler?.wordCount ?? 0} words
+                {result.agentLabel} receives {result.crawler ? `${result.crawler.wordCount} words` : "an unknown amount of content"}
                 {result.browser?.ok && result.browser.wordCount > 0 && (
                   <> · {result.parity}% of what a browser gets</>
                 )}
@@ -705,7 +705,7 @@ function TextPane({ heading, side, accent }: { heading: string; side?: ViewSide;
           {heading}
         </span>
         <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-tertiary)" }}>
-          {side?.status ?? "—"} · {side?.wordCount ?? 0}w
+          {side?.status ?? "—"} · {side ? `${side.wordCount}w` : "—"}
         </span>
       </div>
       <div style={{

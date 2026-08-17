@@ -16,7 +16,7 @@ import {
   auditCrawlerAccess, scoreAnswerReadiness, extractSitemapPaths, AI_CRAWLERS,
   type CrawlerAccess, type ReadinessReport,
 } from "@/lib/ai-crawlers";
-import { originCandidates, fetchText, fetchAcrossOrigins } from "@/lib/site-fetch";
+import { originCandidates, fetchText, fetchAcrossOrigins, urlIsPublic, ssrfReason } from "@/lib/site-fetch";
 
 export const dynamic = "force-dynamic";
 
@@ -39,12 +39,20 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const candidates = originCandidates(siteUrl);
+    // Only public hosts, and the filter goes here rather than on the raw input.
+    //
+    // The site being audited comes from the user's own settings, which is easy
+    // to read as trusted — but it is a free-text field the user controls, and
+    // this route fetches whatever it contains from our servers. That makes
+    // "https://169.254.169.254" in Settings a route to the cloud metadata
+    // endpoint. Same control as the site audit and the crawler view.
+    const candidates = originCandidates(siteUrl).filter(urlIsPublic);
     if (candidates.length === 0) {
       return NextResponse.json({
         success: false,
         reason:  "invalid_site",
-        message: `Could not derive a URL from "${siteUrl}".`,
+        message: ssrfReason(siteUrl)
+          ?? `Could not derive a URL from "${siteUrl}".`,
       });
     }
 

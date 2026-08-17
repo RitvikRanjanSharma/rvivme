@@ -1,0 +1,22 @@
+{
+  "//": "Compiles the competitor-compare unit tests to runnable CommonJS. Same arrangement as tsconfig.json in this directory — see the note there for why the path aliases are repeated and then rewritten by the runner.",
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2022",
+    "lib": ["ES2022", "dom"],
+    "types": ["node"],
+    "isolatedModules": false,
+    "incremental": false,
+    "baseUrl": "../..",
+    "paths": { "@/*": ["./*"] }
+  },
+  "include": [
+    "./competitor-compare.test.ts",
+    "../../lib/competitor-compare.ts",
+    "../../lib/ai-crawlers.ts",
+    "../../lib/site-fetch.ts"
+  ]
+}

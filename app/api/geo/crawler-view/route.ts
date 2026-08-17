@@ -30,7 +30,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { getCallerOrNull } from "@/lib/supabase-server";
-import { originCandidates, fetchText } from "@/lib/site-fetch";
+import { originCandidates, fetchText, hostIsPublic } from "@/lib/site-fetch";
 import { parseRobots, crawlerAccess, AI_CRAWLERS } from "@/lib/ai-crawlers";
 import {
   inspectAsCrawler, normaliseUrl, CRAWLER_AGENTS, DEFAULT_AGENT,
@@ -43,17 +43,10 @@ export const dynamic = "force-dynamic";
 // did nothing.
 export const maxDuration = 30;
 
-/** Hostnames we will never fetch, whatever the database says. */
-const BLOCKED_HOST = /^(localhost$|127\.|10\.|192\.168\.|169\.254\.|0\.0\.0\.0$|\[?::1\]?$|.*\.local$|.*\.internal$)/i;
-/** 172.16.0.0/12 — the range that needs arithmetic rather than a prefix. */
-function isPrivate172(hostname: string): boolean {
-  const m = hostname.match(/^172\.(\d+)\./);
-  return !!m && Number(m[1]) >= 16 && Number(m[1]) <= 31;
-}
-
-function hostIsPublic(hostname: string): boolean {
-  return !BLOCKED_HOST.test(hostname) && !isPrivate172(hostname);
-}
+// hostIsPublic now lives in lib/site-fetch.ts. It used to be defined here and
+// copied into every other endpoint that fetches a caller-supplied URL — three
+// copies of one security control, which is three chances for a fix to land on
+// two of them.
 
 export async function GET(request: NextRequest) {
   try {

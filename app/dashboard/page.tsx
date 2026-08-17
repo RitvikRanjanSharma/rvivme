@@ -489,10 +489,14 @@ function BacklinksPanel({ brandColor, domain }: { brandColor:string; domain:stri
   }, [domain]);
 
   const kpis = data ? [
-    { label: "Backlinks",         value: data.backlinks?.toLocaleString()       ?? "0" },
-    { label: "Referring Domains", value: data.referringDomains?.toLocaleString() ?? "0" },
-    { label: "Domain Rank",       value: data.domainRank ?? "—"                        },
-    { label: "Referring IPs",     value: data.referringIPs?.toLocaleString()    ?? "0" },
+    // "—" not "0" throughout. A missing field here used to render as zero,
+    // which claims the site has no backlinks — a very different statement from
+    // "the response didn't include that figure". Domain Rank always did this
+    // correctly; the other three did not, in the same array.
+    { label: "Backlinks",         value: data.backlinks?.toLocaleString()        ?? "—" },
+    { label: "Referring Domains", value: data.referringDomains?.toLocaleString() ?? "—" },
+    { label: "Domain Rank",       value: data.domainRank                         ?? "—" },
+    { label: "Referring IPs",     value: data.referringIPs?.toLocaleString()     ?? "—" },
   ] : [];
 
   return (

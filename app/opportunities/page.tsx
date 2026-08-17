@@ -470,7 +470,9 @@ export default function OpportunitiesPage() {
                 fontFamily: "var(--font-body)", fontSize: "11.5px",
                 color: "var(--text-tertiary)", lineHeight: 1.65,
               }}>
-                Built from {report.period?.queryCount?.toLocaleString() ?? 0} queries in your
+                Built from {report.period?.queryCount != null
+                  ? `${report.period.queryCount.toLocaleString()} queries`
+                  : "your queries"} in your
                 Search Console
                 {report.period?.current
                   ? ` for ${fmtRange(report.period.current)}`
