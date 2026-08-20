@@ -25,6 +25,13 @@ import {
   type LocalSignalReport,
 } from "@/lib/local-seo";
 import type { QueryRow } from "@/lib/opportunities";
+import { googleFetch } from "@/lib/outbound-fetch";
+import { callerGscSite } from "@/lib/caller-site";
+
+// Declared so a slow upstream fails as a timeout rather than as a killed
+// process. A killed function returns nothing at all, which the UI cannot
+// distinguish from an empty result.
+export const maxDuration = 45;
 
 const GSC_API_BASE = "https://www.googleapis.com/webmasters/v3";
 const GSC_SCOPE    = "https://www.googleapis.com/auth/webmasters.readonly";
@@ -47,17 +54,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: "unauthenticated" }, { status: 401 });
     }
 
-    const { data } = await caller.supabase
-      .from("users").select("gsc_site_url").eq("id", caller.user.id).single();
-    const siteUrl = (data as { gsc_site_url: string | null } | null)?.gsc_site_url?.trim();
-
-    if (!siteUrl) {
+    const site = await callerGscSite(caller.supabase, caller.user.id);
+    if (!site.ok) {
+      // The reason is carried through rather than flattened to "not connected".
+      // A missing profile row is our bug and self-heals on reload; an
+      // unconnected property is a setup step. Same message for both used to
+      // send people to reconnect something that was never broken.
       return NextResponse.json({
         success: false,
-        reason:  "not_configured",
-        message: "Connect Search Console under Settings to see your local search picture.",
+        reason:  site.reason,
+        message: site.reason === "not_configured" ? "Connect Search Console under Settings to see your local search picture." : site.message,
       });
     }
+    const siteUrl = site.siteUrl;
 
     const tokenResult = await resolveGoogleToken(caller.user.id, GSC_SCOPE);
     if (!tokenResult.ok) {
@@ -69,8 +78,7 @@ export async function GET(request: NextRequest) {
     }
 
     // ── Search Console: queries over the window ──────────────────────────────
-    const res = await fetch(
-      `${GSC_API_BASE}/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
+    const res = await googleFetch(`${GSC_API_BASE}/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
       {
         method:  "POST",
         headers: {

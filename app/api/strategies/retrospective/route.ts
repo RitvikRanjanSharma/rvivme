@@ -14,6 +14,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCallerOrNull }    from "@/lib/supabase-server";
 import { resolveGoogleToken } from "@/lib/google-oauth";
+import { googleFetch } from "@/lib/outbound-fetch";
+
+// Declared so a slow upstream fails as a timeout rather than as a killed
+// process. A killed function returns nothing at all, which the UI cannot
+// distinguish from an empty result.
+export const maxDuration = 60;
 import {
   buildRetrospective,
   type BaselineGsc, type CurrentGscSnapshot, type TrackedKeyword,
@@ -93,7 +99,7 @@ export async function GET(request: NextRequest) {
       const tokenResult = await resolveGoogleToken(caller.user.id, GSC_SCOPE);
       if (tokenResult.ok) {
         const range = { startDate: isoDaysAgo(LAG_DAYS + PERIOD), endDate: isoDaysAgo(LAG_DAYS) };
-        const call = (body: object) => fetch(
+        const call = (body: object) => googleFetch(
           `${GSC_API_BASE}/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
           {
             method: "POST",

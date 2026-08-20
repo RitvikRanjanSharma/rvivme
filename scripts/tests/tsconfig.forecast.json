@@ -1,0 +1,11 @@
+{
+  "//": "Compiles the forecast + content-gap tests to runnable CommonJS. Same arrangement as the sibling test configs — see tsconfig.json here for why the aliases are repeated and then rewritten by the runner.",
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false, "module": "commonjs", "moduleResolution": "node",
+    "target": "ES2022", "lib": ["ES2022", "dom"], "types": ["node"],
+    "isolatedModules": false, "incremental": false,
+    "baseUrl": "../..", "paths": { "@/*": ["./*"] }
+  },
+  "include": ["./forecast-gap.test.ts", "../../lib/forecast.ts", "../../lib/content-gap.ts"]
+}

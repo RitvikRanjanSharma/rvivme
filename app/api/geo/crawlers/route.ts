@@ -17,6 +17,7 @@ import {
   type CrawlerAccess, type ReadinessReport,
 } from "@/lib/ai-crawlers";
 import { originCandidates, fetchText, fetchAcrossOrigins, urlIsPublic, ssrfReason } from "@/lib/site-fetch";
+import { callerGscSite } from "@/lib/caller-site";
 
 export const dynamic = "force-dynamic";
 
@@ -27,17 +28,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: "unauthenticated" }, { status: 401 });
     }
 
-    const { data } = await caller.supabase
-      .from("users").select("gsc_site_url").eq("id", caller.user.id).single();
-    const siteUrl = (data as { gsc_site_url: string | null } | null)?.gsc_site_url?.trim();
-
-    if (!siteUrl) {
+    const site = await callerGscSite(caller.supabase, caller.user.id);
+    if (!site.ok) {
+      // The reason is carried through rather than flattened to "not connected".
+      // A missing profile row is our bug and self-heals on reload; an
+      // unconnected property is a setup step. Same message for both used to
+      // send people to reconnect something that was never broken.
       return NextResponse.json({
         success: false,
-        reason:  "not_configured",
-        message: "Add your site under Settings to run the answer-engine audit.",
+        reason:  site.reason,
+        message: site.reason === "not_configured" ? "Add your site under Settings to run the answer-engine audit." : site.message,
       });
     }
+    const siteUrl = site.siteUrl;
 
     // Only public hosts, and the filter goes here rather than on the raw input.
     //

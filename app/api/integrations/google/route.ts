@@ -14,11 +14,16 @@
 
 import { NextResponse } from "next/server";
 import { getCallerOrNull } from "@/lib/supabase-server";
+import { googleFetch } from "@/lib/outbound-fetch";
 import {
   getConnection, getValidAccessToken, oauthConfigured,
 } from "@/lib/google-oauth";
 
 export const dynamic = "force-dynamic";
+// Declared so a slow upstream fails as a timeout rather than as a killed
+// process. A killed function returns nothing at all, which the UI cannot
+// distinguish from an empty result.
+export const maxDuration = 30;
 
 type Ga4Property = { id: string; name: string; account?: string };
 type GscSite     = { siteUrl: string; permissionLevel: string };
@@ -29,7 +34,7 @@ async function listGa4Properties(accessToken: string): Promise<Ga4Property[]> {
 
   // accountSummaries bundles accounts and their properties in one call, which
   // avoids an N+1 over accounts.
-  const res = await fetch(
+  const res = await googleFetch(
     "https://analyticsadmin.googleapis.com/v1beta/accountSummaries?pageSize=200",
     { headers: { Authorization: `Bearer ${accessToken}` } },
   );
@@ -53,7 +58,7 @@ async function listGa4Properties(accessToken: string): Promise<Ga4Property[]> {
 
 /** Search Console — every site the user has any level of access to. */
 async function listGscSites(accessToken: string): Promise<GscSite[]> {
-  const res = await fetch("https://www.googleapis.com/webmasters/v3/sites", {
+  const res = await googleFetch("https://www.googleapis.com/webmasters/v3/sites", {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) return [];

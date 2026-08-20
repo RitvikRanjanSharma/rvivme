@@ -18,6 +18,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCallerOrNull }   from "@/lib/supabase-server";
 import { resolveGoogleToken } from "@/lib/google-oauth";
+import { googleFetch } from "@/lib/outbound-fetch";
+import { callerGscSite } from "@/lib/caller-site";
+
+// Declared so a slow upstream fails as a timeout rather than as a killed
+// process. A killed function returns nothing at all, which the UI cannot
+// distinguish from an empty result.
+export const maxDuration = 60;
 import {
   buildReport,
   type QueryRow, type QueryPageRow,
@@ -50,8 +57,7 @@ type GscApiRow = {
 async function searchAnalytics(
   siteUrl: string, token: string, body: object,
 ): Promise<GscApiRow[]> {
-  const res = await fetch(
-    `${GSC_API_BASE}/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
+  const res = await googleFetch(`${GSC_API_BASE}/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
     {
       method:  "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -94,20 +100,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: "unauthenticated" }, { status: 401 });
     }
 
-    const { data } = await caller.supabase
-      .from("users")
-      .select("gsc_site_url")
-      .eq("id", caller.user.id)
-      .single();
-    const siteUrl = (data as { gsc_site_url: string | null } | null)?.gsc_site_url?.trim();
-
-    if (!siteUrl) {
+    const site = await callerGscSite(caller.supabase, caller.user.id);
+    if (!site.ok) {
+      // The reason is carried through rather than flattened to "not connected".
+      // A missing profile row is our bug and self-heals on reload; an
+      // unconnected property is a setup step. Same message for both used to
+      // send people to reconnect something that was never broken.
       return NextResponse.json({
         success: false,
-        reason:  "not_configured",
-        message: "Connect Search Console under Settings to see your opportunities.",
+        reason:  site.reason,
+        message: site.reason === "not_configured" ? "Connect Search Console under Settings to see your opportunities." : site.message,
       });
     }
+    const siteUrl = site.siteUrl;
 
     const tokenResult = await resolveGoogleToken(caller.user.id, GSC_SCOPE);
     if (!tokenResult.ok) {

@@ -25,6 +25,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getCallerOrNull } from "@/lib/supabase-server";
 import { checkAndIncrement } from "@/lib/quota";
 import { getOrFetch, CACHE_NS, CACHE_TTL } from "@/lib/cache";
+import { outboundFetch } from "@/lib/outbound-fetch";
+
+// Declared so a slow upstream fails as a timeout rather than as a killed
+// process. A killed function returns nothing at all, which the UI cannot
+// distinguish from an empty result.
+export const maxDuration = 60;
 
 type Mode = "live" | "simulated" | "not_configured";
 
@@ -130,7 +136,7 @@ async function checkLiveAIOverview(
       `${process.env.DATAFORSEO_LOGIN}:${process.env.DATAFORSEO_PASSWORD}`,
     ).toString("base64");
 
-    const res = await fetch("https://api.dataforseo.com/v3/serp/google/organic/live/advanced", {
+    const res = await outboundFetch("https://api.dataforseo.com/v3/serp/google/organic/live/advanced", {
       method:  "POST",
       headers: {
         Authorization:  `Basic ${auth}`,
@@ -143,7 +149,7 @@ async function checkLiveAIOverview(
         device:        "desktop",
         depth:         20,
       }]),
-    });
+    }, 30_000, "DataForSEO");
 
     if (!res.ok) throw new Error(`DFS ${res.status}`);
     const json = await res.json();
@@ -195,7 +201,7 @@ async function checkSimulated(
 
   return getOrFetch(sb, userId, CACHE_NS.GEO, cacheKey, CACHE_TTL.medium, async () => {
     const apiKey = process.env.ANTHROPIC_API_KEY!;
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await outboundFetch("https://api.anthropic.com/v1/messages", {
       method:  "POST",
       headers: {
         "Content-Type":      "application/json",
@@ -211,7 +217,7 @@ async function checkSimulated(
           content: `Search query: "${keyword}"\n\nProvide a concise AI answer that cites specific websites and domains as sources.`,
         }],
       }),
-    });
+    }, 45_000, "Claude");
 
     if (!res.ok) throw new Error(`Anthropic ${res.status}`);
     const data = await res.json();

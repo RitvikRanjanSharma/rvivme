@@ -24,16 +24,22 @@
 // =============================================================================
 
 import { NextResponse, type NextRequest } from "next/server";
-import { getGoogleAccessToken } from "@/lib/google-auth";
+import { resolveGoogleToken }   from "@/lib/google-oauth";
 import { getCallerOrNull }      from "@/lib/supabase-server";
+import { callerGscSite, deriveDomain } from "@/lib/caller-site";
+import { googleFetch } from "@/lib/outbound-fetch";
+
+// Declared so a slow upstream fails as a timeout rather than as a killed
+// process. A killed function returns nothing at all, which the UI cannot
+// distinguish from an empty result.
+export const maxDuration = 45;
 
 const GSC_API_BASE = "https://www.googleapis.com/webmasters/v3";
 const GSC_SCOPE    = "https://www.googleapis.com/auth/webmasters.readonly";
 
 async function searchAnalytics(siteUrl: string, token: string, body: object) {
   const encoded = encodeURIComponent(siteUrl);
-  const res = await fetch(
-    `${GSC_API_BASE}/sites/${encoded}/searchAnalytics/query`,
+  const res = await googleFetch(`${GSC_API_BASE}/sites/${encoded}/searchAnalytics/query`,
     {
       method:  "POST",
       headers: {
@@ -60,28 +66,30 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Per-user site URL (RLS enforced)
-    const { data, error: rowErr } = await caller.supabase
-      .from("users")
-      .select("gsc_site_url")
-      .eq("id", caller.user.id)
-      .single();
-    const row = data as { gsc_site_url: string | null } | null;
-
-    if (rowErr || !row?.gsc_site_url?.trim()) {
-      return NextResponse.json({
-        success: false,
-        reason:  "not_configured",
-        message: "Search Console is not connected for your workspace yet.",
-      });
+    // Per-user site URL (RLS enforced). A missing profile row is reported as
+    // itself rather than as a disconnected integration — see lib/caller-site.
+    const site = await callerGscSite(caller.supabase, caller.user.id);
+    if (!site.ok) {
+      return NextResponse.json({ success: false, reason: site.reason, message: site.message });
     }
-
-    const siteUrl = row.gsc_site_url.trim();
+    const siteUrl = site.siteUrl;
 
     const limitParam = Number(new URL(request.url).searchParams.get("limit") ?? 100);
     const rowLimit   = Math.min(Math.max(limitParam, 1), 500);
 
-    const token = await getAccessToken();
+    // The caller's own OAuth connection first, shared service account second.
+    // This route used to go straight to the service account, which only works
+    // if that account was granted Viewer on the property — so it failed for
+    // exactly the users who onboarded through the OAuth flow we ask them to use.
+    const tokenResult = await resolveGoogleToken(caller.user.id, GSC_SCOPE);
+    if (!tokenResult.ok) {
+      return NextResponse.json({
+        success: false,
+        reason:  tokenResult.reason === "reauth_required" ? "reauth_required" : "not_connected",
+        message: tokenResult.message,
+      });
+    }
+    const token = tokenResult.accessToken;
 
     const dateRange = {
       startDate: new Date(Date.now() - 28 * 24 * 60 * 60 * 1000)
@@ -173,16 +181,4 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function getAccessToken(): Promise<string> {
-  return getGoogleAccessToken(GSC_SCOPE);
-}
 
-/** Strip sc-domain: prefix / https:// so downstream UI can treat it as a plain domain. */
-function deriveDomain(siteUrl: string): string {
-  if (siteUrl.startsWith("sc-domain:")) return siteUrl.slice("sc-domain:".length);
-  try {
-    return new URL(siteUrl).hostname;
-  } catch {
-    return siteUrl;
-  }
-}

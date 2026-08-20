@@ -17,6 +17,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { textFromContent } from "@/lib/speech";
+import { outboundFetch } from "@/lib/outbound-fetch";
+
+// Declared so a slow upstream fails as a timeout rather than as a killed
+// process. A killed function returns nothing at all, which the UI cannot
+// distinguish from an empty result.
+export const maxDuration = 30;
 
 export const revalidate = 3600;
 
@@ -91,7 +97,7 @@ export async function POST(request: NextRequest) {
       `- Only use what's in the text. Do not add statistics or claims of your own.\n\n` +
       `TITLE: ${post.title}\n\nARTICLE:\n${body}`;
 
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await outboundFetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type":      "application/json",
@@ -103,7 +109,7 @@ export async function POST(request: NextRequest) {
         max_tokens: 400,
         messages:   [{ role: "user", content: prompt }],
       }),
-    });
+    }, 25_000, "Claude");
 
     if (!res.ok) {
       const errText = await res.text().catch(() => "");

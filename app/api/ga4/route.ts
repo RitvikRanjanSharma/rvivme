@@ -11,6 +11,12 @@ import { NextResponse } from "next/server";
 import { getCallerOrNull } from "@/lib/supabase-server";
 import { rangeFor, bucketFor, bucketSeries } from "@/lib/date-range";
 import { resolveGoogleToken } from "@/lib/google-oauth";
+import { googleFetch } from "@/lib/outbound-fetch";
+
+// Declared so a slow upstream fails as a timeout rather than as a killed
+// process. A killed function returns nothing at all, which the UI cannot
+// distinguish from an empty result.
+export const maxDuration = 45;
 
 const GA4_API_BASE = "https://analyticsdata.googleapis.com/v1beta";
 const GA4_SCOPE    = "https://www.googleapis.com/auth/analytics.readonly";
@@ -19,7 +25,7 @@ const GA4_SCOPE    = "https://www.googleapis.com/auth/analytics.readonly";
 // Run a GA4 Data API report
 // ─────────────────────────────────────────────────────────────────────────────
 async function runReport(propertyId: string, token: string, body: object) {
-  const res = await fetch(
+  const res = await googleFetch(
     `${GA4_API_BASE}/properties/${propertyId}:runReport`,
     {
       method:  "POST",

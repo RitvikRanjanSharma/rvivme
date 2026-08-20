@@ -38,8 +38,15 @@ import {
   TRENDS_TIMEFRAMES,
   type TrendsGeo,
 } from "@/lib/google-trends";
-import { getGoogleAccessToken } from "@/lib/google-auth";
+import { resolveGoogleToken } from "@/lib/google-oauth";
+import { callerGscSite } from "@/lib/caller-site";
 import { getCallerOrNull }      from "@/lib/supabase-server";
+import { googleFetch } from "@/lib/outbound-fetch";
+
+// Declared so a slow upstream fails as a timeout rather than as a killed
+// process. A killed function returns nothing at all, which the UI cannot
+// distinguish from an empty result.
+export const maxDuration = 60;
 
 const GSC_API_BASE = "https://www.googleapis.com/webmasters/v3";
 const GSC_SCOPE    = "https://www.googleapis.com/auth/webmasters.readonly";
@@ -89,20 +96,26 @@ export async function POST(request: NextRequest) {
           { status: 401 }
         );
       }
-      const { data } = await caller.supabase
-        .from("users")
-        .select("gsc_site_url")
-        .eq("id", caller.user.id)
-        .single();
-      const siteUrl = (data as { gsc_site_url: string | null } | null)?.gsc_site_url?.trim();
-      if (!siteUrl) {
+      // A missing profile row is named as itself rather than reported as a
+      // disconnected integration — see lib/caller-site.
+      const site = await callerGscSite(caller.supabase, caller.user.id);
+      if (!site.ok) {
+        return NextResponse.json({ success: false, reason: site.reason, message: site.message });
+      }
+
+      // The caller's own OAuth connection first, shared service account second.
+      // Going straight to the service account only worked for workspaces that
+      // had granted it Viewer access on the property.
+      const tokenResult = await resolveGoogleToken(caller.user.id, GSC_SCOPE);
+      if (!tokenResult.ok) {
         return NextResponse.json({
           success: false,
-          reason:  "not_configured",
-          message: "Connect Search Console under Settings to use 'ideas for my site'.",
+          reason:  tokenResult.reason === "reauth_required" ? "reauth_required" : "not_connected",
+          message: tokenResult.message,
         });
       }
-      seeds = await fetchTopGscQueries(siteUrl, 3);
+
+      seeds = await fetchTopGscQueries(site.siteUrl, 3, tokenResult.accessToken);
       if (seeds.length === 0) {
         return NextResponse.json({
           success: false,
@@ -206,8 +219,7 @@ export async function POST(request: NextRequest) {
 }
 
 // ── Internal: top GSC queries for a given siteUrl ──────────────────────────
-async function fetchTopGscQueries(siteUrl: string, limit: number): Promise<string[]> {
-  const token   = await getGoogleAccessToken(GSC_SCOPE);
+async function fetchTopGscQueries(siteUrl: string, limit: number, token: string): Promise<string[]> {
   const encoded = encodeURIComponent(siteUrl);
 
   const body = {
@@ -221,8 +233,7 @@ async function fetchTopGscQueries(siteUrl: string, limit: number): Promise<strin
     orderBy:    [{ fieldName: "impressions", sortOrder: "DESCENDING" }],
   };
 
-  const res = await fetch(
-    `${GSC_API_BASE}/sites/${encoded}/searchAnalytics/query`,
+  const res = await googleFetch(`${GSC_API_BASE}/sites/${encoded}/searchAnalytics/query`,
     {
       method:  "POST",
       headers: {

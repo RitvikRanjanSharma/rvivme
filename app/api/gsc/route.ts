@@ -11,6 +11,13 @@ import { NextResponse } from "next/server";
 import { getCallerOrNull } from "@/lib/supabase-server";
 import { rangeFor, rangeDates, bucketFor, bucketSeries, GSC_LAG_DAYS } from "@/lib/date-range";
 import { resolveGoogleToken } from "@/lib/google-oauth";
+import { googleFetch } from "@/lib/outbound-fetch";
+import { callerGscSite } from "@/lib/caller-site";
+
+// Declared so a slow upstream fails as a timeout rather than as a killed
+// process. A killed function returns nothing at all, which the UI cannot
+// distinguish from an empty result.
+export const maxDuration = 45;
 
 const GSC_API_BASE = "https://www.googleapis.com/webmasters/v3";
 const GSC_SCOPE    = "https://www.googleapis.com/auth/webmasters.readonly";
@@ -24,8 +31,7 @@ async function searchAnalytics(
   body: object
 ) {
   const encoded = encodeURIComponent(siteUrl);
-  const res = await fetch(
-    `${GSC_API_BASE}/sites/${encoded}/searchAnalytics/query`,
+  const res = await googleFetch(`${GSC_API_BASE}/sites/${encoded}/searchAnalytics/query`,
     {
       method: "POST",
       headers: {
@@ -68,37 +74,18 @@ export async function GET(request: Request) {
     //    Manual cast mirrors the pattern used in lib/useDomain.ts — supabase-js
     //    2.x narrows string-literal select() results to `never` when combined
     //    with our generated Database type.
-    const { data, error: rowErr } = await caller.supabase
-      .from("users")
-      .select("gsc_site_url")
-      .eq("id", caller.user.id)
-      .single();
-    const row = data as { gsc_site_url: string | null } | null;
-
-    if (rowErr) {
-      // Treat "no row" as not_configured so brand new users see the empty
-      // state instead of a red error banner.
+    // A missing profile row and an unconnected integration are different
+    // problems with different fixes, and this used to report both as
+    // "Search Console is not connected" — sending someone to reconnect an
+    // integration that was working. See lib/caller-site.
+    const site = await callerGscSite(caller.supabase, caller.user.id);
+    if (!site.ok) {
       return NextResponse.json(
-        {
-          success: false,
-          reason:  "not_configured",
-          message: "Search Console is not connected for your workspace yet.",
-        },
-        { status: 200 }
+        { success: false, reason: site.reason, message: site.message },
+        { status: 200 },
       );
     }
-
-    const siteUrl = row?.gsc_site_url?.trim();
-    if (!siteUrl) {
-      return NextResponse.json(
-        {
-          success: false,
-          reason:  "not_configured",
-          message: "Search Console is not connected for your workspace yet.",
-        },
-        { status: 200 }
-      );
-    }
+    const siteUrl = site.siteUrl;
 
     // Prefer the caller's own OAuth connection; fall back to the legacy shared
     // service account so existing setups keep working during the migration.

@@ -25,6 +25,7 @@ import { GA4Panel }  from "./ga4-panel";
 import { RetrospectivePanel } from "./retrospective-panel";
 import { GSCPanel }  from "./gsc-panel";
 import { useDomain } from "@/lib/useDomain";
+import { project, confidenceLabel } from "@/lib/forecast";
 import {
   saveAndActivateStrategy, getActiveStrategy,
   type Strategy as SavedStrategy, type BaselineMetrics,
@@ -149,63 +150,52 @@ function AnimatedNumber({ target, decimals=0, delay=0 }: { target:number; decima
 }
 
 // ── Forecast model ─────────────────────────────────────────────────────────────
+// The projection itself lives in lib/forecast.ts, which refuses to draw one
+// when there isn't enough history. This function's only job is turning GA4's
+// daily rows into months and stitching the two halves of the chart together.
 function buildChartData(trend: GA4TrendPoint[]) {
-  if (trend.length === 0) {
-    // No GA4 data connected — return an empty, zeroed structure so the UI
-    // can show a proper empty state. Absolutely no fabricated traffic numbers.
-    return {
-      data:         [] as TrafficDataPoint[],
-      currentMTD:   0,
-      forecast6M:   0,
-      growthPct:    0,
-      confidence:   0,
-      handoffMonth: "",
-    };
-  }
+  const empty = {
+    data: [] as TrafficDataPoint[], currentMTD: 0, handoffMonth: "",
+    projection: project([]),
+  };
+  if (trend.length === 0) return empty;
 
   const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  const monthly: Record<string,number[]> = {};
+  const monthly: Record<string, number[]> = {};
   trend.forEach(p => {
     const d = new Date(p.date);
     const k = `${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
-    if (!monthly[k]) monthly[k] = [];
-    monthly[k].push(p.sessions);
+    (monthly[k] ??= []).push(p.sessions);
   });
 
   const historicalData: TrafficDataPoint[] = Object.entries(monthly).map(([month, sessions]) => ({
-    month: month.split(" ")[0], actual: sessions.reduce((a,b)=>a+b,0),
-    forecast:null, lower:null, upper:null,
+    month: month.split(" ")[0],
+    actual: sessions.reduce((a, b) => a + b, 0),
+    forecast: null, lower: null, upper: null,
   }));
 
-  const values = historicalData.map(d => d.actual ?? 0).filter(v=>v>0);
-  const last    = values[values.length-1] ?? 0;
-  const growthRates = values.slice(1).map((v,i) => v/Math.max(values[i],1));
-  const geoMean = growthRates.length > 0
-    ? Math.pow(growthRates.reduce((a,b)=>a*b,1), 1/growthRates.length) : 1.05;
-  const clampedRate = Math.max(0.97, Math.min(1.30, geoMean));
-  const handoffMonth = historicalData[historicalData.length-1]?.month ?? "";
+  const projection   = project(historicalData.map(h => ({ month: h.month, actual: h.actual })));
+  const last         = historicalData[historicalData.length - 1]?.actual ?? 0;
+  const handoffMonth = historicalData[historicalData.length - 1]?.month ?? "";
 
-  historicalData[historicalData.length-1] = {
-    ...historicalData[historicalData.length-1],
-    forecast: last, lower: Math.round(last*0.92), upper: Math.round(last*1.08),
+  if (!projection.ready) {
+    // Measured months only. Previously this branch drew six months of
+    // compounding growth from a hardcoded 1.05 fallback rate and labelled it
+    // 90% confident — a line through one point, with a number attached that
+    // made it look researched.
+    return { data: historicalData, currentMTD: last, handoffMonth, projection };
+  }
+
+  historicalData[historicalData.length - 1] = {
+    ...historicalData[historicalData.length - 1],
+    forecast: last, lower: Math.round(last * 0.94), upper: Math.round(last * 1.06),
   };
 
-  const now = new Date();
-  const forecastData: TrafficDataPoint[] = Array.from({length:6},(_,i) => {
-    const fd = new Date(now.getFullYear(), now.getMonth()+i+1, 1);
-    const fv = Math.round(last*Math.pow(clampedRate,i+1));
-    const u  = 0.06+i*0.04;
-    return { month: MONTHS[fd.getMonth()]+(i===5?"+":" ").trim(), actual:null, forecast:fv, lower:Math.round(fv*(1-u)), upper:Math.round(fv*(1+u)) };
-  });
+  const forecastData: TrafficDataPoint[] = projection.points.map(pt => ({
+    month: pt.month, actual: null, forecast: pt.forecast, lower: pt.lower, upper: pt.upper,
+  }));
 
-  const forecast6M = forecastData[5]?.forecast ?? last;
-  return {
-    data: [...historicalData,...forecastData],
-    currentMTD: last, forecast6M,
-    growthPct: Math.round(((forecast6M-last)/Math.max(last,1))*100),
-    confidence: Math.max(60, Math.min(92, 92-values.length*2)),
-    handoffMonth,
-  };
+  return { data: [...historicalData, ...forecastData], currentMTD: last, handoffMonth, projection };
 }
 
 // ── Chart tooltip ──────────────────────────────────────────────────────────────
@@ -306,7 +296,7 @@ function ProjectionChart({ brandColor, ga4Trend, ga4Loading, ga4Reason, ga4Messa
 }) {
   const chartRef = useRef<HTMLDivElement>(null);
   const inView   = useInView(chartRef, { once:true, margin:"-60px" });
-  const { data, currentMTD, forecast6M, growthPct, confidence, handoffMonth } = buildChartData(ga4Trend);
+  const { data, currentMTD, handoffMonth, projection } = buildChartData(ga4Trend);
   const isReal = ga4Trend.length > 0;
 
   // Empty-state. Two very different situations were previously collapsed into
@@ -402,10 +392,14 @@ function ProjectionChart({ brandColor, ga4Trend, ga4Loading, ga4Reason, ga4Messa
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:"24px", flexWrap:"wrap", gap:"12px" }}>
           <div>
             <div style={{ fontFamily:"var(--font-body)", fontSize:"15px", fontWeight:600, color:"var(--text-primary)", marginBottom:"4px" }}>
-              Organic Traffic · 6-Month AI Projection
+              {projection.ready ? "Organic Traffic · 6-Month Projection" : "Organic Traffic"}
             </div>
             <div style={{ fontFamily:"var(--font-mono)", fontSize:"11px", color:isReal?"var(--signal-green)":"var(--text-tertiary)", letterSpacing:"0.08em" }}>
-              {ga4Loading ? "LOADING…" : `LIVE · AI FORECAST v1.0 · ${confidence}% CONFIDENCE`}
+              {ga4Loading
+                ? "LOADING…"
+                : projection.ready
+                  ? `LIVE · ${projection.monthsUsed} MONTHS OF HISTORY · ${projection.confidence}% CONFIDENCE`
+                  : "LIVE · MEASURED SESSIONS · NO PROJECTION YET"}
             </div>
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:"16px" }}>
@@ -438,12 +432,28 @@ function ProjectionChart({ brandColor, ga4Trend, ga4Loading, ga4Reason, ga4Messa
             <Area type="monotone" dataKey="lower"    stroke="none" fill="var(--bg)"   fillOpacity={1}   dot={false} legendType="none" animationDuration={inView?1200:0}/>
             <Area type="monotone" dataKey="actual"   name="Historical"  stroke={brandColor} strokeWidth={2} fill="url(#grad1)" dot={false} activeDot={{ r:4, fill:brandColor, stroke:"var(--bg)", strokeWidth:2 }} animationDuration={inView?1000:0}/>
             <Area type="monotone" dataKey="forecast" name="AI Forecast" stroke={brandColor} strokeWidth={1.5} strokeDasharray="5 4" strokeOpacity={0.75} fill="none" dot={false} activeDot={{ r:3 }} animationDuration={inView?1400:0}/>
-            <ReferenceLine x={handoffMonth} stroke="var(--text-tertiary)" strokeDasharray="2 4" strokeWidth={1} label={{ value:"FORECAST →", position:"top", fontFamily:"var(--font-mono)", fontSize:9, fill:"var(--text-tertiary)", dy:-6 }}/>
+            {projection.ready && <ReferenceLine x={handoffMonth} stroke="var(--text-tertiary)" strokeDasharray="2 4" strokeWidth={1} label={{ value:"FORECAST →", position:"top", fontFamily:"var(--font-mono)", fontSize:9, fill:"var(--text-tertiary)", dy:-6 }}/>}
           </AreaChart>
         </ResponsiveContainer>
 
-        <div className="grid-2-mobile" style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"1px", background:"var(--border)", borderTop:"1px solid var(--border)", marginTop:"20px", borderRadius:"0 0 10px 10px", overflow:"hidden" }}>
-          {[{label:"Current MTD",value:currentMTD,suffix:""},{label:"Forecast +6M",value:forecast6M,suffix:""},{label:"Growth",value:growthPct,suffix:"%"},{label:"Confidence",value:confidence,suffix:"%"}].map((s,i)=>(
+        <div className="grid-2-mobile" style={{ display:"grid", gridTemplateColumns:`repeat(${projection.ready ? 4 : 3},1fr)`, gap:"1px", background:"var(--border)", borderTop:"1px solid var(--border)", marginTop:"20px", borderRadius:"0 0 10px 10px", overflow:"hidden" }}>
+          {(projection.ready
+            ? [
+                {label:"Current MTD",  value:currentMTD,               suffix:""},
+                {label:"Forecast +6M", value:projection.forecast6M!,   suffix:""},
+                {label:"Growth",       value:projection.growthPct!,    suffix:"%"},
+                {label:"Confidence",   value:projection.confidence!,   suffix:"%"},
+              ]
+            // Not projecting, so the three projection tiles are gone rather
+            // than showing zeros. A "Forecast +6M: 0" reads as a prediction of
+            // collapse; a "Confidence: 0%" reads as a broken product. Neither
+            // is what "we need two more months of data" means.
+            : [
+                {label:"Current MTD",     value:currentMTD,             suffix:""},
+                {label:"Months recorded", value:projection.monthsUsed,  suffix:""},
+                {label:"Months needed",   value:projection.monthsNeeded,suffix:""},
+              ]
+          ).map((s,i)=>(
             <div key={s.label} style={{ background:"var(--surface)", padding:"14px 16px", textAlign:"center" }}>
               <div style={{ fontFamily:"var(--font-mono)", fontSize:"18px", fontWeight:500, color:"var(--text-primary)", letterSpacing:"-0.02em", marginBottom:"3px" }}>
                 {ga4Loading?"—":<><AnimatedNumber target={s.value} decimals={s.suffix==="%"?1:0} delay={0.4+i*0.08}/>{s.suffix}</>}
@@ -451,6 +461,12 @@ function ProjectionChart({ brandColor, ga4Trend, ga4Loading, ga4Reason, ga4Messa
               <div style={{ fontFamily:"var(--font-mono)", fontSize:"9px", color:"var(--text-tertiary)", letterSpacing:"0.1em", textTransform:"uppercase" }}>{s.label}</div>
             </div>
           ))}
+        </div>
+
+        <div style={{ fontFamily:"var(--font-body)", fontSize:"12px", color:"var(--text-tertiary)", lineHeight:1.55, marginTop:"14px", paddingTop:"2px" }}>
+          {projection.ready
+            ? <>Projected from {projection.monthsUsed} months of your own sessions at {(((projection.monthlyRate ?? 1) - 1) * 100).toFixed(1)}% a month — {confidenceLabel(projection.confidence!)}. The shaded band widens the further out it goes, and widens faster when your month-to-month growth has been uneven.</>
+            : projection.reason}
         </div>
       </Panel>
     </motion.div>

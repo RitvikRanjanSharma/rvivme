@@ -8,6 +8,12 @@
 // =============================================================================
 
 import { NextResponse, type NextRequest } from "next/server";
+import { outboundFetch } from "@/lib/outbound-fetch";
+
+// Declared so a slow upstream fails as a timeout rather than as a killed
+// process. A killed function returns nothing at all, which the UI cannot
+// distinguish from an empty result.
+export const maxDuration = 60;
 
 // Keeping the same model the browser code used previously so behaviour
 // is unchanged. Override per-call by passing { model } in the request body.
@@ -50,7 +56,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await outboundFetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type":      "application/json",
@@ -63,7 +69,7 @@ export async function POST(request: NextRequest) {
         ...(system ? { system } : {}),
         messages: [{ role: "user", content: prompt }],
       }),
-    });
+    }, 55_000, "Claude");
 
     if (!res.ok) {
       const errText = await res.text().catch(() => "");

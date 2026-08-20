@@ -20,7 +20,8 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { verifyCron, getServiceSupabase } from "@/lib/cron";
-import { getGoogleAccessToken } from "@/lib/google-auth";
+import { resolveGoogleToken } from "@/lib/google-oauth";
+import { googleFetch } from "@/lib/outbound-fetch";
 
 const GSC_API_BASE = "https://www.googleapis.com/webmasters/v3";
 const GSC_SCOPE    = "https://www.googleapis.com/auth/webmasters.readonly";
@@ -60,17 +61,17 @@ export async function GET(req: NextRequest) {
     failed:          [] as { user_id: string; reason: string }[],
   };
 
-  // Get one Google access token up front; service-account tokens are valid
-  // for ~1 hour, so it covers the whole batch.
-  let token: string;
-  try {
-    token = await getGoogleAccessToken(GSC_SCOPE);
-  } catch (e: any) {
-    return NextResponse.json(
-      { success: false, error: `google-auth: ${e.message}` },
-      { status: 500 },
-    );
-  }
+  // A token is resolved PER USER inside the loop rather than once up front.
+  //
+  // The single shared service-account token this used to take only works for
+  // workspaces that granted that account Viewer access on their property.
+  // Every user who connected through the OAuth flow we actually ask them to
+  // use was silently skipped, and the failure looked like "no ranking history
+  // for this customer" rather than like a broken job.
+  //
+  // resolveGoogleToken reads the connection through the service-role client,
+  // so it works here with no session, and still falls back to the shared
+  // account for anyone on the legacy setup.
 
   for (const u of users) {
     if (!u.gsc_site_url) continue;
@@ -89,8 +90,15 @@ export async function GET(req: NextRequest) {
       continue;
     }
 
+    const tokenResult = await resolveGoogleToken(u.id, GSC_SCOPE);
+    if (!tokenResult.ok) {
+      // One user's missing connection must not end the batch for everyone else.
+      summary.failed.push({ user_id: u.id, reason: `google-auth: ${tokenResult.reason}` });
+      continue;
+    }
+
     try {
-      const rows = await snapshotForUser(token, u.gsc_site_url, u.id, tracked, u.website_url);
+      const rows = await snapshotForUser(tokenResult.accessToken, u.gsc_site_url, u.id, tracked, u.website_url);
       if (rows.length) {
         const { error: upErr } = await sb
           .from("keyword_rankings_history")
@@ -134,8 +142,7 @@ async function snapshotForUser(
   const endDate = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const startDate = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const res = await fetch(
-    `${GSC_API_BASE}/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
+  const res = await googleFetch(`${GSC_API_BASE}/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
     {
       method:  "POST",
       headers: {

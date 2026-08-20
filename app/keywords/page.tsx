@@ -61,14 +61,27 @@ interface IdeaKw {
   difficulty:       number | null;
   intent:           string | null;
 }
-// Competitor keywords are disabled (no free equivalent of DataForSEO Labs
-// competitor ranked_keywords exists). Interface retained so the type checker
-// is happy and future re-enablement doesn't need a rewrite.
-interface CompKw {
-  term: string; volume: number; difficulty: number;
-  cpc: number; competitionLevel: string; intent: string;
-  competitorPos: number; aiReason?: string;
-}
+// The competitor tab no longer asks which keywords a rival RANKS for. That
+// needs a crawled SERP corpus, there is no free equivalent, and the endpoint
+// behind it had been returning "unavailable" while this page kept calling it.
+//
+// It now asks what they PUBLISH that you have no search presence for: their
+// sitemap and page titles on one side, your real Search Console queries on the
+// other. See lib/content-gap.ts. A narrower claim, but a true one.
+type GapPage = {
+  url: string; title: string; terms: string[];
+  verdict: "covered" | "gap" | "unclear";
+  matchedQuery?: string; overlap: number;
+};
+type GapResult = {
+  competitor: string;
+  sitemapUrl: string | null;
+  sample: { fetched: number; attempted: number; totalInSitemap: number; truncated: boolean };
+  basis:  { queries: number; period: string; siteUrl: string };
+  assessed: number;
+  gaps: GapPage[]; covered: GapPage[]; unclear: GapPage[];
+  themes: Array<{ term: string; pages: number }>;
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function diffColor(d: number) {
@@ -111,6 +124,23 @@ function EmptyState({ msg, brandColor }: { msg: string; brandColor: string }) {
   );
 }
 
+/**
+ * One fact about how a result was produced.
+ *
+ * Sits above the content-gap table because the reader needs to know it is a
+ * sample of their site measured against 28 days of your queries, not a
+ * complete account of either. A finding whose basis is invisible gets read as
+ * more certain than it is.
+ */
+function Basis({ label, value, accent }: { label: string; value: string; accent?: string }) {
+  return (
+    <div>
+      <div style={{ fontFamily:"var(--font-mono)", fontSize:"9px", letterSpacing:"0.1em", textTransform:"uppercase", color:"var(--text-tertiary)", marginBottom:"3px" }}>{label}</div>
+      <div style={{ fontFamily:"var(--font-body)", fontSize:"13px", color: accent ?? "var(--text-primary)" }}>{value}</div>
+    </div>
+  );
+}
+
 function DiffBar({ d }: { d: number }) {
   return (
     <div style={{ display:"flex", alignItems:"center", gap:"7px" }}>
@@ -125,73 +155,6 @@ function DiffBar({ d }: { d: number }) {
 function IntentBadge({ i }: { i: string }) {
   return (
     <span style={{ fontFamily:"var(--font-mono)", fontSize:"9px", letterSpacing:"0.08em", textTransform:"capitalize", color:intentColor(i), background:`${intentColor(i)}18`, padding:"2px 7px", borderRadius:"100px" }}>{i}</span>
-  );
-}
-
-// ─── AI reason card ───────────────────────────────────────────────────────────
-function AiReasonCard({ kw, domain, brandColor }: { kw: CompKw; domain: string; brandColor: string }) {
-  const [open,    setOpen]    = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [reason,  setReason]  = useState(kw.aiReason ?? "");
-
-  async function loadReason() {
-    if (reason || loading) { setOpen(!open); return; }
-    setOpen(true); setLoading(true);
-    try {
-      const prompt = `You are an SEO strategist. In 2-3 sentences explain why the keyword "${kw.term}" (volume: ${kw.volume}/mo, difficulty: ${kw.difficulty}/100, intent: ${kw.intent}) is a strategic opportunity for "${domain}". Be direct and specific. No fluff.`;
-      const res  = await fetch("/api/claude", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ prompt, max_tokens: 200 }),
-      });
-      const data = await res.json();
-      if (data?.reason === "not_configured") {
-        setReason("AI analysis isn't configured. Add an ANTHROPIC_API_KEY to enable it.");
-        return;
-      }
-      if (!res.ok || data.error) throw new Error(data.error ?? "Analysis failed");
-      setReason(data.text || "Analysis unavailable.");
-    } catch (e) {
-      console.error("[AiReasonCard]", e);
-      setReason("Unable to generate analysis. Check your connection.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div>
-      <button onClick={loadReason} style={{
-        display:"inline-flex", alignItems:"center", gap:"5px",
-        fontFamily:"var(--font-mono)", fontSize:"9px", letterSpacing:"0.08em",
-        color: brandColor, background:`rgba(var(--brand-rgb),0.08)`,
-        border:`1px solid rgba(var(--brand-rgb),0.20)`,
-        borderRadius:"100px", padding:"3px 9px", cursor:"pointer",
-        transition:"all 0.16s",
-      }}>
-        <Zap size={9} />
-        {open ? "HIDE" : "WHY THIS?"}
-        {open ? <ChevronUp size={9} /> : <ChevronDown size={9} />}
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div initial={{ opacity:0, height:0 }} animate={{ opacity:1, height:"auto" }} exit={{ opacity:0, height:0 }}
-            transition={{ duration:0.25 }}
-            style={{ overflow:"hidden" }}
-          >
-            <div style={{ marginTop:"8px", padding:"10px 12px", background:"var(--card)", border:"1px solid var(--border)", borderRadius:"8px", maxWidth:"480px" }}>
-              {loading
-                ? <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
-                    <div style={{ width:"12px", height:"12px", border:`1.5px solid rgba(var(--brand-rgb),0.3)`, borderTopColor:brandColor, borderRadius:"50%", animation:"spin 0.7s linear infinite", flexShrink:0 }} />
-                    <span style={{ fontFamily:"var(--font-body)", fontSize:"12px", color:"var(--text-tertiary)" }}>Analysing…</span>
-                  </div>
-                : <p style={{ fontFamily:"var(--font-body)", fontSize:"12px", color:"var(--text-secondary)", lineHeight:1.65, margin:0 }}>{reason}</p>
-              }
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
   );
 }
 
@@ -213,11 +176,10 @@ function numOrDash(v: number | null | undefined, fmt?: (n: number) => string): R
 }
 
 function KwTable<T extends { term: string }>({
-  keywords, columns, emptyMsg, brandColor, compDomain, yourDomain, showAi = false,
+  keywords, columns, emptyMsg, brandColor,
   selectable = false, selected, onToggleSelect, onToggleAll, badges,
 }: {
   keywords: T[]; columns: KwColumn<T>[]; emptyMsg: string; brandColor: string;
-  compDomain?: string; yourDomain?: string; showAi?: boolean;
   selectable?: boolean;
   selected?: Set<string>;
   onToggleSelect?: (term: string) => void;
@@ -278,7 +240,7 @@ function KwTable<T extends { term: string }>({
                   </td>
                 )}
                 <td style={{ padding:"13px 14px", borderBottom, maxWidth:"320px" }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom: showAi ? "8px" : (rowBadges.length ? 6 : 0) }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom: rowBadges.length ? 6 : 0 }}>
                     <span style={{ fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:500, color:"var(--text-primary)" }}>{kw.term}</span>
                     {rowBadges.map((b, j) => (
                       <span key={`${b.strategyId}-${j}`}
@@ -293,9 +255,6 @@ function KwTable<T extends { term: string }>({
                         }}>{b.acronym}</span>
                     ))}
                   </div>
-                  {showAi && compDomain && yourDomain && (
-                    <AiReasonCard kw={kw as unknown as CompKw} domain={yourDomain} brandColor={brandColor} />
-                  )}
                 </td>
                 {columns.map(c => (
                   <td key={c.header} style={{ padding:"13px 14px", borderBottom }}>
@@ -332,11 +291,10 @@ export default function KeywordsPage() {
 
   // Competitor keywords
   const [compDomain,  setCompDomain]  = useState("");
-  const [gapKws,      setGapKws]      = useState<CompKw[]>([]);
-  const [oppKws,      setOppKws]      = useState<CompKw[]>([]);
+  const [gapResult,   setGapResult]   = useState<GapResult | null>(null);
+  const [gapView,     setGapView]     = useState<"gaps" | "covered">("gaps");
   const [compKwLoading, setCompKwLoading] = useState(false);
   const [compKwError,   setCompKwError]   = useState<string|null>(null);
-  const [compSection,   setCompSection]   = useState<"gap"|"opp">("gap");
   const [saveState,     setSaveState]     = useState<"idle"|"saving"|"saved"|"error">("idle");
   const [saveMessage,   setSaveMessage]   = useState<string|null>(null);
 
@@ -373,8 +331,10 @@ export default function KeywordsPage() {
     const pool: string[] = Array.from(new Set([
       ...rankings.map(k => k.term),
       ...ideas.map(k => k.term),
-      ...gapKws.map(k => k.term),
-      ...oppKws.map(k => k.term),
+      // Themes, not page titles: a term appearing across several of their
+      // pages is a subject they have committed to, which is what a strategy
+      // can actually be built around.
+      ...(gapResult?.themes ?? []).map(t => t.term),
     ]));
     if (!pool.length || !strategies.length) return;
 
@@ -401,7 +361,7 @@ export default function KeywordsPage() {
     })();
     return () => { cancelled = true; };
   /* eslint-disable-next-line react-hooks/exhaustive-deps */
-  }, [rankings, ideas, gapKws, oppKws, strategies]);
+  }, [rankings, ideas, gapResult, strategies]);
 
   // Selection helpers.
   function toggleKw(term: string) {
@@ -434,15 +394,12 @@ export default function KeywordsPage() {
       keyword: term, volume: fromIdea.volume, difficulty: fromIdea.difficulty,
       intent: fromIdea.intent, source: "ai",
     };
-    const fromGap = gapKws.find(k => k.term === term);
+    // Gap themes carry no volume, difficulty or intent, and we pass null
+    // rather than a placeholder. A 0 here would travel into the strategy and
+    // be read back later as a measured figure.
+    const fromGap = (gapResult?.themes ?? []).find(t => t.term === term);
     if (fromGap) return {
-      keyword: term, volume: fromGap.volume, difficulty: fromGap.difficulty,
-      intent: fromGap.intent, source: "gap",
-    };
-    const fromOpp = oppKws.find(k => k.term === term);
-    if (fromOpp) return {
-      keyword: term, volume: fromOpp.volume, difficulty: fromOpp.difficulty,
-      intent: fromOpp.intent, source: "opportunity",
+      keyword: term, volume: null, difficulty: null, intent: null, source: "gap",
     };
     return { keyword: term, source: "manual" };
   }
@@ -468,13 +425,19 @@ export default function KeywordsPage() {
     if (!domain || domainLoading) return;
     setRankLoading(true); setRankError(null);
     try {
-      const res  = await fetch("/api/dataforseo/keywords", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ domain, limit: 50 }),
-      });
+      // Search Console, not DataForSEO. These are the queries the site
+      // genuinely received impressions for — exact, not modelled — and the
+      // route has existed since the DFS endpoints were switched off. The page
+      // simply never stopped calling the dead one.
+      const res  = await fetch("/api/keywords/ranked?limit=50");
       const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error ?? "Failed");
+      if (!data.success) {
+        throw new Error(
+          data.reason === "not_configured"
+            ? "Connect Search Console under Settings → Integrations to see the queries you rank for."
+            : data.message ?? "Couldn't load your rankings.",
+        );
+      }
       setRankings(data.keywords ?? []);
     } catch (e: any) { setRankError(e.message); }
     finally { setRankLoading(false); }
@@ -489,138 +452,121 @@ export default function KeywordsPage() {
       const body = ideaMode === "site"
         ? { mode: "site", domain }
         : { mode: "seed", seed: ideaSeed.split(",").map(s => s.trim()).filter(Boolean) };
-      const res  = await fetch("/api/dataforseo/keyword-ideas", {
+      // Google Trends related queries — "rising" is the closest free signal to
+      // an opportunity keyword. Same story as rankings: the free route was
+      // built and the page kept calling the retired one.
+      const res  = await fetch("/api/keywords/ideas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error ?? "Failed");
+      if (!data.success) throw new Error(data.message ?? "Couldn't load keyword ideas.");
       setIdeas(data.keywords ?? []);
     } catch (e: any) { setIdeaError(e.message); }
     finally { setIdeaLoading(false); }
   }
 
-  // Load competitor keywords
+  // What they publish that you have no search presence for.
+  //
+  // Not "keywords they rank for" — that needs a SERP corpus we don't have,
+  // and the endpoint this used to call has been returning "unavailable" for
+  // some time while this page carried on calling it. Their sitemap and page
+  // titles on one side, your real Search Console queries on the other.
   async function loadCompetitorKws() {
     if (!compDomain.trim()) return;
-    setCompKwLoading(true); setCompKwError(null); setSaveState("idle"); setSaveMessage(null);
+    setCompKwLoading(true); setCompKwError(null); setGapResult(null);
+    setSaveState("idle"); setSaveMessage(null);
     try {
       const cd  = compDomain.trim().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
-      const res = await fetch("/api/dataforseo/competitor-keywords", {
+      const res = await fetch("/api/competitors/content-gap", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ yourDomain: domain, competitorDomain: cd, limit: 50 }),
+        body: JSON.stringify({ domain: cd }),
       });
       const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error ?? "Failed");
-      setGapKws(data.gapKeywords ?? []);
-      setOppKws(data.oppKeywords ?? []);
+      if (!data.success) throw new Error(data.message ?? "Couldn't analyse that competitor.");
+      setGapResult(data as GapResult);
+      setGapView("gaps");
     } catch (e: any) { setCompKwError(e.message); }
     finally { setCompKwLoading(false); }
   }
 
-  // Save currently-visible competitor keywords (gap + opportunity) to Supabase
-  // so the user can come back to them later, and so future work (strategies,
-  // content briefs) can reference them.
+  // Save the themes — terms recurring across several of their gap pages.
+  // Individual page titles are the evidence; the recurring term is the thing
+  // you would actually brief a writer on.
   async function saveCompetitorKws() {
-    const cd = compDomain.trim().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
-    if (!cd || (gapKws.length === 0 && oppKws.length === 0)) return;
+    const cd     = compDomain.trim().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
+    const themes = gapResult?.themes ?? [];
+    if (!cd || themes.length === 0) return;
 
     setSaveState("saving"); setSaveMessage(null);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not signed in — can't save keywords.");
+      if (!user) throw new Error("Not signed in — can't save.");
 
-      const rows = [
-        ...gapKws.map(k => ({
-          user_id:           user.id,
-          keyword:           k.term,
-          source:            "gap"         as const,
-          competitor_domain: cd,
-          volume:            k.volume,
-          difficulty:        k.difficulty,
-          cpc:               k.cpc,
-          intent:            k.intent,
-          competitor_pos:    k.competitorPos,
-        })),
-        ...oppKws.map(k => ({
-          user_id:           user.id,
-          keyword:           k.term,
-          source:            "opportunity" as const,
-          competitor_domain: cd,
-          volume:            k.volume,
-          difficulty:        k.difficulty,
-          cpc:               k.cpc,
-          intent:            k.intent,
-          competitor_pos:    k.competitorPos,
-        })),
-      ];
+      const rows = themes.map(t => ({
+        user_id:           user.id,
+        keyword:           t.term,
+        source:            "gap" as const,
+        competitor_domain: cd,
+        // Null, not zero. We did not measure volume, difficulty or CPC, and a
+        // 0 stored here becomes indistinguishable from a measurement later.
+        volume:            null,
+        difficulty:        null,
+        cpc:               null,
+        intent:            null,
+        notes:             `Appears on ${t.pages} of ${cd}'s pages that you have no search presence for.`,
+      }));
 
-      // Upsert — if the user re-saves the same keyword+competitor combo, we
-      // update the row instead of failing on the unique constraint.
-      const { error: upErr, count } = await supabase
+      const { data, error: upErr } = await supabase
         .from("tracked_keywords")
-        .upsert(rows as never, { onConflict: "user_id,keyword,competitor_domain", count: "exact" }).select("id");
+        .upsert(rows as never, { onConflict: "user_id,keyword,competitor_domain" })
+        .select("id");
 
       if (upErr) throw new Error(upErr.message);
+      // PostgREST calls a zero-row write a success. Checking the returned rows
+      // is the only way to know it landed.
+      if (!data || data.length === 0) throw new Error("Nothing saved — check your profile is set up in Settings.");
 
       setSaveState("saved");
-      setSaveMessage(`Saved ${count ?? rows.length} keyword${rows.length === 1 ? "" : "s"} to your tracking list.`);
-      // Revert the "Saved" confirmation after a short delay so the button is
-      // reusable if the user wants to re-save.
+      setSaveMessage(`Saved ${data.length} theme${data.length === 1 ? "" : "s"} to your tracking list.`);
       setTimeout(() => setSaveState("idle"), 2500);
     } catch (e: any) {
       setSaveState("error");
-      setSaveMessage(e.message ?? "Failed to save keywords.");
+      setSaveMessage(e.message ?? "Failed to save.");
     }
   }
 
-  // Export the currently-selected section (gap or opportunity) as CSV so the
-  // user can pull it into a spreadsheet, content planner, or brief template.
+  // Export the pages themselves, so any row can be opened and checked.
   function exportCompetitorKws() {
-    const cd   = compDomain.trim().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
-    const rows = compSection === "gap" ? gapKws : oppKws;
-    if (rows.length === 0) return;
+    const rows = gapView === "gaps" ? gapResult?.gaps : gapResult?.covered;
+    if (!rows || rows.length === 0) return;
 
     const esc = (v: unknown) => {
-      const s = String(v ?? "");
-      // RFC 4180 CSV escaping — wrap in quotes and double any embedded quotes.
-      return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      const str = String(v ?? "");
+      // RFC 4180 — wrap in quotes and double any embedded quotes.
+      return /[",\n\r]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
     };
-
-    const header = [
-      "Keyword","Section","CompetitorDomain","YourDomain",
-      "Volume","Difficulty","CPC","Intent","CompetitionLevel","CompetitorPosition",
-    ];
-    const lines = [
+    const header = ["PageTitle", "URL", "Verdict", "TopicTerms", "YourClosestQuery", "Overlap"];
+    const csv = [
       header.join(","),
-      ...rows.map(k => [
-        k.term,
-        compSection === "gap" ? "Gap" : "Opportunity",
-        cd,
-        domain,
-        k.volume,
-        k.difficulty,
-        k.cpc,
-        k.intent,
-        k.competitionLevel,
-        k.competitorPos,
+      ...rows.map(r => [
+        r.title, r.url, r.verdict, r.terms.join(" "),
+        r.matchedQuery ?? "", r.overlap,
       ].map(esc).join(",")),
-    ];
-    const csv = lines.join("\n");
+    ].join("\n");
 
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
+    const blob  = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url   = URL.createObjectURL(blob);
+    const link  = document.createElement("a");
     const stamp = new Date().toISOString().slice(0, 10);
-    a.href     = url;
-    a.download = `competitor-keywords-${cd}-${compSection}-${stamp}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    link.href = url;
+    link.download = `content-gap-${gapResult?.competitor ?? "competitor"}-${gapView}-${stamp}.csv`;
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
     URL.revokeObjectURL(url);
   }
+
 
   const filtered = rankings.filter(k =>
     !rankFilter || k.term.toLowerCase().includes(rankFilter.toLowerCase())
@@ -815,15 +761,17 @@ export default function KeywordsPage() {
             {/* Input */}
             <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:"12px", padding:"20px", marginBottom:"20px" }}>
               <div style={{ fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:600, color:"var(--text-primary)", marginBottom:"6px" }}>
-                Competitor Keyword Analysis
+                Content gap
               </div>
-              <div style={{ fontFamily:"var(--font-body)", fontSize:"13px", color:"var(--text-secondary)", marginBottom:"14px" }}>
-                Enter a competitor domain to discover keywords they rank for that you don't — and quick-win opportunities with low competition.
+              <div style={{ fontFamily:"var(--font-body)", fontSize:"13px", color:"var(--text-secondary)", marginBottom:"14px", maxWidth:"640px", lineHeight:1.55 }}>
+                We read the pages a competitor publishes, and compare them against the queries your site
+                actually received impressions for. Anything they cover and you have no presence for is a gap.
+                Both halves are measured — theirs from their live sitemap, yours from Search Console.
               </div>
               <div style={{ display:"flex", gap:"10px", flexWrap:"wrap" }}>
                 <input value={compDomain} onChange={e => setCompDomain(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter") loadCompetitorKws(); }}
-                  placeholder="competitor.com"
+                  placeholder="competitor.co.uk"
                   style={{ flex:"1 1 240px", padding:"10px 13px", fontFamily:"var(--font-body)", fontSize:"13px", color:"var(--text-primary)", background:"var(--card)", border:"1px solid var(--border)", borderRadius:"8px", outline:"none", boxSizing:"border-box" as const }}
                   onFocus={e => e.currentTarget.style.borderColor = "var(--brand)"}
                   onBlur={e =>  e.currentTarget.style.borderColor = "var(--border)"}
@@ -835,53 +783,100 @@ export default function KeywordsPage() {
                   border:"none", borderRadius:"8px", padding:"10px 20px", cursor:"pointer",
                 }}>
                   {compKwLoading ? <div style={{ width:"12px", height:"12px", border:"2px solid rgba(255,255,255,0.3)", borderTopColor:"#fff", borderRadius:"50%", animation:"spin 0.7s linear infinite" }} /> : <ArrowRight size={13} />}
-                  {compKwLoading ? "Analysing…" : "Analyse"}
+                  {compKwLoading ? "Reading their site…" : "Analyse"}
                 </button>
               </div>
             </div>
 
             {compKwError && (
-              <div style={{ display:"flex", alignItems:"center", gap:"8px", padding:"12px 16px", background:"rgba(255,171,0,0.08)", border:"1px solid rgba(255,171,0,0.25)", borderRadius:"10px", marginBottom:"16px" }}>
-                <AlertTriangle size={14} color="var(--signal-amber)" />
-                <span style={{ fontFamily:"var(--font-body)", fontSize:"13px", color:"var(--signal-amber)" }}>{compKwError}</span>
+              <div style={{ display:"flex", alignItems:"flex-start", gap:"8px", padding:"12px 16px", background:"rgba(255,171,0,0.08)", border:"1px solid rgba(255,171,0,0.25)", borderRadius:"10px", marginBottom:"16px" }}>
+                <AlertTriangle size={14} color="var(--signal-amber)" style={{ flexShrink:0, marginTop:"2px" }} />
+                <span style={{ fontFamily:"var(--font-body)", fontSize:"13px", color:"var(--signal-amber)", lineHeight:1.5 }}>{compKwError}</span>
               </div>
             )}
 
-            {(gapKws.length > 0 || oppKws.length > 0) && (
+            {gapResult && (
               <>
-                {/* Section tabs + Save / Export actions */}
+                {/* What this was actually built from. A sample reported as a
+                    total is a lie with a plausible shape. */}
+                <div style={{ display:"flex", flexWrap:"wrap", gap:"18px", padding:"12px 16px", background:"var(--muted)", borderRadius:"8px", marginBottom:"16px" }}>
+                  <Basis label="Their pages read"  value={`${gapResult.sample.fetched} of ${gapResult.sample.totalInSitemap.toLocaleString()}`} />
+                  <Basis label="Your queries"      value={`${gapResult.basis.queries.toLocaleString()} · ${gapResult.basis.period}`} />
+                  <Basis label="No presence for"   value={`${gapResult.gaps.length}`} accent={gapResult.gaps.length > 0 ? "var(--signal-amber)" : undefined} />
+                  <Basis label="Already covered"   value={`${gapResult.covered.length}`} />
+                </div>
+
+                {gapResult.sample.truncated && (
+                  <div style={{ fontFamily:"var(--font-body)", fontSize:"12px", color:"var(--text-tertiary)", marginBottom:"16px" }}>
+                    They publish {gapResult.sample.totalInSitemap.toLocaleString()} pages; we read the first {gapResult.sample.fetched}.
+                    Treat the counts above as a sample of their site, not a total.
+                  </div>
+                )}
+
+                {/* Themes — the recurring subjects, which is what you brief on */}
+                {gapResult.themes.length > 0 && (
+                  <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:"12px", padding:"18px 20px", marginBottom:"20px" }}>
+                    <div style={{ fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:600, color:"var(--text-primary)", marginBottom:"4px" }}>
+                      Subjects they keep coming back to
+                    </div>
+                    <div style={{ fontFamily:"var(--font-body)", fontSize:"12.5px", color:"var(--text-secondary)", marginBottom:"12px", lineHeight:1.5 }}>
+                      Terms appearing across several of the pages you have no presence for. One page is a topic;
+                      several is a commitment. These are what a content brief should start from — note that we
+                      have no search volume for them, only that {gapResult.competitor} publishes on them and you don&rsquo;t.
+                    </div>
+                    <div style={{ display:"flex", flexWrap:"wrap", gap:"7px" }}>
+                      {gapResult.themes.map(t => {
+                        const on = selectedKws.has(t.term);
+                        return (
+                          <button key={t.term} onClick={() => toggleKw(t.term)}
+                            title={strategies.length > 0 ? "Select to attach to a strategy" : undefined}
+                            style={{
+                              display:"flex", alignItems:"center", gap:"6px",
+                              fontFamily:"var(--font-body)", fontSize:"12.5px",
+                              color: on ? "#fff" : "var(--text-primary)",
+                              background: on ? brandColor : "var(--card)",
+                              border:`1px solid ${on ? brandColor : "var(--border)"}`,
+                              borderRadius:"100px", padding:"5px 12px", cursor:"pointer", transition:"all 0.15s",
+                            }}>
+                            {t.term}
+                            <span style={{ fontFamily:"var(--font-mono)", fontSize:"9px", opacity:0.7 }}>{t.pages}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* View switch + actions */}
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:"12px", marginBottom:"16px", flexWrap:"wrap" }}>
                   <div style={{ display:"flex", gap:"12px" }}>
-                    <button onClick={() => setCompSection("gap")} style={{
+                    <button onClick={() => setGapView("gaps")} style={{
                       display:"flex", alignItems:"center", gap:"7px",
                       fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:500,
-                      color: compSection === "gap" ? "#fff" : "var(--text-secondary)",
-                      background: compSection === "gap" ? brandColor : "transparent",
-                      border:`1px solid ${compSection === "gap" ? brandColor : "var(--border)"}`,
+                      color: gapView === "gaps" ? "#fff" : "var(--text-secondary)",
+                      background: gapView === "gaps" ? brandColor : "transparent",
+                      border:`1px solid ${gapView === "gaps" ? brandColor : "var(--border)"}`,
                       borderRadius:"8px", padding:"9px 18px", cursor:"pointer", transition:"all 0.16s",
                     }}>
-                      <Globe2 size={13} />
-                      Keyword Gap
-                      <span style={{ fontFamily:"var(--font-mono)", fontSize:"10px", background:"rgba(255,255,255,0.2)", padding:"1px 6px", borderRadius:"100px" }}>{gapKws.length}</span>
+                      <Target size={13} /> No presence
+                      <span style={{ fontFamily:"var(--font-mono)", fontSize:"10px", background:"rgba(255,255,255,0.2)", padding:"1px 6px", borderRadius:"100px" }}>{gapResult.gaps.length}</span>
                     </button>
-                    <button onClick={() => setCompSection("opp")} style={{
+                    <button onClick={() => setGapView("covered")} style={{
                       display:"flex", alignItems:"center", gap:"7px",
                       fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:500,
-                      color: compSection === "opp" ? "#fff" : "var(--text-secondary)",
-                      background: compSection === "opp" ? "var(--signal-green)" : "transparent",
-                      border:`1px solid ${compSection === "opp" ? "var(--signal-green)" : "var(--border)"}`,
+                      color: gapView === "covered" ? "#fff" : "var(--text-secondary)",
+                      background: gapView === "covered" ? "var(--signal-green)" : "transparent",
+                      border:`1px solid ${gapView === "covered" ? "var(--signal-green)" : "var(--border)"}`,
                       borderRadius:"8px", padding:"9px 18px", cursor:"pointer", transition:"all 0.16s",
                     }}>
-                      <Zap size={13} />
-                      Quick Wins
-                      <span style={{ fontFamily:"var(--font-mono)", fontSize:"10px", background:"rgba(255,255,255,0.2)", padding:"1px 6px", borderRadius:"100px" }}>{oppKws.length}</span>
+                      <Check size={13} /> Already covered
+                      <span style={{ fontFamily:"var(--font-mono)", fontSize:"10px", background:"rgba(255,255,255,0.2)", padding:"1px 6px", borderRadius:"100px" }}>{gapResult.covered.length}</span>
                     </button>
                   </div>
 
                   <div style={{ display:"flex", gap:"8px" }}>
-                    <button
-                      onClick={saveCompetitorKws}
-                      disabled={saveState === "saving" || (gapKws.length === 0 && oppKws.length === 0)}
+                    <button onClick={saveCompetitorKws}
+                      disabled={saveState === "saving" || gapResult.themes.length === 0}
                       style={{
                         display:"flex", alignItems:"center", gap:"6px",
                         fontFamily:"var(--font-mono)", fontSize:"11px", letterSpacing:"0.08em",
@@ -890,20 +885,15 @@ export default function KeywordsPage() {
                         border:`1px solid ${saveState === "saved" ? "var(--signal-green)" : "var(--border)"}`,
                         borderRadius:"8px", padding:"8px 14px", cursor:"pointer", transition:"all 0.16s",
                       }}
-                      title="Save all gap + opportunity keywords to your tracked list"
+                      title="Save the recurring subjects to your tracked keyword list"
                     >
-                      {saveState === "saving" ? (
-                        <div style={{ width:"11px", height:"11px", border:"1.5px solid var(--border)", borderTopColor:"var(--text-primary)", borderRadius:"50%", animation:"spin 0.7s linear infinite" }} />
-                      ) : saveState === "saved" ? (
-                        <Check size={11} />
-                      ) : (
-                        <Save size={11} />
-                      )}
-                      {saveState === "saving" ? "SAVING" : saveState === "saved" ? "SAVED" : "SAVE"}
+                      {saveState === "saving"
+                        ? <div style={{ width:"11px", height:"11px", border:"1.5px solid var(--border)", borderTopColor:"var(--text-primary)", borderRadius:"50%", animation:"spin 0.7s linear infinite" }} />
+                        : saveState === "saved" ? <Check size={11} /> : <Save size={11} />}
+                      {saveState === "saving" ? "SAVING" : saveState === "saved" ? "SAVED" : "SAVE THEMES"}
                     </button>
-                    <button
-                      onClick={exportCompetitorKws}
-                      disabled={(compSection === "gap" ? gapKws : oppKws).length === 0}
+                    <button onClick={exportCompetitorKws}
+                      disabled={(gapView === "gaps" ? gapResult.gaps : gapResult.covered).length === 0}
                       style={{
                         display:"flex", alignItems:"center", gap:"6px",
                         fontFamily:"var(--font-mono)", fontSize:"11px", letterSpacing:"0.08em",
@@ -911,10 +901,9 @@ export default function KeywordsPage() {
                         border:"1px solid var(--border)", borderRadius:"8px",
                         padding:"8px 14px", cursor:"pointer", transition:"all 0.16s",
                       }}
-                      title={`Export the ${compSection === "gap" ? "gap" : "quick wins"} table as CSV`}
+                      title="Export the visible pages as CSV"
                     >
-                      <Download size={11} />
-                      EXPORT CSV
+                      <Download size={11} /> EXPORT CSV
                     </button>
                   </div>
                 </div>
@@ -934,48 +923,75 @@ export default function KeywordsPage() {
                   </div>
                 )}
 
-                {/* Section description */}
                 <div style={{ padding:"12px 16px", background:"var(--muted)", borderRadius:"8px", marginBottom:"16px" }}>
-                  {compSection === "gap"
-                    ? <span style={{ fontFamily:"var(--font-body)", fontSize:"13px", color:"var(--text-secondary)" }}>
-                        Keywords <strong style={{ color:"var(--text-primary)" }}>{compDomain}</strong> ranks for that <strong style={{ color:"var(--text-primary)" }}>{domain}</strong> does not. High-volume opportunities to close the gap. Click <strong style={{ color:brandColor }}>WHY THIS?</strong> for AI analysis.
-                      </span>
-                    : <span style={{ fontFamily:"var(--font-body)", fontSize:"13px", color:"var(--text-secondary)" }}>
-                        Low-difficulty keywords (under 40) where you can rank faster. These are the easiest wins — competitor ranks but the keyword isn't heavily contested. AI analysis explains each opportunity.
-                      </span>
-                  }
+                  <span style={{ fontFamily:"var(--font-body)", fontSize:"13px", color:"var(--text-secondary)", lineHeight:1.55 }}>
+                    {gapView === "gaps"
+                      ? <>Pages <strong style={{ color:"var(--text-primary)" }}>{gapResult.competitor}</strong> publishes where none of your Search Console queries come close to the subject. Open any one to check it.</>
+                      : <>Pages where you already appear for something close. The query of yours that covers it is shown, so you can judge whether we matched it fairly.</>}
+                  </span>
                 </div>
 
-                {/* Table */}
+                {/* Pages */}
                 <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:"12px", overflow:"hidden" }}>
-                  <KwTable
-                    keywords={compSection === "gap" ? gapKws : oppKws}
-                    columns={[
-                      { header: "Volume",     render: (kw) => kw.volume.toLocaleString() },
-                      { header: "Their Pos",  render: (kw) => kw.competitorPos },
-                      { header: "Difficulty", render: (kw) => <DiffBar d={kw.difficulty} /> },
-                      { header: "CPC",        render: (kw) => `£${kw.cpc.toFixed(2)}` },
-                      { header: "Intent",     render: (kw) =>
-                          <span style={{ color: intentColor(kw.intent), fontFamily:"var(--font-mono)", fontSize:"11px", letterSpacing:"0.06em", textTransform:"uppercase" }}>{kw.intent}</span> },
-                    ]}
-                    emptyMsg="No keywords found for this section."
-                    brandColor={brandColor}
-                    compDomain={compDomain}
-                    yourDomain={domain}
-                    showAi={true}
-                    selectable={strategies.length > 0}
-                    selected={selectedKws}
-                    onToggleSelect={toggleKw}
-                    onToggleAll={toggleAllKw}
-                    badges={kwBadges}
-                  />
+                  {(gapView === "gaps" ? gapResult.gaps : gapResult.covered).length === 0 ? (
+                    <EmptyState
+                      msg={gapView === "gaps"
+                        ? `Nothing found that ${gapResult.competitor} covers and you don't — on the pages we read.`
+                        : "None of the pages we read overlapped with your queries."}
+                      brandColor={brandColor}
+                    />
+                  ) : (
+                    <div>
+                      {(gapView === "gaps" ? gapResult.gaps : gapResult.covered).map((pg, i, arr) => (
+                        <div key={pg.url} style={{ padding:"14px 16px", borderBottom: i < arr.length - 1 ? "1px solid var(--border)" : "none" }}>
+                          <div style={{ display:"flex", justifyContent:"space-between", gap:"12px", flexWrap:"wrap", alignItems:"flex-start" }}>
+                            <div style={{ flex:"1 1 320px", minWidth:0 }}>
+                              <div style={{ fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:600, color:"var(--text-primary)", marginBottom:"3px" }}>
+                                {pg.title || "(no title)"}
+                              </div>
+                              <a href={pg.url} target="_blank" rel="noopener noreferrer"
+                                style={{ fontFamily:"var(--font-mono)", fontSize:"10.5px", color:"var(--text-tertiary)", textDecoration:"none", wordBreak:"break-all" }}>
+                                {pg.url}
+                              </a>
+                              <div style={{ display:"flex", gap:"5px", flexWrap:"wrap", marginTop:"7px" }}>
+                                {pg.terms.slice(0, 8).map(t => (
+                                  <span key={t} style={{ fontFamily:"var(--font-mono)", fontSize:"9px", letterSpacing:"0.04em", color:"var(--text-secondary)", background:"var(--card)", border:"1px solid var(--border)", padding:"2px 7px", borderRadius:"100px" }}>{t}</span>
+                                ))}
+                              </div>
+                            </div>
+                            <div style={{ textAlign:"right", flexShrink:0 }}>
+                              {pg.matchedQuery ? (
+                                <>
+                                  <div style={{ fontFamily:"var(--font-mono)", fontSize:"9px", color:"var(--text-tertiary)", letterSpacing:"0.08em", marginBottom:"3px" }}>YOUR CLOSEST QUERY</div>
+                                  <div style={{ fontFamily:"var(--font-body)", fontSize:"12.5px", color:"var(--signal-green)" }}>{pg.matchedQuery}</div>
+                                  <div style={{ fontFamily:"var(--font-mono)", fontSize:"10px", color:"var(--text-tertiary)", marginTop:"2px" }}>{Math.round(pg.overlap * 100)}% of the subject</div>
+                                </>
+                              ) : (
+                                <div style={{ fontFamily:"var(--font-mono)", fontSize:"10px", color:"var(--text-tertiary)", letterSpacing:"0.06em" }}>
+                                  NO QUERY OF YOURS IS CLOSE
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
+
+                {gapResult.unclear.length > 0 && (
+                  <div style={{ fontFamily:"var(--font-body)", fontSize:"12px", color:"var(--text-tertiary)", marginTop:"12px", lineHeight:1.5 }}>
+                    {gapResult.unclear.length} of their pages had titles carrying nothing but their brand name
+                    (&ldquo;Home | {gapResult.competitor}&rdquo; and similar). We can&rsquo;t say anything about those, so
+                    they are excluded rather than counted as gaps.
+                  </div>
+                )}
               </>
             )}
 
-            {!compKwLoading && gapKws.length === 0 && oppKws.length === 0 && !compKwError && (
+            {!compKwLoading && !gapResult && !compKwError && (
               <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:"12px" }}>
-                <EmptyState msg="Enter a competitor domain above to see keyword gaps and quick win opportunities." brandColor={brandColor} />
+                <EmptyState msg="Enter a competitor domain above to see what they publish that you have no search presence for." brandColor={brandColor} />
               </div>
             )}
           </motion.div>
