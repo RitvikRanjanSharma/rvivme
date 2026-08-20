@@ -82,6 +82,8 @@ export async function POST(req: NextRequest) {
     if (findings.length === 0) {
       return NextResponse.json({
         success: true,
+        // No model call is made on this path, so nothing can have been skipped.
+        narrativeSkipped: null,
         audit: { domain: audit.domain, score: audit.score },
         // A clean audit is a legitimate outcome and should read as one rather
         // than as a failure to produce advice.
@@ -110,6 +112,7 @@ export async function POST(req: NextRequest) {
     // impact, why, fix — is ours and is passed through untouched.
     const key = process.env.ANTHROPIC_API_KEY;
     let summary = "";
+    let narrativeSkipped: "quota" | null = null;
     let effortByRule: Record<string, string> = {};
 
     if (key) {
@@ -128,9 +131,14 @@ export async function POST(req: NextRequest) {
         const res = await fetch(`${resolveBaseUrl()}/api/claude`, {
           method:  "POST",
           headers: { "Content-Type": "application/json", cookie: req.headers.get("cookie") ?? "" },
-          body:    JSON.stringify({ prompt, max_tokens: 900 }),
+          body:    JSON.stringify({ task: "audit_plan", prompt }),
         });
         const j = await res.json().catch(() => null);
+        // The ordering and the fixes are ours and stay correct without the
+        // model, so a cap or a failure degrades the narrative rather than the
+        // plan. Recorded so the UI can say why the summary is missing instead
+        // of leaving a blank someone reads as "nothing to say".
+        if (j?.reason === "quota_exceeded") narrativeSkipped = "quota";
         const raw = String(j?.text ?? "").replace(/^```json\s*|\s*```$/g, "").trim();
         const parsed = JSON.parse(raw);
         summary      = String(parsed.summary ?? "");

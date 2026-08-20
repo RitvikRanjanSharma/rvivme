@@ -188,9 +188,14 @@ export async function POST(req: NextRequest) {
     const res = await fetch(`${resolveBaseUrl()}/api/claude`, {
       method:  "POST",
       headers: { "Content-Type": "application/json", cookie: req.headers.get("cookie") ?? "" },
-      body:    JSON.stringify({ prompt, max_tokens: 1200 }),
+      body:    JSON.stringify({ task: "audit_fix", prompt }),
     });
     const j   = await res.json().catch(() => null);
+    // The proxy is metered now, so "you've hit today's cap" is a real outcome
+    // and must be said rather than surfacing as an empty result.
+    if (j?.reason === "quota_exceeded" || j?.reason === "unauthenticated") {
+      return NextResponse.json({ success: false, reason: j.reason, message: j.message });
+    }
     const raw = String(j?.text ?? "").replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
 
     let options: string[] = [];

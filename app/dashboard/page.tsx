@@ -800,14 +800,19 @@ Each strategy must be specific to this domain's actual data. Impact and effort a
       const res = await fetch("/api/claude", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ prompt, max_tokens: 1000 }),
+        body:    JSON.stringify({ task: "insight", prompt }),
       });
       const data = await res.json();
       if (data?.reason === "not_configured") {
         setAiNotConfigured(true);
         return;
       }
-      if (!res.ok || data.error) throw new Error(data.error ?? "Strategy generation failed");
+      if (data?.reason === "quota_exceeded" || data?.reason === "unauthenticated") {
+        // A daily cap is not a broken feature, and shouldn't read like one.
+        setError(data.message ?? "You've used today's AI allowance.");
+        return;
+      }
+      if (!res.ok || data.error) throw new Error(data.error ?? data.message ?? "Strategy generation failed");
       const text  = data.text ?? "[]";
       const clean = text.replace(/```json|```/g,"").trim();
       const parsed = JSON.parse(clean);

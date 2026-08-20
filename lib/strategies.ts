@@ -282,11 +282,15 @@ Rules:
   const res = await fetch("/api/claude", {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
-    body:    JSON.stringify({ prompt, max_tokens: 1400 }),
+    body:    JSON.stringify({ task: "strategy", prompt }),
   });
   const data = await res.json();
   if (data?.reason === "not_configured") throw new Error("AI is not configured on this workspace.");
-  if (!res.ok || data.error)             throw new Error(data.error ?? "Plan generation failed");
+  // The proxy is metered now. "You've used today's allowance" is a real
+  // outcome, and it is not the same as a failure — say which it was.
+  if (data?.reason === "quota_exceeded")  throw new Error(data.message ?? "You've used today's AI allowance.");
+  if (data?.reason === "unauthenticated") throw new Error("Your session expired — sign in again to use AI features.");
+  if (!res.ok || data.error)             throw new Error(data.error ?? data.message ?? "Plan generation failed");
 
   const raw    = (data.text ?? "[]").replace(/```json|```/g,"").trim();
   const parsed = JSON.parse(raw) as Array<{
@@ -412,14 +416,16 @@ Return ONLY valid JSON, no markdown:
     const res = await fetch("/api/claude", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ prompt, max_tokens: 1600 }),
+      body:    JSON.stringify({ task: "classify", prompt }),
     });
     const data = await res.json();
-    if (data?.reason === "not_configured") {
-      // Graceful fallback: no AI → no badges, just echo the keywords.
+    // Badges are a convenience on top of a page that works without them, so
+    // both "no AI configured" and "out of allowance" degrade to no badges
+    // rather than to an error over a working keyword table.
+    if (data?.reason === "not_configured" || data?.reason === "quota_exceeded" || data?.reason === "unauthenticated") {
       return keywords.map(k => ({ keyword: k, matches: [] }));
     }
-    if (!res.ok || data.error) throw new Error(data.error ?? "Keyword recommend failed");
+    if (!res.ok || data.error) throw new Error(data.error ?? data.message ?? "Keyword recommend failed");
 
     try {
       const raw    = (data.text ?? "[]").replace(/```json|```/g,"").trim();

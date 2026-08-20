@@ -10,14 +10,35 @@
 // live web grounding, which is irrelevant here and would risk it pulling in
 // outside material that isn't in the post.
 //
-// Summaries are cached in-process per slug. A post's text rarely changes, and
-// re-summarising on every click would burn tokens for an identical answer.
+// CACHING, AND WHY THE OLD CACHE WASN'T ONE
+//
+// This endpoint is public by design — a blog reader has no account. It used to
+// call Anthropic on every cache miss, guarded only by a Map in module scope
+// with a one-hour TTL.
+//
+// On Vercel that Map lives inside a single serverless instance. Traffic spread
+// across instances misses it, a cold start empties it, and an hour later it
+// expires regardless — so the same published post, whose text has not changed,
+// was summarised over and over on an unmetered key with no session to count
+// against.
+//
+// The summary of a published post is a pure function of its text, so it is now
+// stored on the row with a hash of the text it came from. Same hash, serve the
+// stored copy and call nobody. Different hash, generate once and store it.
+// That turns one call per reader per hour per instance into one call per edit.
+// See supabase/migrations/016_cache_blog_summaries.sql.
+//
+// The in-process Map is kept in front of the database as a cheap first hop for
+// repeat clicks in one session. It is now an optimisation rather than the only
+// thing standing between a reader and our API key.
 // =============================================================================
 
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createHash } from "node:crypto";
 import { textFromContent } from "@/lib/speech";
 import { outboundFetch } from "@/lib/outbound-fetch";
+import { HAIKU, TASKS } from "@/lib/ai-tasks";
 
 // Declared so a slow upstream fails as a timeout rather than as a killed
 // process. A killed function returns nothing at all, which the UI cannot
@@ -58,14 +79,28 @@ export async function POST(request: NextRequest) {
 
     const { data } = await sb
       .from("blog_posts")
-      .select("title, excerpt, content")
+      .select("title, excerpt, content, ai_summary, ai_summary_hash")
       .eq("slug", slug)
       .eq("status", "published")
-      .single();
+      .maybeSingle();
 
-    const post = data as { title: string; excerpt: string | null; content: string } | null;
+    const post = data as {
+      title: string; excerpt: string | null; content: string;
+      ai_summary: string | null; ai_summary_hash: string | null;
+    } | null;
     if (!post) {
       return NextResponse.json({ success: false, error: "Post not found" }, { status: 404 });
+    }
+
+    // Hash the article text, not the row. updated_at moves when a category or
+    // a cover image changes, neither of which alters a word of the article —
+    // and each would discard a good summary and pay for an identical one.
+    const articleText = textFromContent(post.content);
+    const hash = createHash("sha256").update(articleText).digest("hex").slice(0, 32);
+
+    if (post.ai_summary && post.ai_summary_hash === hash) {
+      cache.set(slug, { text: post.ai_summary, at: Date.now() });
+      return NextResponse.json({ success: true, summary: post.ai_summary, cached: true, source: "stored" });
     }
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -85,7 +120,7 @@ export async function POST(request: NextRequest) {
 
     // Cap the input — a very long post would otherwise dominate the token
     // budget, and the opening is where the thesis lives anyway.
-    const body = textFromContent(post.content).slice(0, 12000);
+    const body = articleText.slice(0, 12000);
 
     const prompt =
       `Summarise this article for someone deciding whether to read it, and for text-to-speech playback.\n\n` +
@@ -105,8 +140,10 @@ export async function POST(request: NextRequest) {
         "x-api-key":         apiKey,
       },
       body: JSON.stringify({
-        model:      "claude-sonnet-4-6",
-        max_tokens: 400,
+        // Compressing text we hand it, with no outside knowledge required —
+        // the definition of Haiku work, at a fifth of Sonnet's output price.
+        model:      HAIKU,
+        max_tokens: TASKS.summarise.maxTokens,
         messages:   [{ role: "user", content: prompt }],
       }),
     }, 25_000, "Claude");
@@ -124,7 +161,22 @@ export async function POST(request: NextRequest) {
     }
 
     cache.set(slug, { text: summary, at: Date.now() });
-    return NextResponse.json({ success: true, summary });
+
+    // Store it so the next reader — on any instance, at any time — costs
+    // nothing. Best-effort: a failed write means we summarise again next time,
+    // which is the old behaviour, not a broken response for this reader.
+    try {
+      const { data: stored } = await sb.rpc("set_post_summary", {
+        p_slug: slug, p_summary: summary, p_hash: hash,
+      });
+      if (stored !== true) {
+        console.warn(`[blog/summary] summary for "${slug}" was not persisted; it will be regenerated next time`);
+      }
+    } catch (e) {
+      console.warn("[blog/summary] persist failed:", e instanceof Error ? e.message : e);
+    }
+
+    return NextResponse.json({ success: true, summary, source: "generated" });
 
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
