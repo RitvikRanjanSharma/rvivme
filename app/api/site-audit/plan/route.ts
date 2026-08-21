@@ -31,7 +31,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCallerOrNull } from "@/lib/supabase-server";
 import { RULE_GUIDE, byImpact } from "@/lib/audit-guide";
-import { resolveBaseUrl } from "@/lib/site";
+import { askClaude } from "@/lib/claude-client";
 
 export const dynamic     = "force-dynamic";
 export const maxDuration = 60;
@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
     // impact, why, fix — is ours and is passed through untouched.
     const key = process.env.ANTHROPIC_API_KEY;
     let summary = "";
-    let narrativeSkipped: "quota" | null = null;
+    let narrativeSkipped: "quota" | "error" | null = null;
     let effortByRule: Record<string, string> = {};
 
     if (key) {
@@ -127,26 +127,23 @@ export async function POST(req: NextRequest) {
         `Return ONLY the JSON object, no preamble or code fences.`,
       ].join("\n");
 
-      try {
-        const res = await fetch(`${resolveBaseUrl()}/api/claude`, {
-          method:  "POST",
-          headers: { "Content-Type": "application/json", cookie: req.headers.get("cookie") ?? "" },
-          body:    JSON.stringify({ task: "audit_plan", prompt }),
-        });
-        const j = await res.json().catch(() => null);
-        // The ordering and the fixes are ours and stay correct without the
-        // model, so a cap or a failure degrades the narrative rather than the
-        // plan. Recorded so the UI can say why the summary is missing instead
-        // of leaving a blank someone reads as "nothing to say".
-        if (j?.reason === "quota_exceeded") narrativeSkipped = "quota";
-        const raw = String(j?.text ?? "").replace(/^```json\s*|\s*```$/g, "").trim();
-        const parsed = JSON.parse(raw);
-        summary      = String(parsed.summary ?? "");
-        effortByRule = (parsed.effort ?? {}) as Record<string, string>;
-      } catch {
-        // The plan is still useful without the narrative — the ordering and
-        // the fixes are ours. Degrade to those rather than failing outright.
-        summary = "";
+      // The ordering and the fixes are ours and stay correct without the
+      // model, so any refusal degrades the narrative rather than the plan.
+      // The reason is recorded so the UI can say why the summary is missing
+      // instead of leaving a blank someone reads as "nothing to say".
+      const answer = await askClaude("audit_plan", prompt, req.headers.get("cookie"));
+      if (!answer.ok) {
+        narrativeSkipped = answer.reason === "quota_exceeded" ? "quota" : "error";
+        console.warn(`[site-audit/plan] narrative skipped: ${answer.reason} — ${answer.message}`);
+      } else {
+        try {
+          const parsed = JSON.parse(answer.text.replace(/^```json\s*|\s*```$/g, "").trim());
+          summary      = String(parsed.summary ?? "");
+          effortByRule = (parsed.effort ?? {}) as Record<string, string>;
+        } catch {
+          narrativeSkipped = "error";
+          console.warn("[site-audit/plan] unparseable narrative:", answer.text.slice(0, 200));
+        }
       }
     }
 

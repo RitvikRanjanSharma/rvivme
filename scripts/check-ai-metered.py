@@ -27,6 +27,20 @@ WHAT IT CHECKS
 
 3. Client code may not post `model` or `max_tokens` to /api/claude — it sends
    a `task` and the server decides.
+
+4. Server routes must reach the proxy through askClaude() in lib/claude-client,
+   not by fetching it directly.
+
+   The fourth rule was added after "Find competitors" reported "the suggestion
+   came back in a format we couldn't read". Nothing had come back in a bad
+   format: /api/claude had refused the request, and the caller checked three of
+   the eight refusal reasons before doing JSON.parse("") on the missing text.
+   The other five — including the one that had actually happened — all arrived
+   as a format complaint, naming the wrong culprit and inviting a retry that
+   would fail identically.
+
+   askClaude returns a discriminated union whose failure branch has no `text`
+   field, so the compiler rejects that mistake instead of the user finding it.
 """
 
 import re
@@ -87,6 +101,17 @@ def main() -> int:
             problems.append(f"{rel}: takes `model` from the request body — model choice belongs to lib/ai-tasks")
         if BODY_BUDGET.search(src) and not CLAMPED.search(src):
             problems.append(f"{rel}: takes `max_tokens` from the request body without clamping it through resolveTask")
+
+    # Rule 4: server routes go through the client.
+    for route in sorted((APP / "api").rglob("route.ts")):
+        rel = route.relative_to(ROOT).as_posix()
+        if rel == "app/api/claude/route.ts":
+            continue                       # the proxy itself
+        src = route.read_text(encoding="utf-8")
+        if "/api/claude" in src and "askClaude" not in src:
+            problems.append(
+                f"{rel}: fetches /api/claude directly — use askClaude() from "
+                f"lib/claude-client so refusals cannot be read as text")
 
     for path in list(APP.rglob("*.tsx")) + list(LIB.glob("*.ts")):
         if ".next" in path.parts:

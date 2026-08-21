@@ -36,7 +36,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getCallerOrNull } from "@/lib/supabase-server";
 import { hostIsPublic, originCandidates } from "@/lib/site-fetch";
 import { toOrigin, domainOf } from "@/lib/competitor-compare";
-import { resolveBaseUrl } from "@/lib/site";
+import { askClaude, parseJsonArray } from "@/lib/claude-client";
 
 export const dynamic     = "force-dynamic";
 export const maxDuration = 60;
@@ -162,41 +162,35 @@ export async function POST(request: NextRequest) {
       `No code fences, no commentary.`,
     ].join("\n");
 
-    const res = await fetch(`${resolveBaseUrl()}/api/claude`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json", cookie: request.headers.get("cookie") ?? "" },
-      body:    JSON.stringify({ task: "competitor_names", prompt }),
-    });
-    const j = await res.json().catch(() => null);
-
-    // The proxy is metered now, so "you've hit today's cap" is a real outcome
-    // and must be said rather than surfacing as an empty result.
-    if (j?.reason === "quota_exceeded" || j?.reason === "unauthenticated") {
-      return NextResponse.json({ success: false, reason: j.reason, message: j.message });
-    }
-
-    if (j?.reason === "not_configured") {
+    const answer = await askClaude("competitor_names", prompt, request.headers.get("cookie"));
+    if (!answer.ok) {
+      // Every refusal is reported as itself. This used to check three of the
+      // eight ways the proxy can fail and let the rest fall through to
+      // JSON.parse(""), which surfaced as "the suggestion came back in a
+      // format we couldn't read" — the wrong culprit, and an invitation to
+      // retry something that would fail identically.
       return NextResponse.json({
-        success: false, reason: "not_configured",
-        message: "Competitor discovery needs an Anthropic API key on the server. You can still add competitors manually.",
+        success: false,
+        reason:  answer.reason,
+        message: answer.reason === "not_configured"
+          ? "Competitor discovery needs an Anthropic API key on the server. You can still add competitors manually."
+          : answer.message,
       });
     }
 
-    const raw = String(j?.text ?? "").replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
-    let parsed: Array<{ domain?: string; reason?: string }> = [];
-    try {
-      const p = JSON.parse(raw);
-      if (Array.isArray(p)) parsed = p;
-    } catch {
+    const parsed = parseJsonArray<{ domain?: string; reason?: string }>(answer.text);
+    if (!parsed.ok) {
+      // Genuinely unreadable now — and it says what it actually received.
+      console.error("[competitors/discover] unparseable:", parsed.snippet);
       return NextResponse.json({
         success: false, reason: "unreadable",
-        message: "The suggestion came back in a format we couldn't read. Try again.",
+        message: `The model answered in a format we couldn't read. Try again — if it keeps happening, it returned: ${parsed.snippet.slice(0, 120)}`,
       });
     }
 
     // Normalise, drop ourselves and anything already tracked.
     const seen = new Set<string>([you, ...exclude]);
-    const candidates = parsed
+    const candidates = parsed.value
       .map(c => ({ domain: domainOf(String(c?.domain ?? "")).toLowerCase(), reason: String(c?.reason ?? "").trim() }))
       .filter(c => c.domain && c.domain.includes(".") && !seen.has(c.domain))
       .filter(c => { if (seen.has(c.domain)) return false; seen.add(c.domain); return true; })

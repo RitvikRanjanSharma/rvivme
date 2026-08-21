@@ -140,10 +140,33 @@ export async function POST(request: NextRequest) {
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
       console.error(`[claude] ${task} ${model} ${res.status}: ${errText.slice(0, 300)}`);
-      return NextResponse.json(
-        { success: false, reason: "upstream_error", message: `Anthropic API error (${res.status})` },
-        { status: 502 },
-      );
+
+      // Anthropic's own message goes back, not just the status code.
+      //
+      // "Anthropic API error (400)" is true and useless: a bad model name, an
+      // over-long prompt and a malformed body all look identical. The one
+      // string that tells them apart was written to the server log and thrown
+      // away, so the person who could act on it never saw it. This cost a
+      // debugging session when a caller reported "the suggestion came back in
+      // a format we couldn't read" and the real answer was sitting here.
+      let detail = "";
+      try {
+        const parsed = JSON.parse(errText) as { error?: { message?: string; type?: string } };
+        detail = parsed?.error?.message ?? "";
+      } catch {
+        detail = errText.slice(0, 200);
+      }
+
+      return NextResponse.json({
+        success: false,
+        reason:  "upstream_error",
+        message: detail
+          ? `Anthropic refused the request (${res.status}): ${detail}`
+          : `Anthropic API error (${res.status}).`,
+        // Named separately so a UI can show the friendly half and log the rest.
+        status:  res.status,
+        detail:  detail || null,
+      }, { status: 502 });
     }
 
     const data = await res.json();

@@ -33,7 +33,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getCallerOrNull } from "@/lib/supabase-server";
 import { canSuggest } from "@/lib/audit-fixes";
 import { RULE_GUIDE } from "@/lib/audit-guide";
-import { resolveBaseUrl } from "@/lib/site";
+import { askClaude, parseJsonArray } from "@/lib/claude-client";
 
 export const dynamic     = "force-dynamic";
 export const maxDuration = 45;
@@ -185,28 +185,23 @@ export async function POST(req: NextRequest) {
       `Base everything on the page's actual subject above. Do not invent facts about the business, and do not use placeholders like "Your Company".`,
     ].join("\n");
 
-    const res = await fetch(`${resolveBaseUrl()}/api/claude`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json", cookie: req.headers.get("cookie") ?? "" },
-      body:    JSON.stringify({ task: "audit_fix", prompt }),
-    });
-    const j   = await res.json().catch(() => null);
-    // The proxy is metered now, so "you've hit today's cap" is a real outcome
-    // and must be said rather than surfacing as an empty result.
-    if (j?.reason === "quota_exceeded" || j?.reason === "unauthenticated") {
-      return NextResponse.json({ success: false, reason: j.reason, message: j.message });
+    const answer = await askClaude("audit_fix", prompt, req.headers.get("cookie"));
+    if (!answer.ok) {
+      // Every refusal reported as itself, rather than the three the previous
+      // version happened to remember with the rest falling through.
+      return NextResponse.json({ success: false, reason: answer.reason, message: answer.message });
     }
-    const raw = String(j?.text ?? "").replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
 
-    let options: string[] = [];
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) options = parsed.map(String);
-    } catch {
-      // A model that ignored the format instruction still produced something
-      // useful. Salvage lines rather than discarding the whole response.
-      options = raw.split("\n").map(l => l.replace(/^\s*[-*\d.]+\s*/, "").trim()).filter(Boolean);
-    }
+    const parsed = parseJsonArray<unknown>(answer.text);
+    // A model that ignored the format instruction still produced something
+    // useful, so lines are salvaged rather than the whole response discarded.
+    // This is a legitimate fallback for THIS route because the output is a
+    // list of short strings; it would be wrong for structured JSON.
+    const options: string[] = parsed.ok
+      ? parsed.value.map(String)
+      : answer.text
+          .replace(/^```(?:json)?\s*|\s*```$/g, "")
+          .split("\n").map(l => l.replace(/^\s*[-*\d.]+\s*/, "").trim()).filter(Boolean);
 
     // Enforce the limits rather than trusting them. Recommending a 74-character
     // title as the fix for a 68-character one would be worse than silence.
