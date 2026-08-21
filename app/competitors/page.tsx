@@ -127,6 +127,9 @@ export default function CompetitorsPage() {
 
   const [you,      setYou]      = useState<SiteMeasure | null>(null);
   const [youState, setYouState] = useState<RowState>("queued");
+  // Why the baseline failed. measureSite has always produced this and the row
+  // threw it away, leaving "couldn't reach your site" with no way to act on it.
+  const [youError, setYouError] = useState<string | null>(null);
   const [rows,     setRows]     = useState<Row[]>([]);
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState<string | null>(null);
@@ -171,6 +174,7 @@ export default function CompetitorsPage() {
     setLoading(true);
     setError(null);
     setYou(null);
+    setYouError(null);
     setYouState(domain ? "measuring" : "failed");
 
     // 1. Saved competitors.
@@ -216,6 +220,9 @@ export default function CompetitorsPage() {
     if (id !== runId.current) return;
     setYou(yourResult.measure);
     setYouState(yourResult.measure?.reachable ? "done" : "failed");
+    setYouError(yourResult.measure?.reachable
+      ? null
+      : (yourResult.measure?.error ?? yourResult.message ?? null));
 
     await Promise.all(theirPromises.map(async (p, i) => {
       const { measure: m, message } = await p;
@@ -494,6 +501,14 @@ export default function CompetitorsPage() {
                       <div style={{ fontFamily: "var(--font-mono)", fontSize: "9px", color: brandColor, letterSpacing: "0.08em" }}>
                         {youState === "measuring" ? "MEASURING…" : youState === "failed" ? (domain ? "COULDN'T REACH YOUR SITE" : "SET YOUR SITE IN SETTINGS") : "YOU — BASELINE"}
                       </div>
+                      {youState === "failed" && youError && (
+                        // The actual cause, in the row it belongs to. A verdict
+                        // without a reason is something the reader can only
+                        // believe or ignore, not fix.
+                        <div style={{ fontFamily: "var(--font-body)", fontSize: "11.5px", color: "var(--text-tertiary)", marginTop: "3px", maxWidth: "460px", lineHeight: 1.45 }}>
+                          {youError}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </td>

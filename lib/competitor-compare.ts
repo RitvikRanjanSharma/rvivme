@@ -51,7 +51,7 @@ import {
   parseRobots, extractSitemapPaths, crawlerAccess,
   scoreAnswerReadiness, AI_CRAWLERS,
 } from "./ai-crawlers";
-import { describeFetchError, type Fetcher } from "./site-fetch";
+import { describeFetchError, originCandidates, type Fetcher } from "./site-fetch";
 
 const TIMEOUT_MS = 9_000;
 
@@ -236,38 +236,77 @@ async function get(url: string, fetcher: Fetcher): Promise<Raw> {
  * to display and a terrible thing to convert into zeroes.
  */
 export async function measureSite(
-  origin: string,
+  input: string,
   fetcher: Fetcher = fetch,
 ): Promise<SiteMeasure> {
-  const url    = origin.replace(/\/+$/, "");
-  const domain = (() => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; } })();
+  // Try the apex AND the www sibling, preferred host first.
+  //
+  // This module used to fetch exactly the origin it was handed, and that was a
+  // real defect: useDomain() strips "www." before the page ever calls us, so a
+  // site served from www was always measured at its apex. If that apex is
+  // parked, mis-certificated, or simply not configured, the whole thing came
+  // back "couldn't reach your site" about a site that is plainly up.
+  //
+  // originCandidates() is the same helper the answer-engine audit has used
+  // from the start, for exactly this reason. It should have been used here on
+  // day one.
+  const candidates = originCandidates(input.replace(/\/+$/, ""));
   const measuredAt = new Date().toISOString();
 
+  const first  = candidates[0] ?? input;
+  const domain = (() => { try { return new URL(first).hostname.replace(/^www\./, ""); } catch { return input; } })();
+
   const base: SiteMeasure = {
-    domain, url, reachable: false, status: null, error: null,
+    domain, url: first, reachable: false, status: null, error: null,
     title: null, description: null, h1: null,
     wordCount: null, schemaTypes: [], answerScore: null,
     pagesInSitemap: null, sitemapUrl: null,
     answerBotsAllowed: null, answerBotsTotal: AI_CRAWLERS.filter(c => c.purpose === "answers").length,
     answerBotsBlocked: [], robotsKnown: false,
-    https: url.startsWith("https://"), measuredAt,
+    https: first.startsWith("https://"), measuredAt,
   };
 
-  // Homepage and robots.txt in parallel — they're independent.
-  const [home, robots] = await Promise.all([
-    get(url, fetcher),
-    get(`${url}/robots.txt`, fetcher),
-  ]);
+  if (candidates.length === 0) {
+    return { ...base, error: `"${input}" is not a URL we can fetch.` };
+  }
+
+  // Walk the candidates until one answers with a page. A 404 from a host that
+  // exists is NOT a reason to try the sibling — the server answered, and
+  // fetching a different hostname after a real answer would be measuring a
+  // site nobody asked about. Only a failure to reach the host at all moves on.
+  let home!: Raw;
+  let url = candidates[0];
+  for (const candidate of candidates) {
+    url  = candidate;
+    home = await get(candidate, fetcher);
+    if (home.ok && home.body) break;
+    if (home.status !== null) break;   // a real answer, even an unhappy one
+  }
 
   if (!home.ok || !home.body) {
-    return { ...base, status: home.status, error: home.error ?? `The site returned ${home.status ?? "no response"}.` };
+    // Say what we tried and what happened. The page previously rendered a bare
+    // "couldn't reach your site" while this string sat unused in the payload,
+    // which left the reader with a verdict and no way to act on it.
+    const tried = candidates.length > 1 ? ` (tried ${candidates.join(" and ")})` : "";
+    return {
+      ...base,
+      url,
+      status: home.status,
+      error: home.error
+        ? `${home.error}${tried}`
+        : `The site returned ${home.status ?? "no response"}${tried}.`,
+    };
   }
+
+  // Everything after this point reads from the host that actually answered.
+  const robots = await get(`${url}/robots.txt`, fetcher);
 
   const html = home.body;
   const readiness = scoreAnswerReadiness(html, url);
 
   const measure: SiteMeasure = {
     ...base,
+    url,
     reachable: true,
     status: home.status,
     title: firstMatch(html, /<title[^>]*>([\s\S]*?)<\/title>/i),

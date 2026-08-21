@@ -34,7 +34,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { getCallerOrNull } from "@/lib/supabase-server";
-import { hostIsPublic } from "@/lib/site-fetch";
+import { hostIsPublic, originCandidates } from "@/lib/site-fetch";
 import { toOrigin, domainOf } from "@/lib/competitor-compare";
 import { resolveBaseUrl } from "@/lib/site";
 
@@ -43,8 +43,23 @@ export const maxDuration = 60;
 
 const MAX_SUGGESTIONS = 8;
 
-/** Read enough of the homepage for the model to know what the business does. */
+/**
+ * Read enough of the homepage for the model to know what the business does.
+ *
+ * Tries the apex and the www sibling. The caller strips "www." before we ever
+ * see the domain, so a site served from www was always asked for at its apex —
+ * and a parked or mis-certificated apex produced "we couldn't read enough from
+ * your homepage" about a site that is plainly up.
+ */
 async function homepageText(origin: string): Promise<string> {
+  for (const candidate of originCandidates(origin)) {
+    const text = await fetchOne(candidate);
+    if (text.length >= 80) return text;
+  }
+  return "";
+}
+
+async function fetchOne(origin: string): Promise<string> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 9_000);
   try {

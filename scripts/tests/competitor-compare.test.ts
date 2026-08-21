@@ -167,6 +167,73 @@ testAsync("a sitemap index is followed one level", async () => {
   assert.strictEqual(m.pagesInSitemap, 3);
 });
 
+// ─── host resolution: the apex/www problem ───────────────────────────────────
+
+testAsync("falls back to the www sibling when the apex is unreachable", async () => {
+  // The bug this fixes: useDomain() strips "www." before the page calls us, so
+  // a site served from www was always asked for at its apex. A parked or
+  // mis-certificated apex then produced "couldn't reach your site" about a
+  // site that was plainly up — which is what happened to our own domain.
+  const f = (async (input: string | URL) => {
+    const url = String(input);
+    if (url.startsWith("https://acme.test")) {
+      throw Object.assign(new Error("nope"), { cause: { code: "ENOTFOUND" } });
+    }
+    if (url === "https://www.acme.test") {
+      return { ok: true, status: 200, url, text: async () => PAGE } as unknown as Response;
+    }
+    return { ok: false, status: 404, url, text: async () => "" } as unknown as Response;
+  }) as unknown as typeof fetch;
+
+  const m = await measureSite("https://acme.test", f);
+  assert.strictEqual(m.reachable, true, "www answered, so the site is reachable");
+  assert.strictEqual(m.url, "https://www.acme.test", "reports the host that actually answered");
+  assert.strictEqual(m.title, "Acme Roofing — Flat Roof Specialists in Leeds");
+});
+
+testAsync("a real answer stops the walk — we do not shop for a better host", async () => {
+  // A 404 from the apex means that server exists and answered. Trying www
+  // after a real answer would be measuring a site nobody asked about.
+  let wwwTried = false;
+  const f = (async (input: string | URL) => {
+    const url = String(input);
+    if (url.includes("www.")) { wwwTried = true; }
+    return { ok: false, status: 404, url, text: async () => "" } as unknown as Response;
+  }) as unknown as typeof fetch;
+
+  const m = await measureSite("https://acme.test", f);
+  assert.strictEqual(m.reachable, false);
+  assert.strictEqual(wwwTried, false, "stopped at the host that answered");
+  assert.ok(m.error?.includes("404"), "says what the server actually said");
+});
+
+testAsync("an unreachable site names both hosts it tried", async () => {
+  // "Couldn't reach your site" with no detail is a verdict the reader can only
+  // believe or ignore. Saying what was attempted makes it actionable.
+  const f = (async () => {
+    throw Object.assign(new Error("nope"), { cause: { code: "ENOTFOUND" } });
+  }) as unknown as typeof fetch;
+
+  const m = await measureSite("https://acme.test", f);
+  assert.strictEqual(m.reachable, false);
+  assert.ok(m.error?.includes("hostname"), "human-readable cause");
+  assert.ok(m.error?.includes("acme.test") && m.error?.includes("www.acme.test"),
+    `names both attempts, got: ${m.error}`);
+});
+
+testAsync("robots and sitemap follow the host that answered", async () => {
+  // If the apex is dead and www serves the site, reading robots.txt from the
+  // apex would report "no rules" — which renders as "every crawler allowed".
+  const f = fakeFetch({
+    "https://www.acme.test": [200, PAGE],
+    "https://www.acme.test/robots.txt": [200, "User-agent: OAI-SearchBot\nDisallow: /\n"],
+  });
+  const m = await measureSite("https://www.acme.test", f);
+  assert.strictEqual(m.robotsKnown, true);
+  assert.ok(m.answerBotsBlocked.includes("OAI-SearchBot"),
+    "read robots from the answering host, not a guess");
+});
+
 // ─── comparison ──────────────────────────────────────────────────────────────
 
 function measureStub(over: Partial<SiteMeasure>): SiteMeasure {

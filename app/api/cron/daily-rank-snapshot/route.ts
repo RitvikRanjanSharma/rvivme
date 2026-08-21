@@ -183,6 +183,8 @@ async function snapshotForUser(
       user_id:      userId,
       keyword:      t.keyword,
       domain,
+      // integer-by-construction: byQuery rounds and clamps to 1-101 above, and
+      // 101 is the sentinel for "not in the top 100".
       position:     match?.position ?? 101,
       search_volume: null,
       url:          null,
