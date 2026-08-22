@@ -1,0 +1,11 @@
+{
+  "//": "Compiles the keyword-buckets tests. Same arrangement as the sibling configs.",
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false, "module": "commonjs", "moduleResolution": "node",
+    "target": "ES2022", "lib": ["ES2022", "dom"], "types": ["node"],
+    "isolatedModules": false, "incremental": false,
+    "baseUrl": "../..", "paths": { "@/*": ["./*"] }
+  },
+  "include": ["./keyword-buckets.test.ts", "../../lib/keyword-buckets.ts", "../../lib/opportunities.ts"]
+}

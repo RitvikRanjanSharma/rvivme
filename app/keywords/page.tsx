@@ -73,6 +73,26 @@ type GapPage = {
   verdict: "covered" | "gap" | "unclear";
   matchedQuery?: string; overlap: number;
 };
+// The planner view. Buckets are recomputed from live Search Console data on
+// every load rather than stored, because a keyword's situation moves and a
+// stored label would go stale without saying so.
+type Bucket =
+  | "winning" | "striking" | "ctr_gap" | "slipping" | "competing"
+  | "no_presence" | "mismatch" | "brand" | "watching";
+type BucketMeta = { label: string; meaning: string; action: string; order: number };
+type BucketedKeyword = {
+  term: string; bucket: Bucket; why: string; watched: boolean; source: string | null;
+  clicks: number | null; impressions: number | null; ctr: number | null; position: number | null;
+  opportunityScore: number | null; confidence: "high" | "medium" | "low" | null;
+};
+type BucketResult = {
+  keywords: BucketedKeyword[];
+  counts:   Record<Bucket, number>;
+  meta:     Record<Bucket, BucketMeta>;
+  basis:    { queries: number; watched: number; fromOpportunity: number; period: string };
+  scale:    { isEarlyStage: boolean; totalImpressions: number; queryCount: number };
+};
+
 type GapResult = {
   competitor: string;
   sitemapUrl: string | null;
@@ -137,6 +157,17 @@ function Basis({ label, value, accent }: { label: string; value: string; accent?
     <div>
       <div style={{ fontFamily:"var(--font-mono)", fontSize:"9px", letterSpacing:"0.1em", textTransform:"uppercase", color:"var(--text-tertiary)", marginBottom:"3px" }}>{label}</div>
       <div style={{ fontFamily:"var(--font-body)", fontSize:"13px", color: accent ?? "var(--text-primary)" }}>{value}</div>
+    </div>
+  );
+}
+
+/** One figure with its label, or an em dash when there is nothing to report. */
+function Stat({ label, value }: { label: string; value: string }) {
+  const unknown = value === "—";
+  return (
+    <div style={{ textAlign:"right", minWidth:"46px" }}>
+      <div style={{ fontFamily:"var(--font-mono)", fontSize:"12px", color: unknown ? "var(--text-tertiary)" : "var(--text-primary)" }}>{value}</div>
+      <div style={{ fontFamily:"var(--font-mono)", fontSize:"8px", letterSpacing:"0.08em", color:"var(--text-tertiary)" }}>{label}</div>
     </div>
   );
 }
@@ -274,7 +305,12 @@ function KwTable<T extends { term: string }>({
 export default function KeywordsPage() {
   const { domain, loading: domainLoading } = useDomain();
   const [brandColor, setBrandColor] = useState(BRAND_DEFAULT);
-  const [activeTab,  setActiveTab]  = useState<"rankings"|"ideas"|"competitors">("rankings");
+  const [activeTab,  setActiveTab]  = useState<"planner"|"rankings"|"ideas"|"competitors">("planner");
+  const [plan,        setPlan]        = useState<BucketResult | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planError,   setPlanError]   = useState<string | null>(null);
+  const [openBucket,  setOpenBucket]  = useState<Bucket | null>(null);
+  const [watchBusy,   setWatchBusy]   = useState<string | null>(null);
 
   // Rankings
   const [rankings,    setRankings]    = useState<LiveKw[]>([]);
@@ -445,6 +481,49 @@ export default function KeywordsPage() {
 
   useEffect(() => { if (activeTab === "rankings") loadRankings(); }, [activeTab, loadRankings]);
 
+  const loadPlan = useCallback(async () => {
+    setPlanLoading(true); setPlanError(null);
+    try {
+      const res  = await fetch("/api/keywords/buckets");
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(
+          data.reason === "not_configured"
+            ? "Connect Search Console under Settings → Integrations. Every bucket here is built from queries you actually appear for."
+            : data.message ?? "Couldn't build the plan.",
+        );
+      }
+      setPlan(data as BucketResult);
+    } catch (e: any) { setPlanError(e.message); }
+    finally { setPlanLoading(false); }
+  }, []);
+
+  useEffect(() => { if (activeTab === "planner") loadPlan(); }, [activeTab, loadPlan]);
+
+  /** Add or remove one term. Reloads so its bucket reflects the change. */
+  async function toggleWatch(term: string, currentlyWatched: boolean) {
+    setWatchBusy(term);
+    try {
+      const res = currentlyWatched
+        ? await fetch(`/api/keywords/watchlist?keyword=${encodeURIComponent(term)}`, { method: "DELETE" })
+        : await fetch("/api/keywords/watchlist", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ keyword: term, source: "manual" }),
+          });
+      const data = await res.json();
+      if (!data.success) { setPlanError(data.message ?? "Couldn't update the watchlist."); return; }
+      // Optimistic flip, so the row responds immediately; the next load
+      // reconciles it against what the server actually stored.
+      setPlan(p => p && ({
+        ...p,
+        keywords: p.keywords.map(k => k.term === term ? { ...k, watched: !currentlyWatched } : k),
+      }));
+    } catch (e: any) {
+      setPlanError(e?.message ?? "Couldn't update the watchlist.");
+    } finally { setWatchBusy(null); }
+  }
+
   // Load ideas
   async function loadIdeas() {
     setIdeaLoading(true); setIdeaError(null);
@@ -607,9 +686,10 @@ export default function KeywordsPage() {
       {/* Tabs */}
       <div style={{ display:"flex", gap:"4px", borderBottom:"1px solid var(--border)", marginBottom:"20px" }}>
         {([
+          ["planner",     "Planner"],
           ["rankings",    "Rankings"],
           ["ideas",       "Keyword Ideas"],
-          ["competitors", "Competitor Keywords"],
+          ["competitors", "Content Gap"],
         ] as const).map(([id, label]) => (
           <button key={id} onClick={() => setActiveTab(id)} style={{
             fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:500,
@@ -624,6 +704,141 @@ export default function KeywordsPage() {
       </div>
 
       <AnimatePresence mode="wait">
+
+        {/* ── PLANNER ──────────────────────────────────────────────────────── */}
+        {activeTab === "planner" && (
+          <motion.div key="planner" initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }} transition={{ duration:0.2 }}>
+
+            <div style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:"12px", padding:"18px 20px", marginBottom:"18px" }}>
+              <div style={{ fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:600, color:"var(--text-primary)", marginBottom:"5px" }}>
+                Every keyword, sorted by what you can do about it
+              </div>
+              <div style={{ fontFamily:"var(--font-body)", fontSize:"12.5px", color:"var(--text-secondary)", lineHeight:1.55, maxWidth:"680px" }}>
+                Built from the queries Search Console says you appeared for in the last 28 days, plus anything on your
+                watchlist. Nothing here is estimated — no search volume, no difficulty score, no guess at where a
+                competitor ranks. Every row states the numbers it was decided from.
+              </div>
+            </div>
+
+            {planError && (
+              <div style={{ display:"flex", alignItems:"flex-start", gap:"8px", padding:"12px 16px", background:"rgba(255,171,0,0.08)", border:"1px solid rgba(255,171,0,0.25)", borderRadius:"10px", marginBottom:"16px" }}>
+                <AlertTriangle size={14} color="var(--signal-amber)" style={{ flexShrink:0, marginTop:"2px" }} />
+                <span style={{ fontFamily:"var(--font-body)", fontSize:"13px", color:"var(--signal-amber)", lineHeight:1.5 }}>{planError}</span>
+              </div>
+            )}
+
+            {planLoading && (
+              <div style={{ padding:"48px", display:"flex", justifyContent:"center" }}>
+                <div style={{ width:"20px", height:"20px", border:"2px solid var(--border)", borderTopColor:brandColor, borderRadius:"50%", animation:"spin 0.7s linear infinite" }} />
+              </div>
+            )}
+
+            {!planLoading && plan && (
+              <>
+                {/* What it was built from. A finding whose basis is invisible
+                    gets read as more certain than it is. */}
+                <div style={{ display:"flex", flexWrap:"wrap", gap:"20px", padding:"12px 16px", background:"var(--muted)", borderRadius:"8px", marginBottom:"18px" }}>
+                  <Basis label="Queries analysed" value={plan.basis.queries.toLocaleString()} />
+                  <Basis label="On your watchlist" value={plan.basis.watched.toLocaleString()} />
+                  <Basis label="From the opportunity engine" value={plan.basis.fromOpportunity.toLocaleString()} />
+                  <Basis label="Period" value={plan.basis.period} />
+                </div>
+
+                {plan.scale.isEarlyStage && (
+                  <div style={{ fontFamily:"var(--font-body)", fontSize:"12.5px", color:"var(--text-tertiary)", marginBottom:"18px", lineHeight:1.5, maxWidth:"680px" }}>
+                    This is built on {plan.scale.totalImpressions.toLocaleString()} impressions across {plan.scale.queryCount.toLocaleString()} queries,
+                    which is a small sample. The buckets are still right about direction, but treat the ordering inside
+                    them as provisional until there is more data behind it.
+                  </div>
+                )}
+
+                {/* One section per bucket, in the order the library defines. */}
+                {(Object.keys(plan.meta) as Bucket[])
+                  .filter(b => plan.counts[b] > 0)
+                  .sort((a, b) => plan.meta[a].order - plan.meta[b].order)
+                  .map(bucket => {
+                    const meta = plan.meta[bucket];
+                    const rows = plan.keywords.filter(k => k.bucket === bucket);
+                    const open = openBucket === bucket;
+                    return (
+                      <div key={bucket} style={{ background:"var(--surface)", border:"1px solid var(--border)", borderRadius:"12px", marginBottom:"12px", overflow:"hidden" }}>
+                        <button onClick={() => setOpenBucket(open ? null : bucket)}
+                          style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", gap:"12px", padding:"15px 18px", background:"transparent", border:"none", cursor:"pointer", textAlign:"left" }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:"10px", minWidth:0 }}>
+                            <span style={{ fontFamily:"var(--font-body)", fontSize:"14px", fontWeight:600, color:"var(--text-primary)" }}>{meta.label}</span>
+                            <span style={{ fontFamily:"var(--font-mono)", fontSize:"10px", color:brandColor, background:`rgba(var(--brand-rgb),0.08)`, border:`1px solid rgba(var(--brand-rgb),0.20)`, padding:"2px 8px", borderRadius:"100px" }}>
+                              {plan.counts[bucket]}
+                            </span>
+                          </div>
+                          <ChevronDown size={14} color="var(--text-tertiary)" style={{ transform: open ? "rotate(180deg)" : "none", transition:"transform 0.16s", flexShrink:0 }} />
+                        </button>
+
+                        <div style={{ padding:"0 18px 14px" }}>
+                          <div style={{ fontFamily:"var(--font-body)", fontSize:"12.5px", color:"var(--text-secondary)", lineHeight:1.55, maxWidth:"720px" }}>
+                            {meta.meaning}
+                          </div>
+                          <div style={{ fontFamily:"var(--font-body)", fontSize:"12.5px", color:brandColor, lineHeight:1.55, marginTop:"6px", maxWidth:"720px" }}>
+                            {meta.action}
+                          </div>
+                        </div>
+
+                        {open && (
+                          <div style={{ borderTop:"1px solid var(--border)" }}>
+                            {rows.map((k, i) => (
+                              <div key={k.term} style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:"14px", padding:"13px 18px", borderBottom: i < rows.length-1 ? "1px solid var(--border)" : "none", flexWrap:"wrap" }}>
+                                <div style={{ flex:"1 1 340px", minWidth:0 }}>
+                                  <div style={{ display:"flex", alignItems:"center", gap:"7px", flexWrap:"wrap" }}>
+                                    <span style={{ fontFamily:"var(--font-body)", fontSize:"13px", fontWeight:600, color:"var(--text-primary)" }}>{k.term}</span>
+                                    {k.watched && (
+                                      <span style={{ fontFamily:"var(--font-mono)", fontSize:"8px", letterSpacing:"0.08em", color:brandColor, background:`rgba(var(--brand-rgb),0.08)`, border:`1px solid rgba(var(--brand-rgb),0.20)`, padding:"1px 5px", borderRadius:"100px" }}>WATCHING</span>
+                                    )}
+                                    {k.confidence === "low" && (
+                                      <span title="The opportunity engine passed this over, usually for too few impressions."
+                                        style={{ fontFamily:"var(--font-mono)", fontSize:"8px", letterSpacing:"0.08em", color:"var(--text-tertiary)", border:"1px solid var(--border)", padding:"1px 5px", borderRadius:"100px" }}>LOW CONFIDENCE</span>
+                                    )}
+                                  </div>
+                                  <div style={{ fontFamily:"var(--font-body)", fontSize:"12px", color:"var(--text-secondary)", lineHeight:1.5, marginTop:"3px" }}>
+                                    {k.why}
+                                  </div>
+                                </div>
+
+                                <div style={{ display:"flex", alignItems:"center", gap:"18px", flexShrink:0 }}>
+                                  {/* "—" throughout for a term Search Console
+                                      never mentioned. "No impressions recorded"
+                                      and "zero people saw you" are the same
+                                      number and different claims. */}
+                                  <Stat label="POS"  value={k.position    == null ? "—" : k.position.toFixed(1)} />
+                                  <Stat label="IMPR" value={k.impressions == null ? "—" : k.impressions.toLocaleString()} />
+                                  <Stat label="CLICKS" value={k.clicks    == null ? "—" : String(k.clicks)} />
+                                  <button onClick={() => toggleWatch(k.term, k.watched)} disabled={watchBusy === k.term}
+                                    title={k.watched ? "Remove from watchlist" : "Add to watchlist"}
+                                    style={{
+                                      width:"28px", height:"28px", display:"flex", alignItems:"center", justifyContent:"center",
+                                      background: k.watched ? `rgba(var(--brand-rgb),0.10)` : "transparent",
+                                      border:`1px solid ${k.watched ? `rgba(var(--brand-rgb),0.25)` : "var(--border)"}`,
+                                      borderRadius:"6px", cursor: watchBusy === k.term ? "wait" : "pointer",
+                                      color: k.watched ? brandColor : "var(--text-tertiary)", flexShrink:0,
+                                    }}>
+                                    {k.watched ? <Check size={12} /> : <Target size={12} />}
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                <div style={{ fontFamily:"var(--font-body)", fontSize:"12px", color:"var(--text-tertiary)", marginTop:"16px", lineHeight:1.55, maxWidth:"720px" }}>
+                  No search volume, difficulty score or competitor ranking appears here because none of them can be
+                  measured from Search Console. They need a licensed dataset, and we would rather leave a column out
+                  than fill it with a number we can&rsquo;t stand behind.
+                </div>
+              </>
+            )}
+          </motion.div>
+        )}
 
         {/* ── RANKINGS ─────────────────────────────────────────────────────── */}
         {activeTab === "rankings" && (
